@@ -10,13 +10,13 @@ These set of rules present a guide how to contribute your own code to this repo.
 * Modules are defined by the product (e.g. arakoon, openvstorage, swift, ceph, docker, ...)
 
 * Write your code as dynamicly, modular, easy & lightweight as possible, this means:
-⋅⋅* List of items and/or settings are initialized in the constructor (with short explanation)
-⋅⋅* Do not use print statements in the modules (except for the Main) use the the `Utils().logger(..)` instead.
-⋅⋅* Module unrelated stuff is added to the `utils/extension.py` (e.g. logger, system service detector, ...)
-⋅⋅* No unnecessary objects need to be created. If you use it alot, declare it in the initializor / constructor.
-⋅⋅* Testing scripts (in `testing/`) are used as pure educational / testing purpose
-⋅⋅* The directory `conf/` contains all settings and information of the open vstorage health check (in JSON)
-⋅⋅* For monitoring AKA unattended run, don't use spaces between methods in `Main`:
+  * List of items and/or settings are initialized in the constructor (with short explanation)
+  * Do not use print statements in the modules (except for the Main) use the the `Utils().logger(..)` instead.
+  * Module unrelated stuff is added to the `utils/extension.py` (e.g. logger, system service detector, ...)
+  * No unnecessary objects need to be created. If you use it alot, declare it in the initializor / constructor.
+  * Testing scripts (in `testing/`) are used as pure educational / testing purpose
+  * The directory `conf/` contains all settings and information of the open vstorage health check (in JSON)
+  * For monitoring AKA unattended run, don't use spaces between methods in `Main`:
 ```
 if not self.unattended: print ""
 ```
@@ -67,7 +67,7 @@ Section: Main
 """
 ```
 
-⋅⋅* Do not redeclare the Utility Class in a module, obtain it through Class creation initializor / constructor: (e.g.)
+  * Do not redeclare the Utility Class in a module, obtain it through Class creation initializor / constructor: (e.g.)
 **Health Check Main Class**
 ```
 class Main:
