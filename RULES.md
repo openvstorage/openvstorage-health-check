@@ -11,10 +11,19 @@ These set of rules present a guide how to contribute your own code to this repo.
 
 * Write your code as dynamicly, modular, easy & lightweight as possible.
 
-## Writing code (in depth rules for this REPO)
+* For further in-depth rules, go to: `Writing code`
+
+## Writing code (in-depth rules for this REPO)
 
 * List of items and/or settings are initialized in the constructor (with short explanation)
-* Do not use print statements in the modules (except for the Main) use the the `Utils().logger(..)` instead.
+```
+# 1. key -> service name (string)
+#
+# 2. value -> ports (list)
+self.req_side_ports = {'nginx': ['80', '443'], 'memcached': ['11211']}
+```
+
+* Do not use print statements in the modules (except for the `Main`) use the the `Utils().logger(..)` instead.
 * Module unrelated stuff is added to the `utils/extension.py` (e.g. logger, system service detector, ...)
 * No unnecessary objects need to be created. If you use it alot, declare it in the initializor / constructor.
 * Testing scripts (in `testing/`) are used as pure educational / testing purpose
@@ -127,4 +136,6 @@ Utils().logger("STATUS of port {0} of service {1} ...".format(port, process_name
 
 Utils().logger("STATUS of port {0} of service {1} ...".format(port, process_name), self.module, 1, 'port_open_{0}'.format(), False)
 ```
+
+* Last but not least, use your sane mind when you code and contribute ;-)
 
