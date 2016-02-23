@@ -9,19 +9,22 @@ These set of rules present a guide how to contribute your own code to this repo.
 
 * Modules are defined by the product (e.g. arakoon, openvstorage, swift, ceph, docker, ...)
 
-* Write your code as dynamicly, modular, easy & lightweight as possible, this means:
-  * List of items and/or settings are initialized in the constructor (with short explanation)
-  * Do not use print statements in the modules (except for the Main) use the the `Utils().logger(..)` instead.
-  * Module unrelated stuff is added to the `utils/extension.py` (e.g. logger, system service detector, ...)
-  * No unnecessary objects need to be created. If you use it alot, declare it in the initializor / constructor.
-  * Testing scripts (in `testing/`) are used as pure educational / testing purpose
-  * The directory `conf/` contains all settings and information of the open vstorage health check (in JSON)
-  * For monitoring AKA unattended run, don't use spaces between methods in `Main`:
+* Write your code as dynamicly, modular, easy & lightweight as possible.
+
+## Writing code (in depth rules for this REPO)
+
+* List of items and/or settings are initialized in the constructor (with short explanation)
+* Do not use print statements in the modules (except for the Main) use the the `Utils().logger(..)` instead.
+* Module unrelated stuff is added to the `utils/extension.py` (e.g. logger, system service detector, ...)
+* No unnecessary objects need to be created. If you use it alot, declare it in the initializor / constructor.
+* Testing scripts (in `testing/`) are used as pure educational / testing purpose
+* The directory `conf/` contains all settings and information of the open vstorage health check (in JSON)
+* For monitoring AKA unattended run, don't use spaces between methods in `Main`:
 ```
 if not self.unattended: print ""
 ```
 
-  * Try to use 1 method for every module, except if there are several critical components in a module. (e.g.)
+* Try to use 1 method for every module, except if there are several critical components in a module. (e.g.)
 **One critical component:**
 ```
 # Checking Alba
@@ -46,28 +49,28 @@ self.ovs.checkOvsPackages()
 if not self.unattended: print ""
 ```
 
-  * Import default and custom packages under:
+* Import default and custom packages under:
 ```
 """
 Section: Import package(s)
 """
 ```
 
-  * Write, define or declare classes under:
+* Write, define or declare classes under:
 ```
 """
 Section: Classes
 """
 ```
 
-  * Define main methods under: (For modules: Only for testing; for Main: Execution of HEALTH CHECK through `python ..`)
+* Define main methods under: (For modules: Only for testing; for Main: Execution of HEALTH CHECK through `python ..`)
 ```
 """
 Section: Main
 """
 ```
 
-  * Do not redeclare the Utility Class in a module, obtain it through Class creation initializor / constructor: (e.g.)
+* Do not redeclare the Utility Class in a module, obtain it through Class creation initializor / constructor: (e.g.)
 **Health Check Main Class**
 ```
 class Main:
@@ -87,7 +90,7 @@ class OpenvStorageHealthCheck:
         self.utility = utility
 ```
 
-  * How to use the Utility Class `logger` function:
+* How to use the Utility Class `logger` function:
 **Logger SEVERITY_LEVELS:**
 ```
 failure = 0
