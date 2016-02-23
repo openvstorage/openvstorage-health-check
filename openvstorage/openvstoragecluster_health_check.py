@@ -1,5 +1,19 @@
 #!/usr/bin/python
 
+# Copyright 2014 iNuron NV
+#
+# Licensed under the Open vStorage Modified Apache License (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.openvstorage.org/license
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Title: Open vStorage Health Check
 Description: Checks the OVS health 
@@ -20,7 +34,6 @@ import time
 import socket
 import signal
 import psutil
-import commands
 import threading
 import subprocess
 from pwd import getpwuid
@@ -36,8 +49,7 @@ from ovs.lib.storagerouter import StorageRouterController
 import volumedriver.storagerouter.storagerouterclient as src
 
 # import health check utilities
-sys.path.append('../utils')
-from utils import Utils
+from utils.extension import Utils
 
 """
 Section: Classes
@@ -347,8 +359,9 @@ class OpenvStorageHealthCheck:
                 if int(i) < int(j):
                     # queue is building up
                     self.utility.logger(
-                        "Seems like queue '{0}' is building up! Please verify this with 'rabbitmqctl list_queues | grep ovs_'".format(
-                            output_02.index(j)), self.module, 2, 'process_celery_queue_{0}'.format(output_02.index(j)), False)
+                        "Seems like queue '{0}' is building up! Please verify this with 'rabbitmqctl list_queues "
+                        "| grep ovs_'".format(output_02.index(j)), self.module, 2, 'process_celery_queue_{0}'
+                                .format(output_02.index(j)), False)
                     lost_queues.append(output_02.index(j))
                 elif int(i) > int(j):
                     # queue is decreasing

@@ -1,5 +1,19 @@
 #!/usr/bin/python
 
+# Copyright 2014 iNuron NV
+#
+# Licensed under the Open vStorage Modified Apache License (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.openvstorage.org/license
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Title: Global OVS Health Check
 Description: Checks the GLOBAL status of a Open vStorage Node
@@ -16,16 +30,10 @@ import sys
 import os
 
 # import health check utilities
-sys.path.append('../alba')
-sys.path.append('../utils')
-sys.path.append('../arakoon')
-sys.path.append('../openvstorage')
-sys.path.append('/opt/OpenvStorage')
-
-from openvstoragecluster_health_check import OpenvStorageHealthCheck
-from arakooncluster_health_check import ArakoonHealthCheck
-from alba_health_check import AlbaHealthCheck
-from utils import Utils
+from openvstorage.openvstoragecluster_health_check import OpenvStorageHealthCheck
+from arakoon.arakooncluster_health_check import ArakoonHealthCheck
+from alba.alba_health_check import AlbaHealthCheck
+from utils.extension import Utils
 
 """
 Section: Classes
