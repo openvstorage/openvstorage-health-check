@@ -21,7 +21,7 @@ These set of rules present a guide how to contribute your own code to this repo.
 if not self.unattended: print ""
 ```
 
-⋅⋅* Try to use 1 method for every module, except if there are several critical components in a module. (e.g.)
+  * Try to use 1 method for every module, except if there are several critical components in a module. (e.g.)
 **One critical component:**
 ```
 # Checking Alba
@@ -46,21 +46,21 @@ self.ovs.checkOvsPackages()
 if not self.unattended: print ""
 ```
 
-⋅⋅* Import default and custom packages under:
+  * Import default and custom packages under:
 ```
 """
 Section: Import package(s)
 """
 ```
 
-⋅⋅* Write, define or declare classes under:
+  * Write, define or declare classes under:
 ```
 """
 Section: Classes
 """
 ```
 
-⋅⋅* Define main methods under: (For modules: Only for testing; for Main: Execution of HEALTH CHECK through `python ..`)
+  * Define main methods under: (For modules: Only for testing; for Main: Execution of HEALTH CHECK through `python ..`)
 ```
 """
 Section: Main
@@ -87,7 +87,7 @@ class OpenvStorageHealthCheck:
         self.utility = utility
 ```
 
-⋅⋅* How to use the Utility Class `logger` function:
+  * How to use the Utility Class `logger` function:
 **Logger SEVERITY_LEVELS:**
 ```
 failure = 0
