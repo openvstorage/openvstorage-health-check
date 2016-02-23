@@ -66,7 +66,7 @@ ovs healthcheck unattended
 ## Branch Info or contributions
 * The 'master' branch is marked as the main but unstable branch
 * The 'release' branches are the official releases of the HEALTH CHECK Project
-* We'd love to have your contributions, read [Community Information](CONTRIBUTION.md) for notes on how to get started.
+* We'd love to have your contributions, read [Community Information](CONTRIBUTION.md) and [Rules of conduct](RULES.md) for notes on how to get started.
 
 ## File a bug
 Open vStorage and it's automation is quality checked to the highest level.

@@ -23,7 +23,7 @@ These set of rules present a guide how to contribute your own code to this repo.
 self.req_side_ports = {'nginx': ['80', '443'], 'memcached': ['11211']}
 ```
 
-* Do not use print statements in the modules (except for the `Main`) use the the `Utils().logger(..)` instead.
+* Do not use `print` statements in the modules (except for the `Main`) use the the `Utils().logger(..)` instead.
 * Module unrelated stuff is added to the `utils/extension.py` (e.g. logger, system service detector, ...)
 * No unnecessary objects need to be created. If you use it alot, declare it in the initializor / constructor.
 * Testing scripts (in `testing/`) are used as pure educational / testing purpose
