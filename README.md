@@ -26,7 +26,7 @@ elif [ "$1" = "healthcheck" ] ; then
     cd /opt/OpenvStorage-healthcheck
     if [ "$2" = "unattended" ] ; then
         # launch unattended install
-        python -c "from openvstorage.main import Main; Main(True)"
+        python -c "from ovs_health_check.main import Main; Main(True)"
     else
         # launch attended install
         python ovs_health_check/main.py
