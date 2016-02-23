@@ -53,6 +53,7 @@ class Utils:
 
         # fetch from config file
         self.HEALTHCHECK_DIR = "/var/log/ovs/healthcheck"
+        self.HEALTHCHECK_FILE = "healthcheck.log"
         self.debug = False
 
         # init at runtime
@@ -118,10 +119,10 @@ class Utils:
     def restartService(self, service_name):
         if self.serviceManager == 0:
             # restart systemd service
-            return True
+            self.executeBashCommand("systemctl restart {0}.service".format(service_name))
         elif self.serviceManager == 1:
             # restart init service
-            return False
+            self.executeBashCommand("service {0} restart".format(service_name))
 
     def executeBashCommand(self, cmd, subpro=False):
         if not subpro:
@@ -147,7 +148,7 @@ class Utils:
         elif 'sysvinit':
             return 1
         else:
-            raise Exception ("Unsupported Service Manager detected, please contact support or file a bug @github")
+            raise Exception("Unsupported Service Manager detected, please contact support or file a bug @github")
 
     def logger(self, message, module, log_type, unattended_mode_name, unattended_print_mode=True):
 
@@ -164,7 +165,7 @@ class Utils:
         # debug = 6
 
         try:
-            target = open('/var/log/ovs/healthcheck/healthcheck.log', 'a')
+            target = open('{0}/{1}'.format(self.HEALTHCHECK_DIR, self.HEALTHCHECK_FILE), 'a')
             now = datetime.datetime.now()
 
             if log_type == 0:

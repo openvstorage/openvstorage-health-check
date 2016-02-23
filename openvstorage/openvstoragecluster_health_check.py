@@ -64,14 +64,27 @@ class OpenvStorageHealthCheck:
         self.machine_details = System.get_my_storagerouter()
         self.machine_id = System.get_my_machine_id()
         self.max_logsize = 500  # in MB
+
+        # list of packages on your local system
         self.openvstorageTotalPackageList = ["openvstorage", "openvstorage-backend", "openvstorage-backend-core",
                                              "openvstorage-backend-webapps", "openvstorage-core", "openvstorage-hc",
                                              "openvstorage-sdm", "openvstorage-webapps", "openvstorage-unittests",
                                              "alba", "volumedriver-base", "volumedriver-server", "nginx", "memcached",
                                              "rabbitmq-server", "qemu-kvm", "virtinst", "openvpn", "ntp"
                                              ]
+        # 1. key -> service name (string)
+        #
+        # 2. value -> ports (list)
         self.req_side_ports = {'nginx': ['80', '443'], 'memcached': ['11211']}
+
+        # 1. key -> absolute directory name (string)
+        #
+        # 2. value -> rights in linux style format (string)
         self.req_map_rights = {'/tmp': '777', '/var/tmp': '777'}
+
+        # 1. key -> absolute directory or log name (string)
+        #
+        # 2. value -> required user and group (dict)
         self.req_map_owners = {'/var/log/syslog': {'user': 'syslog', 'group': 'adm'},
                                '/var/log/auth.log': {'user': 'syslog', 'group': 'adm'},
                                '/var/log/kern.log': {'user': 'syslog', 'group': 'adm'},
@@ -81,7 +94,9 @@ class OpenvStorageHealthCheck:
                                '/var/cache/man': {'user': 'man', 'group': 'root'},
                                '/etc/shadow': {'user': 'root', 'group': 'shadow'}
                                }
-        # 1. for dir required options: prefix -> list (via grep), type -> string (dir),
+
+        # 1. for dir required options: AS key -> prefix (string)
+        #    AS value -> list, substring of prefix (string) , type -> string (dir)
         #    contains_nested -> Boolean (contains nested dirs and files)
         #
         # 2. for file required options: type -> string (file)
@@ -152,10 +167,12 @@ class OpenvStorageHealthCheck:
             else:
                 self.utility.logger("ALL log files are ok!".format(c_files), self.module, 1, 'log_size')
 
-    def _listLogsInDirectory(self, pwd):
+    @staticmethod
+    def _listLogsInDirectory(pwd):
         return glob.glob("{0}/*.log".format(pwd))
 
-    def _listDirsInDirectory(self, pwd):
+    @staticmethod
+    def _listDirsInDirectory(pwd):
         return next(os.walk(pwd))[1]
 
     def checkHypervisorManagementInformation(self):
@@ -168,18 +185,25 @@ class OpenvStorageHealthCheck:
             for center in management_centers:
 
                 # get general management center information
-                self.utility.logger("OVS is connected to: {0}".format(center.type), self.module, 1, 'manc_ovs_connected'.format(center.type), False)
-                self.utility.logger("Name: {0}".format(center.name), self.module, 1, 'manc_name_{0}'.format(center.name), False)
-                self.utility.logger("IP-address: {0}:{1}".format(center.ip, center.port), self.module, 1, 'manc_ip_{0}_{1}'.format(center.ip, center.port), False)
-                self.utility.logger("user: {0}".format(center.username), self.module, 1, 'manc_user_{0}'.format(center.username), False)
+                self.utility.logger("OVS is connected to: {0}".format(center.type), self.module, 1,
+                                    'manc_ovs_connected'.format(center.type), False)
+                self.utility.logger("Name: {0}".format(center.name), self.module, 1, 'manc_name_{0}'
+                                    .format(center.name), False)
+                self.utility.logger("IP-address: {0}:{1}".format(center.ip, center.port), self.module, 1,
+                                    'manc_ip_{0}_{1}'.format(center.ip, center.port), False)
+                self.utility.logger("user: {0}".format(center.username), self.module, 1, 'manc_user_{0}'
+                                    .format(center.username), False)
 
         else:
-            self.utility.logger("No OpenStack/VMWare management center connected!", self.module, 5, 'manc_ovs_connected')
+            self.utility.logger("No OpenStack/VMWare management center connected!", self.module, 5,
+                                'manc_ovs_connected')
 
-    def _fetchComputeNodeDetailByIp(self, node_ip):
+    @staticmethod
+    def _fetchComputeNodeDetailByIp(node_ip):
         return PMachineList().get_by_ip(str(node_ip))
 
-    def _fetchComputeNodesPerCenterByIp(self, management_ip):
+    @staticmethod
+    def _fetchComputeNodesPerCenterByIp(management_ip):
         return MgmtCenterList().get_by_ip(str(management_ip)).hosts
 
     def _checkPortConnection(self, port_number):
@@ -197,15 +221,18 @@ class OpenvStorageHealthCheck:
                 return False
 
     def _isPortListening(self, process_name, port):
-        self.utility.logger("Checking port {0} of service {1} ...".format(port, process_name), self.module, 3, '_isPortListening', False)
+        self.utility.logger("Checking port {0} of service {1} ...".format(port, process_name), self.module, 3,
+                            '_isPortListening', False)
         if self._checkPortConnection(port):
-            self.utility.logger("Connection successfully established!", self.module, 1, 'port_{0}_{1}'.format(process_name, port))
+            self.utility.logger("Connection successfully established!", self.module, 1, 'port_{0}_{1}'
+                                .format(process_name, port))
         else:
             self.utility.logger("Connection FAILED to service '{1}' on port {0}".format(port, process_name),
                                  self.module, 0, 'port_{0}_{1}'.format(process_name, port))
 
     def checkRequiredPorts(self):
-        self.utility.logger("Checking PORT CONNECTIONS of several services ...", self.module, 3, 'checkRequiredPorts', False)
+        self.utility.logger("Checking PORT CONNECTIONS of several services ...", self.module, 3,
+                            'checkRequiredPorts', False)
 
         # check ports for OVS services
         self.utility.logger("Checking OVS services ...", self.module, 3, 'checkOvsServicesPorts', False)
@@ -232,9 +259,6 @@ class OpenvStorageHealthCheck:
                                  self.module, 0, 'port_celery')
         return None
 
-    def checkSSHConnectionToOtherNodes(self):
-        return True
-
     def checkOvsPackages(self):
         self.utility.logger("Checking OVS packages: ", self.module, 3, 'checkOvsPackages', False)
 
@@ -245,7 +269,8 @@ class OpenvStorageHealthCheck:
                     "Package '%s' is present, with version '%s'" % (package, result[2].split(':')[1].strip()),
                     self.module, 1, 'package_{0}'.format(package))
             else:
-                self.utility.logger("Package '%s' is NOT present ..." % (package), self.module, 5, 'package_{0}'.format(package))
+                self.utility.logger("Package '%s' is NOT present ..." % (package), self.module, 5,
+                                    'package_{0}'.format(package))
         return None
 
     def checkOvsProcesses(self):
@@ -256,13 +281,15 @@ class OpenvStorageHealthCheck:
                 if ovs_service.startswith("ovs-"):
                     process_name = ovs_service.split(".conf", 1)[0].strip()
                     if self._checkStatusOfProcess(process_name):
-                        self.utility.logger("Service '%s' is running!" % (process_name), self.module, 1, 'process_{0}'.format(process_name))
+                        self.utility.logger("Service '%s' is running!" % (process_name), self.module, 1,
+                                            'process_{0}'.format(process_name))
                     else:
                         self.utility.logger("Service '%s' is NOT running, please check this... " % (process_name),
                                              self.module, 0, 'process_{0}'.format(process_name))
             return None
         else:
-            self.utility.logger("Other service managers than 'init' are not yet supported!", self.module, 4, 'hc_process_supported')
+            self.utility.logger("Other service managers than 'init' are not yet supported!", self.module, 4,
+                                'hc_process_supported')
 
     def _checkStatusOfProcess(self, process_name, upstart=True):
 
@@ -277,7 +304,10 @@ class OpenvStorageHealthCheck:
                     return False
                 else:
                     #wrong process name
-                    self.utility.logger("No matching UPSTART process with name {0} found, please check the process_name for errors or try to use 'upstart=False'".format(process_name), self.module, 4, 'process_{0}'.format(process_name), False)
+                    self.utility.logger("No matching UPSTART process with name {0} found, please check "
+                                        "the process_name for errors or try to use 'upstart=False'"
+                                        .format(process_name), self.module, 4, 'process_{0}'
+                                        .format(process_name), False)
             else:
                 result = self.utility.executeBashCommand("service {0} status".format(process_name))
                 if result[0].split()[1] == "start/running,":
@@ -288,9 +318,12 @@ class OpenvStorageHealthCheck:
                     return False
                 else:
                     # wrong process name or unhandled result
-                    self.utility.logger("No matching process with name {0} found, please check the process_name for errors or try to use 'upstart=False'".format(process_name), self.module, 4, 'process_{0}'.format(process_name))
+                    self.utility.logger("No matching process with name {0} found, please check the"
+                                        " process_name for errors or try to use 'upstart=False'"
+                                        .format(process_name), self.module, 4, 'process_{0}'.format(process_name))
         else:
-            self.utility.logger("Other service managers than 'init' are not yet supported!", self.module, 4, 'hc_process_supported', False)
+            self.utility.logger("Other service managers than 'init' are not yet supported!", self.module,
+                                4, 'hc_process_supported', False)
             raise Exception("Unsupported service manager used")
 
     def _methodHandler(self, signum, frame):
@@ -320,7 +353,8 @@ class OpenvStorageHealthCheck:
 
         # check ovs-workers
         if not self._checkStatusOfProcess('ovs-workers'):
-            self.utility.logger("Seems like ovs-workers are down, maybe due to RabbitMQ?", self.module, 0, 'process_ovs-workers', False)
+            self.utility.logger("Seems like ovs-workers are down, maybe due to RabbitMQ?", self.module, 0,
+                                'process_ovs-workers', False)
             # check rabbitMQ status
             if "nodedown" in self.utility.executeBashCommand('service rabbitmq-server status')[1]:
                 # RabbitMQ seems to be DOWN
@@ -331,14 +365,16 @@ class OpenvStorageHealthCheck:
                 # RabbitMQ is showing it's up but lets check some more stuff
                 if "Error" in self.utility.executeBashCommand('rabbitmqctl list_queues')[1]:
                     self.utility.logger(
-                        "RabbitMQ seems to be UP but it is not functioning as it should! Maybe it has been shutdown through 'stop_app'? Please check logs in {0}".format(
-                            RLOGS), self.module, 0, 'RabbitSeemsUpButNotFunctioning', False)
+                        "RabbitMQ seems to be UP but it is not functioning as it should! Maybe it has been"
+                        " shutdown through 'stop_app'? Please check logs in {0}".format(
+                        RLOGS), self.module, 0, 'RabbitSeemsUpButNotFunctioning', False)
                     return False
                 else:
                     self.utility.logger("RabbitMQ process is running as it should, start checking the queues... ",
                                          self.module, 1, 'checkQueuesButRabbitIsWorking', False)
         else:
-            self.utility.logger("OVS workers are UP! Maybe it is stuck? Start checking the queues...", self.module, 0, 'checkQueuesButOvsWorkersAreUp', False)
+            self.utility.logger("OVS workers are UP! Maybe it is stuck? Start checking the queues...", self.module, 0,
+                                'checkQueuesButOvsWorkersAreUp', False)
 
         # fetch remaining tasks on node
         self.utility.logger("Starting deep check for RabbitMQ!", self.module, 3, 'DeepCheckRabbit', False)
@@ -396,37 +432,40 @@ class OpenvStorageHealthCheck:
 
             # apparently the basic check failed, so we are going crazy
             self.utility.logger(
-                "Unexpected exception received during check of celery! Are RabbitMQ and/or ovs-workers running? Traceback: {0}".format(
-                    ex), self.module, 0, 'process_celery')
+                "Unexpected exception received during check of celery! Are RabbitMQ and/or ovs-workers running?"
+                " Traceback: {0}".format(ex), self.module, 0, 'process_celery')
 
             # commencing deep check
             if not self._extendedCheckCelery():
-                self.utility.logger("Please verify the integrety of 'RabbitMQ' and 'ovs-workers'", self.module, 0, 'CheckIntegrityOfWorkers', False)
+                self.utility.logger("Please verify the integrety of 'RabbitMQ' and 'ovs-workers'", self.module, 0,
+                                    'CheckIntegrityOfWorkers', False)
                 return False
             else:
-                self.utility.logger("Deep check finished successfully but did not find anything... :(", self.module, 1, 'DeepCheckDidNotFindAnything', False)
+                self.utility.logger("Deep check finished successfully but did not find anything... :(", self.module, 1,
+                                    'DeepCheckDidNotFindAnything', False)
                 return True
 
     def checkRequiredDirs(self):
 
-        self.utility.logger("Checking if OWNERS are set correctly on certain maps: ", self.module, 3, 'checkRequiredMaps_owners', False)
+        self.utility.logger("Checking if OWNERS are set correctly on certain maps: ", self.module, 3,
+                            'checkRequiredMaps_owners', False)
         for map, owner_settings in self.req_map_owners.iteritems():
             if owner_settings.get('user') == self._findOwnerOfFile(map) and owner_settings.get(
                     'group') == self._findGroupOfFile(map):
-                self.utility.logger("Directory '{0}' has correct owners!".format(map), self.module, 1, 'dir_{0}'.format(map))
+                self.utility.logger("Directory '{0}' has correct owners!".format(map), self.module, 1,
+                                    'dir_{0}'.format(map))
             else:
                 self.utility.logger(
-                    "Directory '{0}' has INCORRECT owners! It must be OWNED by USER={1} and GROUP={2}".format(map,
-                                                                                                              owner_settings.get(
-                                                                                                                  'user'),
-                                                                                                              owner_settings.get(
-                                                                                                                  'group')),
-                    self.module, 0, 'dir_{0}'.format(map))
+                    "Directory '{0}' has INCORRECT owners! It must be OWNED by USER={1} and GROUP={2}"
+                        .format(map, owner_settings.get('user'), owner_settings.get('group')),
+                        self.module, 0, 'dir_{0}'.format(map))
 
-        self.utility.logger("Checking if Rights are set correctly on certain maps: ", self.module, 3, 'checkRequiredMaps_rights', False)
+        self.utility.logger("Checking if Rights are set correctly on certain maps: ", self.module, 3,
+                            'checkRequiredMaps_rights', False)
         for map, rights in self.req_map_rights.iteritems():
             if self._checkRightsOfFile(map, rights):
-                self.utility.logger("Directory '{0}' has correct rights!".format(map), self.module, 1, 'dir_{0}'.format(map))
+                self.utility.logger("Directory '{0}' has correct rights!".format(map), self.module, 1,
+                                    'dir_{0}'.format(map))
             else:
                 self.utility.logger("Directory '{0}' has INCORRECT rights! It must be CHMOD={1} ".format(map, rights),
                                      self.module, 0, 'dir_{0}'.format(map))
@@ -446,7 +485,7 @@ class OpenvStorageHealthCheck:
         # fetch file to start compare
         octal_rights_file = stat.S_IMODE(os.stat(filename).st_mode)
 
-        #determine if rights are correct
+        # determine if rights are correct
         if oct_rights == octal_rights_file:
             return True
         else:
@@ -459,7 +498,9 @@ class OpenvStorageHealthCheck:
             self.utility.logger("DNS resolving works!", self.module, 1, 'dns_resolving')
             return True
         except Exception:
-            self.utility.logger("DNS resolving doesn't work, please check /etc/resolv.conf or add correct DNS server and make it immutable: 'sudo chattr +i /etc/resolv.conf'!", self.module, 0, 'dns_resolving')
+            self.utility.logger("DNS resolving doesn't work, please check /etc/resolv.conf or add correct"
+                                " DNS server and make it immutable: 'sudo chattr +i /etc/resolv.conf'!",
+                                self.module, 0, 'dns_resolving')
             return False
 
     def findZombieAndDeadProcesses(self):
@@ -468,7 +509,7 @@ class OpenvStorageHealthCheck:
 
         self.utility.logger("Checking for zombie/dead processes: ", self.module, 3, 'checkForZombieProcesses', False)
 
-        #check for zombie'd and dead processes
+        # check for zombie'd and dead processes
         for proc in psutil.process_iter():
             try:
                 pinfo = proc.as_dict(attrs=['pid', 'name', 'status'])
@@ -481,17 +522,19 @@ class OpenvStorageHealthCheck:
                 if pinfo.get('status') == psutil.STATUS_DEAD:
                     dead_processes.append("{0}({1})".format(pinfo.get('name'), pinfo.get('pid')))
 
-        #check if there zombie processes
+        # check if there zombie processes
         if len(zombie_processes) == 0:
             self.utility.logger("There are NO zombie processes on this node!", self.module, 1, 'process_zombies')
         else:
-            self.utility.logger("We DETECTED zombie processes on this node: {0}".format(', '.join(zombie_processes)), self.module, 2, 'process_zombies')
+            self.utility.logger("We DETECTED zombie processes on this node: {0}".format(', '.join(zombie_processes)),
+                                self.module, 2, 'process_zombies')
 
-        #check if there dead processes
+        # check if there dead processes
         if len(dead_processes) == 0:
             self.utility.logger("There are NO dead processes on this node!", self.module, 1, 'process_dead')
         else:
-            self.utility.logger("We DETECTED dead processes on this node: {0}".format(', '.join(dead_processes)), self.module, 0, 'process_dead')
+            self.utility.logger("We DETECTED dead processes on this node: {0}".format(', '.join(dead_processes)),
+                                self.module, 0, 'process_dead')
 
     def _checkFiledriver(self, args1, vp_name, test_name):
         # this method is not meant to be executed in serial, it is meant to be executed in parallel as a thread
@@ -500,7 +543,8 @@ class OpenvStorageHealthCheck:
 
     def _checkVolumedriver(self, args1, vp_name, test_name):
         # this method is not meant to be executed in serial, it is meant to be executed in parallel as a thread
-        volumedriver = subprocess.check_output("truncate -s 10GB /mnt/{0}/{1}.raw".format(vp_name, test_name), stderr=subprocess.STDOUT, shell=True)
+        volumedriver = subprocess.check_output("truncate -s 10GB /mnt/{0}/{1}.raw".format(vp_name, test_name),
+                                               stderr=subprocess.STDOUT, shell=True)
         return volumedriver
 
     def checkFileDriver(self):
@@ -531,7 +575,8 @@ class OpenvStorageHealthCheck:
         if len(filedriversNotWorking) == 0:
             self.utility.logger("All filedrivers seem to be working fine!", self.module, 1, 'filedrivers')
         else:
-            self.utility.logger("Some filedrivers seem to have some problems: {0}".format(', '.join(filedriversNotWorking)), self.module, 0, 'filedrivers')
+            self.utility.logger("Some filedrivers seem to have some problems: {0}"
+                                .format(', '.join(filedriversNotWorking)), self.module, 0, 'filedrivers')
 
     def checkVolumeDriver(self):
         volumedriversNotWorking = []
@@ -572,18 +617,22 @@ class OpenvStorageHealthCheck:
         # RabbitMQ check: cluster verification
         #
 
-        self.utility.logger("Precheck: verification of RabbitMQ cluster: ", self.module, 3, 'checkRabbitMQcluster', False)
+        self.utility.logger("Precheck: verification of RabbitMQ cluster: ", self.module, 3,
+                            'checkRabbitMQcluster', False)
 
         cluster_status = self.utility.executeBashCommand("rabbitmqctl cluster_status")
 
         if "Error" not in cluster_status[1]:
             partition_status = cluster_status[3]
             if '@' in partition_status:
-                self.utility.logger("Seems like the RabbitMQ cluster has 'partition' problems, please check this...", self.module, 0, 'process_rabbitmq', False)
+                self.utility.logger("Seems like the RabbitMQ cluster has 'partition' problems, please check this...",
+                                    self.module, 0, 'process_rabbitmq', False)
             else:
-                self.utility.logger("RabbitMQ does not seem to have 'partition' problems :D", self.module, 1, 'process_rabbitmq', False)
+                self.utility.logger("RabbitMQ does not seem to have 'partition' problems :D", self.module, 1,
+                                    'process_rabbitmq', False)
         else:
-            self.utility.logger("Seems like the RabbitMQ cluster has errors, maybe it is offline?", self.module, 0, 'process_rabbitmq', False)
+            self.utility.logger("Seems like the RabbitMQ cluster has errors, maybe it is offline?", self.module, 0,
+                                'process_rabbitmq', False)
 
         #
         # Checking consistency of volumedriver vs. ovsdb and backwards
@@ -591,7 +640,8 @@ class OpenvStorageHealthCheck:
 
         for vp in VPoolList.get_vpools():
 
-            self.utility.logger("Checking consistency of volumedriver vs. ovsdb for vPool '{0}': ".format(vp.name), self.module, 3, 'checkDiscrepanciesVoldrvOvsdb', False)
+            self.utility.logger("Checking consistency of volumedriver vs. ovsdb for vPool '{0}': ".format(vp.name),
+                                self.module, 3, 'checkDiscrepanciesVoldrvOvsdb', False)
 
             # list of vdisks that are in model but are not in volumedriver
             missingInVolumedriver = []
