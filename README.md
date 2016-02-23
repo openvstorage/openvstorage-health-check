@@ -75,24 +75,7 @@ The Open vStorage HEALTH CHECK Project maintains a [public issue tracker](https:
 where you can report bugs and request features.
 This issue tracker is not a customer support forum but an error, flaw, failure, or fault in the Open vStorage software.
 
-If you want to submit a bug, please read the [Community Information](CONTRIBUTING.md) for notes on how to get started.
+If you want to submit a bug, please read the [Community Information](CONTRIBUTION.md) for notes on how to get started.
 
 # License
-
-```
-# Copyright 2014 iNuron NV
-#
-# Licensed under the Open vStorage Modified Apache License (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.openvstorage.org/license
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-```
-
-
+The Open vStorage Healthcheck is released under the [Apache 2 license](http://www.apache.org/licenses/LICENSE-2.0).
