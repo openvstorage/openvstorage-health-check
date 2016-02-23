@@ -23,13 +23,13 @@ vim /usr/bin/ovs
 
 ```
 elif [ "$1" = "healthcheck" ] ; then
-    cd /opt/OpenvStorage-healthcheck/ovs_health_check
+    cd /opt/OpenvStorage-healthcheck
     if [ "$2" = "unattended" ] ; then
         # launch unattended install
-        python -c "from main import Main; Main(True)"
+        python -c "from openvstorage.main import Main; Main(True)"
     else
         # launch attended install
-        python main.py
+        python ovs_health_check/main.py
     fi
 ```
 
@@ -40,9 +40,9 @@ elif [ "$1" = "healthcheck" ] ; then
 ovs healthcheck
 
 # native python execution
-cd /opt/OpenvStorage-healthcheck/ovs_health_check
+cd /opt/OpenvStorage-healthcheck/
 
-python main.py
+python ovs_health_check/main.py
 ```
 
 ## Monitoring with CheckMK or other server-deamon monitoring systems
