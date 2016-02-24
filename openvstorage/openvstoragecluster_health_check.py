@@ -280,7 +280,7 @@ class OpenvStorageHealthCheck:
             for ovs_service in os.listdir("/etc/init"):
                 if ovs_service.startswith("ovs-"):
                     process_name = ovs_service.split(".conf", 1)[0].strip()
-                    if self._checkStatusOfProcess(process_name):
+                    if self.utility.getStatusOfService(process_name):
                         self.utility.logger("Service '%s' is running!" % (process_name), self.module, 1,
                                             'process_{0}'.format(process_name))
                     else:
@@ -289,42 +289,7 @@ class OpenvStorageHealthCheck:
             return None
         else:
             self.utility.logger("Other service managers than 'init' are not yet supported!", self.module, 4,
-                                'hc_process_supported')
-
-    def _checkStatusOfProcess(self, process_name, upstart=True):
-
-        if self.service_manager:
-            if upstart:
-                result = self.utility.executeBashCommand("status {0}".format(process_name))
-                if result[0].split()[1] == "start/running,":
-                    return True
-                elif result[0].split()[1] == "stop/waiting":
-                    return False
-                elif result[0].split()[1] == "start/pre-start,":
-                    return False
-                else:
-                    #wrong process name
-                    self.utility.logger("No matching UPSTART process with name {0} found, please check "
-                                        "the process_name for errors or try to use 'upstart=False'"
-                                        .format(process_name), self.module, 4, 'process_{0}'
-                                        .format(process_name), False)
-            else:
-                result = self.utility.executeBashCommand("service {0} status".format(process_name))
-                if result[0].split()[1] == "start/running,":
-                    return True
-                elif result[0].split()[1] == "stop/waiting":
-                    return False
-                elif result[0].split()[1] == "start/pre-start,":
-                    return False
-                else:
-                    # wrong process name or unhandled result
-                    self.utility.logger("No matching process with name {0} found, please check the"
-                                        " process_name for errors or try to use 'upstart=False'"
-                                        .format(process_name), self.module, 4, 'process_{0}'.format(process_name))
-        else:
-            self.utility.logger("Other service managers than 'init' are not yet supported!", self.module,
-                                4, 'hc_process_supported', False)
-            raise Exception("Unsupported service manager used")
+                                'hc_process_supported', False)
 
     def _methodHandler(self, signum, frame):
         WARNING = "SPOTTED a PROCESS who is taking to long! The process that you are trying to reach is probably stuck!"
@@ -352,22 +317,28 @@ class OpenvStorageHealthCheck:
         self.utility.logger("Commencing deep check for celery/RabbitMQ", self.module, 2, '_extendedCheckCelery', False)
 
         # check ovs-workers
-        if not self._checkStatusOfProcess('ovs-workers'):
+        if not self.utility.getStatusOfService('ovs-workers'):
             self.utility.logger("Seems like ovs-workers are down, maybe due to RabbitMQ?", self.module, 0,
                                 'process_ovs-workers', False)
             # check rabbitMQ status
-            if "nodedown" in self.utility.executeBashCommand('service rabbitmq-server status')[1]:
+            if self.utility.getStatusOfService('rabbitmq-server'):
                 # RabbitMQ seems to be DOWN
                 self.utility.logger("RabbitMQ seems to be DOWN, please check logs in {0}".format(RLOGS), self.module,
                                      0, 'RabbitIsDown', False)
                 return False
             else:
                 # RabbitMQ is showing it's up but lets check some more stuff
-                if "Error" in self.utility.executeBashCommand('rabbitmqctl list_queues')[1]:
+                list_status = self.utility.executeBashCommand('rabbitmqctl list_queues')[1]
+                if "Error" in list_status:
                     self.utility.logger(
                         "RabbitMQ seems to be UP but it is not functioning as it should! Maybe it has been"
                         " shutdown through 'stop_app'? Please check logs in {0}".format(
                         RLOGS), self.module, 0, 'RabbitSeemsUpButNotFunctioning', False)
+                    return False
+                elif "Error: {aborted" in list_status:
+                    self.utility.logger(
+                        "RabbitMQ seems to be DOWN but it is not functioning as it should! Please check logs in {0}"
+                            .format(RLOGS), self.module, 0, 'RabbitSeemsDown', False)
                     return False
                 else:
                     self.utility.logger("RabbitMQ process is running as it should, start checking the queues... ",
@@ -623,7 +594,14 @@ class OpenvStorageHealthCheck:
         cluster_status = self.utility.executeBashCommand("rabbitmqctl cluster_status")
 
         if "Error" not in cluster_status[1]:
-            partition_status = cluster_status[3]
+
+            # this can happen
+            if len(cluster_status) < 3:
+                partition_status = cluster_status[2]
+            else:
+                partition_status = cluster_status[3]
+
+            # check parition status
             if '@' in partition_status:
                 self.utility.logger("Seems like the RabbitMQ cluster has 'partition' problems, please check this...",
                                     self.module, 0, 'process_rabbitmq', False)

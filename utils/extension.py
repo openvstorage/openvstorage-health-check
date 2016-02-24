@@ -32,6 +32,10 @@ import commands
 import json
 import os
 
+# ovs packages
+from ovs.extensions.services.service import ServiceManager
+from ovs.extensions.generic.sshclient import SSHClient
+
 """
 Section: Classes
 """
@@ -51,10 +55,19 @@ class Utils:
         # module specific
         self.module = "utils"
 
+        # load config file
+        PARENT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
+        with open("{0}/conf/settings.json".format(PARENT)) as settings_file:
+            self.settings = json.load(settings_file)
+
         # fetch from config file
-        self.HEALTHCHECK_DIR = "/var/log/ovs/healthcheck"
-        self.HEALTHCHECK_FILE = "healthcheck.log"
-        self.debug = False
+        self.HEALTHCHECK_DIR = self.settings["healthcheck"]["logging"]["directory"]
+        self.HEALTHCHECK_FILE = self.settings["healthcheck"]["logging"]["file"]
+        self.debug = self.settings["healthcheck"]["debug_mode"]
+        self.max_log_size = self.settings["healthcheck"]["max_check_log_size"]  # in MB
+
+        # open ovs ssh client
+        self.client = SSHClient('127.0.0.1', username='root')
 
         # init at runtime
         self.etcd = self.detectEtcd()
@@ -105,7 +118,7 @@ class Utils:
                     return "etcd://127.0.0.1:2379/ovs/vpools/{0}/hosts/{1}/config".format(guid, name)
 
     def detectEtcd(self):
-        result = commands.getoutput("dpkg -l | grep etcd").split()
+        result = self.executeBashCommand("dpkg -l | grep etcd")
 
         if len(result) == 0:
             return False
@@ -116,13 +129,8 @@ class Utils:
         # dumps converts to general json, loads converts to python value
         return json.loads(json.dumps(xmltodict.parse(str(xml))))
 
-    def restartService(self, service_name):
-        if self.serviceManager == 0:
-            # restart systemd service
-            self.executeBashCommand("systemctl restart {0}.service".format(service_name))
-        elif self.serviceManager == 1:
-            # restart init service
-            self.executeBashCommand("service {0} restart".format(service_name))
+    def getStatusOfService(self, service_name):
+        return ServiceManager.get_service_status(str(service_name), self.client)
 
     def executeBashCommand(self, cmd, subpro=False):
         if not subpro:
