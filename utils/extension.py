@@ -89,7 +89,7 @@ class Utils:
         if not os.path.isdir(self.HEALTHCHECK_DIR):
             os.makedirs(self.HEALTHCHECK_DIR)
 
-    def fetchConfigFilePath(self, name, product, guid=None):
+    def fetchConfigFilePath(self, name, product, guid=None, node_id=""):
 
         # INFO
         # guid is only for volumedriver (vpool) config and proxy configs
@@ -115,12 +115,12 @@ class Utils:
                 if not guid and self.etcd:
                     raise Exception("You must provide a 'vPOOL_guid' for ETCD, currently this is 'None'")
                 else:
-                    return "etcd://127.0.0.1:2379/ovs/vpools/{0}/hosts/{1}/config".format(guid, name)
+                    return "etcd://127.0.0.1:2379/ovs/vpools/{0}/hosts/{1}/config".format(guid, name+node_id)
 
     def detectEtcd(self):
         result = self.executeBashCommand("dpkg -l | grep etcd")
 
-        if len(result) == 0:
+        if result[0] == '':
             return False
         else:
             return True
