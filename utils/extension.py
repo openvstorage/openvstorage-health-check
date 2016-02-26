@@ -17,7 +17,6 @@
 """
 Title: Utils
 Description: Utilities for OVS health check
-Maintainer: Jonas Libbrecht
 """
 
 """
@@ -89,7 +88,7 @@ class Utils:
         if not os.path.isdir(self.HEALTHCHECK_DIR):
             os.makedirs(self.HEALTHCHECK_DIR)
 
-    def fetchConfigFilePath(self, name, product, guid=None, node_id=""):
+    def fetchConfigFilePath(self, name, node_id, product, guid=None):
 
         # INFO
         # guid is only for volumedriver (vpool) config and proxy configs

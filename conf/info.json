@@ -2,11 +2,13 @@
     "main": {
         "name": "Open vStorage Health Check",
         "description": "Health check for several components of Open vStorage and more ...",
+        "version": 2.0,
         "license": "The Open vStorage Health Check is released under the Apache 2 license",
         "url": "www.openvstorage.org",
         "source": "https://github.com/openvstorage/openvstorage",
         "arch": "amd64",
         "maintainer": {
+
             "name": "Jonas Libbrecht",
             "e-mail": "jonas.libbrecht@openvstorage.com"
         }

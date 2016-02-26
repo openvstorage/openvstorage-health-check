@@ -16,8 +16,7 @@
 
 """
 Title: Open vStorage Health Check
-Description: Checks the OVS health 
-Maintainer: Jonas Libbrecht
+Description: Checks the OVS health
 """
 
 """
@@ -628,7 +627,7 @@ class OpenvStorageHealthCheck:
             missingInModel = []
 
             # fetch configfile of vpool for the volumedriver
-            config_file = self.utility.fetchConfigFilePath(vp.name+self.machine_id, 1, vp.guid)
+            config_file = self.utility.fetchConfigFilePath(vp.name, self.machine_id, 1, vp.guid)
             voldrv_client = src.LocalStorageRouterClient(config_file)
 
             # collect data from volumedriver
@@ -677,7 +676,7 @@ class OpenvStorageHealthCheck:
             self.utility.logger("Checking vPool {0}: ".format(vp.name), self.module, 3,
                                 'checkVPOOL_{0}'.format(vp.name), False)
 
-            config_file = self.utility.fetchConfigFilePath(vp.name+self.machine_id, 1, vp.guid)
+            config_file = self.utility.fetchConfigFilePath(vp.name, self.machine_id, 1, vp.guid)
             voldrv_client = src.LocalStorageRouterClient(config_file)
 
             for volume in voldrv_client.list_volumes():

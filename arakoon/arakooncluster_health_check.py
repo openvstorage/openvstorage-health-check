@@ -16,8 +16,7 @@
 
 """
 Title: Arakoon Health Check
-Description: Checks the Arakoon cluster and its integrity 
-Maintainer: Jonas Libbrecht
+Description: Checks the Arakoon cluster and its integrity
 """
 
 """

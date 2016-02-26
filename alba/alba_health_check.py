@@ -17,7 +17,6 @@
 """
 Title: Alba Health Check
 Description: Checks the Alba backend
-Maintainer: Jonas Libbrecht
 """
 
 """

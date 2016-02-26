@@ -17,8 +17,6 @@
 """
 Title: Global OVS Health Check
 Description: Checks the GLOBAL status of a Open vStorage Node
-Version: 2.0 (Supports ETCD)
-Maintainer: Jonas Libbrecht
 """
 
 """
