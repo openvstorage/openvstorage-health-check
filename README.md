@@ -25,10 +25,10 @@ vim /usr/bin/ovs
 elif [ "$1" = "healthcheck" ] ; then
     cd /opt/OpenvStorage-healthcheck
     if [ "$2" = "unattended" ] ; then
-        # launch unattended install
+        # launch unattended healthcheck
         python -c "from ovs_health_check.main import Main; Main(True)"
     else
-        # launch attended install
+        # launch healthcheck
         python ovs_health_check/main.py
     fi
 ```
