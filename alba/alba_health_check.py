@@ -54,6 +54,7 @@ class AlbaHealthCheck:
         self.utility = utility
         self.show_disks_in_monitoring = False
         self.machine_details = System.get_my_storagerouter()
+        self.machine_id = System.get_my_machine_id()
         self.temp_file_loc = "/tmp/ovs-hc.xml"  # to be put in alba file
         self.temp_file_fetched_loc = "/tmp/ovs-hc-fetched.xml"  # fetched (from alba) file location
         self.temp_file_size = 1048576  # bytes
@@ -103,7 +104,7 @@ class AlbaHealthCheck:
                     # determine what to what backend the proxy is connected
                     abm_name = subprocess.check_output(['alba', 'proxy-client-cfg', '-h', '127.0.0.1', '-p',
                                                         str(sr.ports[0])]).split()[3]
-                    abm_config = self.utility.fetchConfigFilePath(abm_name, 0)
+                    abm_config = self.utility.fetchConfigFilePath(abm_name, self.machine_id, 0)
 
                     # determine presets / backend
                     presets_results = subprocess.Popen(['alba', 'list-presets', '--config', abm_config, '--to-json'],
