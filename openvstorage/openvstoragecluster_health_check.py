@@ -59,7 +59,7 @@ class OpenvStorageHealthCheck:
     def __init__(self, utility=Utils(False)):
         self.module = 'openvstorage'
         self.utility = utility
-        self.service_manager = self.utility.detectServiceManager()
+        self.service_manager = self.utility.serviceManager
         self.machine_details = System.get_my_storagerouter()
         self.machine_id = System.get_my_machine_id()
         self.max_logsize = 500  # in MB
@@ -118,36 +118,40 @@ class OpenvStorageHealthCheck:
         # collect log files
         for log, settings in self.logging.iteritems():
             if settings.get('type') == 'dir':
-                # check if dir contains files
-                files = self._listLogsInDirectory(log)
-                # check if given dir has files
-                if len(files) != 0:
-                    # check size of log files
-                    for file in files:
-                        if settings.get('prefix') != None:
-                            for prefix in list(settings.get('prefix')):
-                                if prefix in file:
-                                    collection.append(file)
-                        else:
-                            collection.append(file)
+                # check if dir exists
+                if os.path.isdir(log):
+                    # check if dir contains files
+                    files = self._listLogsInDirectory(log)
+                    # check if given dir has files
+                    if len(files) != 0:
+                        # check size of log files
+                        for file in files:
+                            if settings.get('prefix') != None:
+                                for prefix in list(settings.get('prefix')):
+                                    if prefix in file:
+                                        collection.append(file)
+                            else:
+                                collection.append(file)
 
-                # check if has nested_dirs and nested_files
-                if settings.get('contains_nested'):
-                    nested_dirs = self._listDirsInDirectory(log)
-                    for dir in nested_dirs:
-                        nested_files = self._listLogsInDirectory(log+"/"+dir)
-                        if len(nested_files) != 0:
-                            # check size of log files
-                            for nested_file in nested_files:
-                                if settings.get('prefix') != None:
-                                    for prefix in list(settings.get('prefix')):
-                                        if prefix in file:
-                                            collection.append(nested_file)
-                                else:
-                                    collection.append(nested_file)
+                    # check if has nested_dirs and nested_files
+                    if settings.get('contains_nested'):
+                        print settings, log
+                        nested_dirs = self._listDirsInDirectory(log)
+                        for dir in nested_dirs:
+                            nested_files = self._listLogsInDirectory(log+"/"+dir)
+                            if len(nested_files) != 0:
+                                # check size of log files
+                                for nested_file in nested_files:
+                                    if settings.get('prefix') != None:
+                                        for prefix in list(settings.get('prefix')):
+                                            if prefix in file:
+                                                collection.append(nested_file)
+                                    else:
+                                        collection.append(nested_file)
             else:
-                # file
-                collection.append(log)
+                # check if file exists
+                if os.path.exists(log):
+                    collection.append(log)
 
         # process log files
         for c_files in collection:
@@ -249,14 +253,17 @@ class OpenvStorageHealthCheck:
 
         # Check Celery and RabbitMQ
         self.utility.logger("Checking RabbitMQ/Celery ...", self.module, 3, 'checkRabbitmqCelery', False)
-        PCOMMAND = "celery inspect ping -b amqp://ovs:0penv5tor4ge@{0}//".format(self.machine_details.ip)
-        pcel = self.utility.executeBashCommand(PCOMMAND.format(process))
-        if len(pcel) != 1 and 'pong' in pcel[1].strip():
-            self.utility.logger("Connection successfully established!", self.module, 1, 'port_celery')
+
+        if self.utility.node_type == "MASTER":
+            PCOMMAND = "celery inspect ping -b amqp://ovs:0penv5tor4ge@{0}//".format(self.machine_details.ip)
+            pcel = self.utility.executeBashCommand(PCOMMAND.format(process))
+            if len(pcel) != 1 and 'pong' in pcel[1].strip():
+                self.utility.logger("Connection successfully established!", self.module, 1, 'port_celery')
+            else:
+                self.utility.logger("Connection FAILED to service Celery, please check 'RabbitMQ' and 'ovs-workers'?",
+                                     self.module, 0, 'port_celery')
         else:
-            self.utility.logger("Connection FAILED to service Celery, please check 'RabbitMQ' and 'ovs-workers'?",
-                                 self.module, 0, 'port_celery')
-        return None
+            self.utility.logger("RabbitMQ is not running/active on this server!", self.module, 5, 'port_celery')
 
     def checkOvsPackages(self):
         self.utility.logger("Checking OVS packages: ", self.module, 3, 'checkOvsPackages', False)
@@ -699,7 +706,7 @@ class OpenvStorageHealthCheck:
 
                 haltedVolumes = []
 
-                self.utility.logger("Checking vPool {0}: ".format(vp.name), self.module, 3,
+                self.utility.logger("Checking vPool '{0}': ".format(vp.name), self.module, 3,
                                     'checkVPOOL_{0}'.format(vp.name), False)
 
                 config_file = self.utility.fetchConfigFilePath(vp.name, self.machine_id, 1, vp.guid)

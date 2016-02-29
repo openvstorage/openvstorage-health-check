@@ -60,8 +60,8 @@ ovs healthcheck unattended
 ```
 
 # Important to know!
-* No files in the vPools may be named after: `ovs-healthcheck-test.xml`
-* No volumes in the vPools may be named after: `ovs-healthcheck-test.raw`
+* No files in the vPools may be named after: `ovs-healthcheck-test-{storagerouter_id}.xml`
+* No volumes in the vPools may be named after: `ovs-healthcheck-test-{storagerouter_id}.raw`
 
 ## Branch Info or contributions
 * The 'master' branch is marked as the main but unstable branch

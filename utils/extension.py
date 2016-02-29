@@ -34,6 +34,7 @@ import os
 # ovs packages
 from ovs.extensions.services.service import ServiceManager
 from ovs.extensions.generic.sshclient import SSHClient
+from ovs.extensions.generic.system import System
 
 """
 Section: Classes
@@ -71,6 +72,7 @@ class Utils:
         # init at runtime
         self.etcd = self.detectEtcd()
         self.serviceManager = self.detectServiceManager()
+        self.node_type = self.detectOvsType()
 
         # fetched from main.py
         self.unattended_mode = unattended_mode
@@ -101,6 +103,7 @@ class Utils:
         # vpool = 1
         # alba_backends = 2
         # alba_asds = 3
+        # ovs = 4
 
         if not self.etcd:
             if product == 0:
@@ -115,6 +118,20 @@ class Utils:
                     raise Exception("You must provide a 'vPOOL_guid' for ETCD, currently this is 'None'")
                 else:
                     return "etcd://127.0.0.1:2379/ovs/vpools/{0}/hosts/{1}/config".format(guid, name+node_id)
+
+    def detectOvsType(self):
+        # fetch config
+
+        if self.etcd:
+            # if etcd is present
+            return self.executeBashCommand("etcdctl get /ovs/framework/hosts/{0}/type"
+                                           .format(System.get_my_storagerouter()))[0].translate(None, '\"')
+        else:
+            # if etcd is absent
+            with open("/opt/OpenvStorage/config/ovs.json") as ovs_json:
+                ovs = json.load(ovs_json)
+
+            return ovs['core']['nodetype']
 
     def detectEtcd(self):
         result = self.executeBashCommand("dpkg -l | grep etcd")
