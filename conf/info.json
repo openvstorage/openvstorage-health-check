@@ -7,10 +7,11 @@
         "url": "www.openvstorage.org",
         "source": "https://github.com/openvstorage/openvstorage",
         "arch": "amd64",
-        "maintainer": {
-
-            "name": "Jonas Libbrecht",
-            "e-mail": "jonas.libbrecht@openvstorage.com"
+        "maintainers": {
+            "kinvaris": {
+                "name": "Jonas Libbrecht",
+                "e-mail": "jonas.libbrecht@openvstorage.com"
+            }
         }
     }
 }

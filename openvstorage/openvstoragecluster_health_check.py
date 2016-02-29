@@ -508,76 +508,98 @@ class OpenvStorageHealthCheck:
 
     def _checkFiledriver(self, args1, vp_name, test_name):
         # this method is not meant to be executed in serial, it is meant to be executed in parallel as a thread
-        filedriver = self.utility.executeBashCommand("touch /mnt/{0}/{1}.xml".format(vp_name, test_name))
-        return filedriver
+        try:
+            filedriver = self.utility.executeBashCommand("touch /mnt/{0}/{1}.xml".format(vp_name, test_name))
+            return filedriver
+        except Exception as e:
+            self.utility.logger("Filedriver_check on vPool '{0}' got exception: {1}".format(vp_name, e), self.module, 6,
+                                'check_filedriver_{0}_thread_exception'.format(vp_name))
 
     def _checkVolumedriver(self, args1, vp_name, test_name):
         # this method is not meant to be executed in serial, it is meant to be executed in parallel as a thread
-        volumedriver = subprocess.check_output("truncate -s 10GB /mnt/{0}/{1}.raw".format(vp_name, test_name),
-                                               stderr=subprocess.STDOUT, shell=True)
-        return volumedriver
+        try:
+            volumedriver = subprocess.check_output("truncate -s 10GB /mnt/{0}/{1}.raw".format(vp_name, test_name),
+                                                   stderr=subprocess.STDOUT, shell=True)
+            return volumedriver
+        except Exception as e:
+            self.utility.logger("Volumedriver_check on vPool '{0}' got exception: {1}".format(vp_name, e),
+                                self.module, 6, 'check_volumedriver_{0}_thread_exception'.format(vp_name))
 
     def checkFileDriver(self):
         filedriversNotWorking = []
-        name = "ovs-healthcheck-test"
+        name = "ovs-healthcheck-test-{0}".format(self.machine_id)
 
         self.utility.logger("Checking filedrivers: ", self.module, 3, 'checkFileDrivers', False)
 
+        vpools = VPoolList.get_vpools()
+
         # perform tests
-        for vp in VPoolList.get_vpools():
+        if len(vpools) != 0:
 
-            # check filedriver
-            t = threading.Thread(target=self._checkFiledriver, args=(1, vp.name, name))
-            t.daemon = True
-            t.start()
+            for vp in vpools:
 
-            time.sleep(5)
+                # check filedriver
+                t = threading.Thread(target=self._checkFiledriver, args=(1, vp.name, name))
+                t.daemon = True
+                t.start()
 
-            # if thread is still alive after x seconds, something is wrong
-            if t.isAlive():
-                filedriversNotWorking.append(vp.name)
+                time.sleep(5)
 
-            # clean-up
+                # if thread is still alive after x seconds or got exception, something is wrong
+                if t.isAlive() or not os.path.exists("/mnt/{0}/{1}.xml".format(vp.name, name)):
+                    filedriversNotWorking.append(vp.name)
+
+                # clean-up
+                if len(filedriversNotWorking) == 0:
+                    self.utility.executeBashCommand("rm -f /mnt/{0}/{1}.xml".format(vp.name, name))
+
+
+            # check if filedrivers are OK!
             if len(filedriversNotWorking) == 0:
-                self.utility.executeBashCommand("rm -f /mnt/{0}/{1}.xml".format(vp.name, name))
+                self.utility.logger("All filedrivers seem to be working fine!", self.module, 1, 'filedrivers')
+            else:
+                self.utility.logger("Some filedrivers seem to have some problems: {0}"
+                                    .format(', '.join(filedriversNotWorking)), self.module, 0, 'filedrivers')
 
-        # check if filedrivers are OK!
-        if len(filedriversNotWorking) == 0:
-            self.utility.logger("All filedrivers seem to be working fine!", self.module, 1, 'filedrivers')
         else:
-            self.utility.logger("Some filedrivers seem to have some problems: {0}"
-                                .format(', '.join(filedriversNotWorking)), self.module, 0, 'filedrivers')
+            self.utility.logger("No vPools found!", self.module, 5, 'filedrivers')
 
     def checkVolumeDriver(self):
         volumedriversNotWorking = []
-        name = "ovs-healthcheck-test"
+        name = "ovs-healthcheck-test-{0}".format(self.machine_id)
 
         self.utility.logger("Checking volumedrivers: ", self.module, 3, 'checkVolumeDrivers', False)
 
-        # perform tests
-        for vp in VPoolList.get_vpools():
+        vpools = VPoolList.get_vpools()
 
-            # check volumedrivers
-            t = threading.Thread(target=self._checkVolumedriver, args=(1, vp.name, name))
-            t.daemon = True
-            t.start()
+        if len(vpools) != 0:
+            # perform tests
+            for vp in vpools:
 
-            time.sleep(5)
+                # check volumedrivers
+                t = threading.Thread(target=self._checkVolumedriver, args=(1, vp.name, name))
+                t.daemon = True
+                t.start()
 
-            # if thread is still alive after x seconds, something is wrong
-            if t.isAlive():
-                volumedriversNotWorking.append(vp.name)
+                time.sleep(5)
 
-            # clean-up
+                # if thread is still alive after x seconds or got exception, something is wrong
+                if t.isAlive() or not os.path.exists("/mnt/{0}/{1}.raw".format(vp.name, name)):
+                    volumedriversNotWorking.append(vp.name)
+
+                # clean-up
+                if len(volumedriversNotWorking) == 0:
+                    self.utility.executeBashCommand("rm -f /mnt/{0}/{1}.raw".format(vp.name, name))
+
+            # check if filedrivers are OK!
             if len(volumedriversNotWorking) == 0:
-                self.utility.executeBashCommand("rm -f /mnt/{0}/{1}.raw".format(vp.name, name))
+                self.utility.logger("All volumedrivers seem to be working fine!", self.module, 1, 'volumedrivers')
+            else:
+                self.utility.logger("Some volumedrivers seem to have some problems: {0}"
+                                    .format(', '.join(volumedriversNotWorking)), self.module, 0, 'volumedrivers')
 
-        # check if filedrivers are OK!
-        if len(volumedriversNotWorking) == 0:
-            self.utility.logger("All volumedrivers seem to be working fine!", self.module, 1, 'volumedrivers')
         else:
-            self.utility.logger("Some volumedrivers seem to have some problems: {0}"
-                                .format(', '.join(volumedriversNotWorking)), self.module, 0, 'volumedrivers')
+            self.utility.logger("No vPools found!", self.module, 5, 'volumedrivers')
 
     def checkModelConsistency(self):
 
@@ -669,31 +691,39 @@ class OpenvStorageHealthCheck:
 
         self.utility.logger("Checking for halted volumes: ", self.module, 3, 'checkHaltedVolumes', False)
 
-        for vp in VPoolList.get_vpools():
+        vpools = VPoolList.get_vpools()
 
-            haltedVolumes = []
+        if len(vpools) != 0:
 
-            self.utility.logger("Checking vPool {0}: ".format(vp.name), self.module, 3,
-                                'checkVPOOL_{0}'.format(vp.name), False)
+            for vp in vpools:
 
-            config_file = self.utility.fetchConfigFilePath(vp.name, self.machine_id, 1, vp.guid)
-            voldrv_client = src.LocalStorageRouterClient(config_file)
+                haltedVolumes = []
 
-            for volume in voldrv_client.list_volumes():
-                # check if volume is halted, returns: 0 or 1
-                if int(self.utility.parseXMLtoJSON(voldrv_client.info_volume(volume))
-                           ["boost_serialization"]["XMLRPCVolumeInfo"]["halted"]):
-                    haltedVolumes.append(volume)
+                self.utility.logger("Checking vPool {0}: ".format(vp.name), self.module, 3,
+                                    'checkVPOOL_{0}'.format(vp.name), False)
 
-            # print all results
-            if len(haltedVolumes) > 0:
-                self.utility.logger("Detected volumes that are HALTED in volumedriver in vPool '{0}': {1}"
-                                    .format(vp.name, ', '.join(haltedVolumes)), self.module, 0,
-                                    'halted_{0}'.format(vp.name))
-            else:
-                self.utility.logger("No halted volumes detected in vPool '{0}'"
-                                    .format(vp.name), self.module, 1,
-                                    'halted_{0}'.format(vp.name))
+                config_file = self.utility.fetchConfigFilePath(vp.name, self.machine_id, 1, vp.guid)
+                voldrv_client = src.LocalStorageRouterClient(config_file)
+
+                for volume in voldrv_client.list_volumes():
+                    # check if volume is halted, returns: 0 or 1
+                    if int(self.utility.parseXMLtoJSON(voldrv_client.info_volume(volume))
+                               ["boost_serialization"]["XMLRPCVolumeInfo"]["halted"]):
+                        haltedVolumes.append(volume)
+
+                # print all results
+                if len(haltedVolumes) > 0:
+                    self.utility.logger("Detected volumes that are HALTED in volumedriver in vPool '{0}': {1}"
+                                        .format(vp.name, ', '.join(haltedVolumes)), self.module, 0,
+                                        'halted')
+                else:
+                    self.utility.logger("No halted volumes detected in vPool '{0}'"
+                                        .format(vp.name), self.module, 1,
+                                        'halted')
+
+        else:
+            self.utility.logger("No vPools found!".format(len(vpools)), self.module, 5, 'halted')
+
 
 """
 Section: Main
