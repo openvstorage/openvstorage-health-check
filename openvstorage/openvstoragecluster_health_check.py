@@ -61,7 +61,7 @@ class OpenvStorageHealthCheck:
         self.utility = utility
         self.service_manager = self.utility.serviceManager
         self.machine_details = System.get_my_storagerouter()
-        self.machine_id = System.get_my_machine_id()
+        self.machine_id = self.machine_details.machine_id
         self.max_logsize = 500  # in MB
 
         # list of packages on your local system
@@ -108,12 +108,20 @@ class OpenvStorageHealthCheck:
                         '/var/log/memcached.log': {'type': 'file'}
                         }
 
+    def getLocalSettings(self):
+        self.utility.logger("Fetching LOCAL information of node: ", self.module, 3, 'local_info', False)
+        self.utility.logger("Cluster ID: {0}".format(self.utility.cluster_id), self.module, 1, 'lc2', False)
+        self.utility.logger("Storagerouter ID: {0}".format(self.machine_id), self.module, 1, 'lc2', False)
+        self.utility.logger("Environment TYPE: {0}".format(self.machine_details.node_type), self.module, 1, 'lc3', False)
+        self.utility.logger("Environment VERSION: {0}".format(self.utility.ovs_version), self.module, 1, 'lc4', False)
+
     def checkSizeOfLogFiles(self):
         collection = []
         good_size = []
         to_big = []
 
-        self.utility.logger("Checking if logfiles their size is not bigger than {0} MB: ".format(self.max_logsize), self.module, 3, 'checkLogfilesSize', False)
+        self.utility.logger("Checking if logfiles their size is not bigger than {0} MB: ".format(self.max_logsize),
+                            self.module, 3, 'checkLogfilesSize', False)
 
         # collect log files
         for log, settings in self.logging.iteritems():
@@ -158,15 +166,18 @@ class OpenvStorageHealthCheck:
             # check if logfile is larger than max_size
             if os.stat(c_files).st_size < 1024000 * self.max_logsize:
                 good_size.append(c_files)
-                self.utility.logger("Logfile '{0}' has a GOOD size!".format(c_files), self.module, 1, 'log_{0}'.format(c_files), False)
+                self.utility.logger("Logfile '{0}' has a GOOD size!".format(c_files), self.module, 1,
+                                    'log_{0}'.format(c_files), False)
             else:
                 to_big.append(c_files)
-                self.utility.logger("Logfile '{0}' is a big ass logfile!".format(c_files), self.module, 0, 'log_{0}'.format(c_files), False)
+                self.utility.logger("Logfile '{0}' is a big ass logfile!".format(c_files), self.module, 0,
+                                    'log_{0}'.format(c_files), False)
 
         # end for unattended_install
         if self.utility.unattended_mode:
             if len(to_big) != 0:
-                self.utility.logger("Some logfiles are too big, please check this!".format(c_files), self.module, 0, 'log_size')
+                self.utility.logger("Some logfiles are too big, please check this!".format(c_files),
+                                    self.module, 0, 'log_size')
             else:
                 self.utility.logger("ALL log files are ok!".format(c_files), self.module, 1, 'log_size')
 
@@ -617,27 +628,33 @@ class OpenvStorageHealthCheck:
         #
 
         self.utility.logger("Precheck: verification of RabbitMQ cluster: ", self.module, 3,
-                            'checkRabbitMQcluster', False)
+                                'checkRabbitMQcluster', False)
 
-        cluster_status = self.utility.executeBashCommand("rabbitmqctl cluster_status")
+        if self.utility.node_type == "MASTER":
 
-        if "Error" not in cluster_status[1]:
+            cluster_status = self.utility.executeBashCommand("rabbitmqctl cluster_status")
 
-            # this can happen
-            if len(cluster_status) < 3:
-                partition_status = cluster_status[2]
+            if "Error" not in cluster_status[1]:
+
+                # this can happen
+                if len(cluster_status) < 3:
+                    partition_status = cluster_status[2]
+                else:
+                    partition_status = cluster_status[3]
+
+                # check parition status
+                if '@' in partition_status:
+                    self.utility.logger("Seems like the RabbitMQ cluster has 'partition' problems, please check this...",
+                                        self.module, 0, 'process_rabbitmq', False)
+                else:
+                    self.utility.logger("RabbitMQ does not seem to have 'partition' problems :D", self.module, 1,
+                                        'process_rabbitmq', False)
             else:
-                partition_status = cluster_status[3]
-
-            # check parition status
-            if '@' in partition_status:
-                self.utility.logger("Seems like the RabbitMQ cluster has 'partition' problems, please check this...",
-                                    self.module, 0, 'process_rabbitmq', False)
-            else:
-                self.utility.logger("RabbitMQ does not seem to have 'partition' problems :D", self.module, 1,
+                self.utility.logger("Seems like the RabbitMQ cluster has errors, maybe it is offline?", self.module, 0,
                                     'process_rabbitmq', False)
+
         else:
-            self.utility.logger("Seems like the RabbitMQ cluster has errors, maybe it is offline?", self.module, 0,
+            self.utility.logger("RabbitMQ is not running/active on this server!", self.module, 5,
                                 'process_rabbitmq', False)
 
         #

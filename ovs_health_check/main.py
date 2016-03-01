@@ -52,6 +52,8 @@ class Main:
         self.utility.logger("Starting Open vStorage Health Check!",self.module, 3, 'starting_ovs_hc', False)
         self.utility.logger("====================================\n",self.module, 3, 'starting_ovs_hc_ul', False)
 
+        self.ovs.getLocalSettings()
+        if not self.unattended: print ""
         self.ovs.checkOvsProcesses()
         if not self.unattended: print ""
         self.ovs.checkOvsWorkers()

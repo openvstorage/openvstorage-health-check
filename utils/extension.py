@@ -73,6 +73,8 @@ class Utils:
         self.etcd = self.detectEtcd()
         self.serviceManager = self.detectServiceManager()
         self.node_type = self.detectOvsType()
+        self.ovs_version = self.detectOvsVersion()
+        self.cluster_id = self.getClusterId()
 
         # fetched from main.py
         self.unattended_mode = unattended_mode
@@ -108,8 +110,10 @@ class Utils:
         if not self.etcd:
             if product == 0:
                 return "/opt/OpenvStorage/config/arakoon/{0}/{0}.cfg".format(name)
-            if product == 1:
+            elif product == 1:
                 return "/opt/OpenvStorage/config/storagedriver/storagedriver/{0}.json".format(name)
+            elif product == 4:
+                return "/opt/OpenvStorage/config/ovs.json"
         else:
             if product == 0:
                 return "etcd://127.0.0.1:2379/ovs/arakoon/{0}/config".format(name)
@@ -118,20 +122,28 @@ class Utils:
                     raise Exception("You must provide a 'vPOOL_guid' for ETCD, currently this is 'None'")
                 else:
                     return "etcd://127.0.0.1:2379/ovs/vpools/{0}/hosts/{1}/config".format(guid, name+node_id)
+            elif product == 4:
+                return "etcd://127.0.0.1:2379/ovs/framework"
+
 
     def detectOvsType(self):
-        # fetch config
+        return System.get_my_storagerouter().node_type
+
+    def detectOvsVersion(self):
+        with open("/opt/OpenvStorage/webapps/frontend/locales/en-US/ovs.json") as ovs_json:
+            ovs = json.load(ovs_json)
+
+        return ovs["releasename"]
+
+    def getClusterId(self):
 
         if self.etcd:
-            # if etcd is present
-            return self.executeBashCommand("etcdctl get /ovs/framework/hosts/{0}/type"
-                                           .format(System.get_my_storagerouter()))[0].translate(None, '\"')
+            return self.getEtcdInformation("/ovs/framework/cluster_id")[0].translate(None, '\"')
         else:
-            # if etcd is absent
             with open("/opt/OpenvStorage/config/ovs.json") as ovs_json:
                 ovs = json.load(ovs_json)
 
-            return ovs['core']['nodetype']
+            return ovs["support"]["cid"]
 
     def detectEtcd(self):
         result = self.executeBashCommand("dpkg -l | grep etcd")
@@ -140,6 +152,9 @@ class Utils:
             return False
         else:
             return True
+
+    def getEtcdInformation(self, location):
+        return self.executeBashCommand("etcdctl get {0}".format(location))
 
     def parseXMLtoJSON(self, xml):
         # dumps converts to general json, loads converts to python value

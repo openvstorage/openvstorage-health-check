@@ -2,7 +2,7 @@
     "healthcheck": {
         "library": "/opt/OpenvStorage-healthcheck",
         "logging": {
-            "directory": "/var/log/ovs/healthcheck",
+            "directory": "/var/log/ovs",
             "file": "healthcheck.log"
         },
         "debug_mode": false,
