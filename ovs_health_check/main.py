@@ -126,15 +126,15 @@ if __name__ == '__main__':
         Utils(unattended).logger("Open vStorage Health Check - Ended by USER through Keyboard", module,
                                  4, 'exception_occured')
 
-#    except Exception as e:
-#        exc_type, exc_obj, exc_tb = sys.exc_info()
-#        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-#        utility = Utils(unattended)
-#
-#        print ""
-#        utility.logger("Recap of Health Check!", module, 3, 'starting_recap_hc', False)
-#       utility.logger("======================\n", module, 3, 'starting_recap_hc_ul', False)
-#        Utils(unattended).logger("Open vStorage Health Check - EXCEPTION - {0}: {1}, in file {2}, on line number: {3}"
-#                                 .format(sys.exc_info()[0].__name__, e, fname, exc_tb.tb_lineno), module, 4,
-#                                 'exception_occured')
+    except Exception as e:
+        exc_type, exc_obj, exc_tb = sys.exc_info()
+        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+        utility = Utils(unattended)
+
+        print ""
+        utility.logger("Recap of Health Check!", module, 3, 'starting_recap_hc', False)
+        utility.logger("======================\n", module, 3, 'starting_recap_hc_ul', False)
+        Utils(unattended).logger("Open vStorage Health Check - EXCEPTION - {0}: {1}, in file {2}, on line number: {3}"
+                                 .format(sys.exc_info()[0].__name__, e, fname, exc_tb.tb_lineno), module, 4,
+                                 'exception_occured')
 
