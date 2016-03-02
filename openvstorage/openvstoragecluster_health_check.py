@@ -143,7 +143,6 @@ class OpenvStorageHealthCheck:
 
                     # check if has nested_dirs and nested_files
                     if settings.get('contains_nested'):
-                        print settings, log
                         nested_dirs = self._listDirsInDirectory(log)
                         for dir in nested_dirs:
                             nested_files = self._listLogsInDirectory(log+"/"+dir)
