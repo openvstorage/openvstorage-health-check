@@ -7,6 +7,7 @@ The health check is classified as a monitoring, detection and healing tool for O
 ## Required packages for Health Check
 ```
 wget https://bootstrap.pypa.io/get-pip.py; python get-pip.py
+pip install flower
 pip install psutil
 pip install xmltodict
 ```
