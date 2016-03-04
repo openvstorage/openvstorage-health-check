@@ -67,7 +67,7 @@ class OpenvStorageHealthCheck:
         # list of packages on your local system
         self.openvstorageTotalPackageList = ["openvstorage", "openvstorage-backend", "openvstorage-backend-core",
                                              "openvstorage-backend-webapps", "openvstorage-core", "openvstorage-hc",
-                                             "openvstorage-sdm", "openvstorage-webapps", "openvstorage-unittests",
+                                             "openvstorage-sdm", "openvstorage-webapps", "openvstorage-test",
                                              "alba", "volumedriver-base", "volumedriver-server", "nginx", "memcached",
                                              "rabbitmq-server", "qemu-kvm", "virtinst", "openvpn", "ntp"
                                              ]
@@ -636,7 +636,7 @@ class OpenvStorageHealthCheck:
             if "Error" not in cluster_status[1]:
 
                 # this can happen
-                if len(cluster_status) < 3:
+                if len(cluster_status) <= 3:
                     partition_status = cluster_status[2]
                 else:
                     partition_status = cluster_status[3]

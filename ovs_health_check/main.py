@@ -15,12 +15,7 @@
 # limitations under the License.
 
 """
-Title: Global OVS Health Check
-Description: Checks the GLOBAL status of a Open vStorage Node
-"""
-
-"""
-Section: Import package(s)
+Module for HealthCheckController
 """
 
 # general packages
@@ -33,89 +28,130 @@ from arakoon.arakooncluster_health_check import ArakoonHealthCheck
 from alba.alba_health_check import AlbaHealthCheck
 from utils.extension import Utils
 
-"""
-Section: Classes
-"""
-
 
 class Main:
-    def __init__(self, unattended=False):
+
+    def __init__(self, unattended_run=False, silent_run=False):
 
         self.module = "healthcheck"
-        self.unattended = unattended
-        self.utility = Utils(self.unattended)
+
+        self.unattended = unattended_run
+        self.silent_mode = silent_run
+        self.utility = Utils(self.unattended, self.silent_mode)
         self.alba = AlbaHealthCheck(self.utility)
         self.arakoon = ArakoonHealthCheck(self.utility)
         self.ovs = OpenvStorageHealthCheck(self.utility)
 
-        # Checking Open vStorage
-        self.utility.logger("Starting Open vStorage Health Check!",self.module, 3, 'starting_ovs_hc', False)
-        self.utility.logger("====================================\n",self.module, 3, 'starting_ovs_hc_ul', False)
+    def check_openvstorage(self):
+        """
+        Checks all critical components of Open vStorage
+        """
+
+        self.utility.logger("Starting Open vStorage Health Check!", self.module, 3, 'starting_ovs_hc', False)
+        self.utility.logger("====================================\n", self.module, 3, 'starting_ovs_hc_ul', False)
 
         self.ovs.getLocalSettings()
-        if not self.unattended: print ""
+        if not self.unattended and not self.silent_mode:
+            print ""
         self.ovs.checkOvsProcesses()
-        if not self.unattended: print ""
+        if not self.unattended and not self.silent_mode:
+            print ""
         self.ovs.checkOvsWorkers()
-        if not self.unattended: print ""
+        if not self.unattended and not self.silent_mode:
+            print ""
         self.ovs.checkOvsPackages()
-        if not self.unattended: print ""
+        if not self.unattended and not self.silent_mode:
+            print ""
         self.ovs.checkRequiredPorts()
-        if not self.unattended: print ""
+        if not self.unattended and not self.silent_mode:
+            print ""
         self.ovs.findZombieAndDeadProcesses()
-        if not self.unattended: print ""
+        if not self.unattended and not self.silent_mode:
+            print ""
         self.ovs.checkRequiredDirs()
-        if not self.unattended: print ""
+        if not self.unattended and not self.silent_mode:
+            print ""
         self.ovs.checkHypervisorManagementInformation()
-        if not self.unattended: print ""
+        if not self.unattended and not self.silent_mode:
+            print ""
         self.ovs.checkSizeOfLogFiles()
-        if not self.unattended: print ""
+        if not self.unattended and not self.silent_mode:
+            print ""
         self.ovs.checkIfDNSResolves()
-        if not self.unattended: print ""
+        if not self.unattended and not self.silent_mode:
+            print ""
         self.ovs.checkModelConsistency()
-        if not self.unattended: print ""
+        if not self.unattended and not self.silent_mode:
+            print ""
         self.ovs.checkForHaltedVolumes()
-        if not self.unattended: print ""
+        if not self.unattended and not self.silent_mode:
+            print ""
         self.ovs.checkFileDriver()
-        if not self.unattended: print ""
+        if not self.unattended and not self.silent_mode:
+            print ""
         self.ovs.checkVolumeDriver()
-        if not self.unattended: print ""
+        if not self.unattended and not self.silent_mode:
+            print ""
 
-        # Checking Arakoon
+    def check_arakoon(self):
+        """
+        Checks all critical components of Arakoon
+        """
+
         self.utility.logger("Starting Arakoon Health Check!", self.module, 3, 'starting_arakoon_hc', False)
         self.utility.logger("==============================\n", self.module, 3, 'starting_arakoon_hc_ul', False)
 
         self.arakoon.checkArakoons()
-        if not self.unattended: print ""
+        if not self.unattended and not self.silent_mode:
+            print ""
 
-        # Checking Alba
+    def check_alba(self):
+        """
+        Checks all critical components of Alba
+        """
+
         self.utility.logger("Starting Alba Health Check!", self.module, 3, 'starting_alba_hc', False)
         self.utility.logger("===========================\n", self.module, 3, 'starting_alba_hc_ul', False)
 
         self.alba.checkAlba()
-        if not self.unattended: print ""
+        if not self.unattended and not self.silent_mode:
+            print ""
 
-        # Get results of Health Check
+    def get_results(self):
+        """
+        Gets the result of the healthcheck
+        """
+
         self.utility.logger("Recap of Health Check!", self.module, 3, 'starting_recap_hc', False)
         self.utility.logger("======================\n", self.module, 3, 'starting_recap_hc_ul', False)
 
         self.utility.logger("SUCCESSFULL={0} FAILED={1} SKIPPED={2} WARNING={3} EXCEPTION={4}"
-                            .format(self.utility.success, self.utility.failure,
-                            self.utility.skip, self.utility.warning,
-                            self.utility.exception), self.module , 1, 'exception_occured')
+                            .format(self.utility.success, self.utility.failure, self.utility.skip, self.utility.warning,
+                                    self.utility.exception), self.module, 1, 'exception_occured')
 
-"""
-Section: Main
-"""
+        if self.silent_mode or self.unattended:
+            # returns dict with minimal and detailed information
+            return {'result': self.utility.healthcheck_dict, 'recap': {'SUCCESSFULL': self.utility.success,
+                                                                       'FAILED': self.utility.failure,
+                                                                       'SKIPPED': self.utility.skip,
+                                                                       'WARNING': self.utility.warning,
+                                                                       'EXCEPTION': self.utility.exception}
+                    }
+        else:
+            return None
 
-# this makes this executeable like this: 'python main.py'
 if __name__ == '__main__':
 
     unattended = False
+    silent_mode = False
     module = "healthcheck"
 
     try:
-        Main(unattended)
+        main = Main(unattended, silent_mode)
+        main.check_openvstorage()
+        main.check_arakoon()
+        main.check_alba()
+        main.get_results()
 
     except KeyboardInterrupt as e:
         utility = Utils(unattended)
@@ -137,4 +173,3 @@ if __name__ == '__main__':
         Utils(unattended).logger("Open vStorage Health Check - EXCEPTION - {0}: {1}, in file {2}, on line number: {3}"
                                  .format(sys.exc_info()[0].__name__, e, fname, exc_tb.tb_lineno), module, 4,
                                  'exception_occured')
-
