@@ -15,39 +15,26 @@
 # limitations under the License.
 
 """
-Title: Alba Health Check
-Description: Checks the Alba backend
+Alba Health Check Module
 """
 
-"""
-Section: Import package(s)
-"""
-
-# general packages
-import os
-import sys
-import time
-import json
-import uuid
-import hashlib
 import subprocess
-
-# ovs packages
-sys.path.append('/opt/OpenvStorage')
+import hashlib
+import time
+import uuid
+import json
+import os
+from ovs.extensions.healthcheck.utils.extension import Utils
 from ovs.dal.lists.albabackendlist import AlbaBackendList
 from ovs.dal.lists.albanodelist import AlbaNodeList
 from ovs.dal.lists.servicelist import ServiceList
 from ovs.extensions.generic.system import System
 
-# import health_check packages
-from utils.extension import Utils
-
-"""
-Section: Classes
-"""
-
 
 class AlbaHealthCheck:
+    """
+    A healthcheck for Alba storage layer
+    """
 
     def __init__(self, utility=Utils(False)):
         self.module = "alba"
@@ -221,7 +208,7 @@ class AlbaHealthCheck:
                         subprocess.call(['rm', str(self.temp_file_loc)])
                         subprocess.call(['rm', str(self.temp_file_fetched_loc)])
 
-        #for unattended
+        # for unattended
         return amount_of_presets_not_working
 
     def _checkIfBackendASDSWorks(self, disks):
@@ -230,7 +217,7 @@ class AlbaHealthCheck:
 
         self.utility.logger("Checking seperate ASD's to see if they work ...",self.module, 3, 'checkAsds', False)
 
-        #check if disks are working
+        # check if disks are working
         if len(disks) != 0:
             for disk in disks:
                 key = 'ovs-healthcheck-{0}'.format(str(uuid.uuid4()))

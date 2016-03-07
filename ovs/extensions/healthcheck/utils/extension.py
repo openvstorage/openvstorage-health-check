@@ -15,33 +15,25 @@
 # limitations under the License.
 
 """
-Title: Utils
-Description: Utilities for OVS health check
+Utilities module for OVS health check
 """
 
-"""
-Section: Import package(s)
-"""
-
-# general packages
 import subprocess
 import xmltodict
 import datetime
 import commands
 import json
 import os
-
-# ovs packages
 from ovs.extensions.services.service import ServiceManager
 from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.generic.system import System
 
-"""
-Section: Classes
-"""
-
 
 class _Colors:
+    """
+    Colors for Open vStorage healthcheck logging
+    """
+
     OKBLUE = '\033[94m'
     OKGREEN = '\033[92m'
     WARNING = '\033[93m'
@@ -51,13 +43,17 @@ class _Colors:
 
 
 class Utils:
+    """
+    General utilities for Open vStorage healthcheck
+    """
+
     def __init__(self, unattended_mode, silent_mode=False):
         # module specific
         self.module = "utils"
 
         # load config file
-        PARENT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
-        with open("{0}/config/healthcheck/settings.json".format(PARENT)) as settings_file:
+        # PARENT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
+        with open("/opt/OpenvStorage/config/healthcheck/settings.json") as settings_file:
             self.settings = json.load(settings_file)
 
         # fetch from config file

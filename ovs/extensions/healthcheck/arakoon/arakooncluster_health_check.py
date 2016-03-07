@@ -15,41 +15,29 @@
 # limitations under the License.
 
 """
-Title: Arakoon Health Check
-Description: Checks the Arakoon cluster and its integrity
+Arakoon Health Check module
 """
 
-"""
-Section: Import package(s)
-"""
-
-# general packages
-import uuid
 import time
-import sys
-
-# ovs packages
-sys.path.append('/opt/OpenvStorage')
+import uuid
 from ovs.dal.lists.storagerouterlist import StorageRouterList
 from ovs.extensions.storage.persistent.pyrakoonstore import PyrakoonStore
 from ovs.extensions.db.arakoon.ArakoonInstaller import ArakoonClusterConfig
 from ovs.extensions.db.arakoon.arakoon.ArakoonManagement import ArakoonManagementEx
-from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonSockNotReadable, ArakoonSockReadNoBytes, ArakoonSockSendError, ArakoonNoMaster, ArakoonNoMasterResult, ArakoonException
+from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
+from ovs.extensions.healthcheck.utils.extension import Utils
 
 try:
     from ovs.extensions.db.etcd.configuration import EtcdConfiguration
 except Exception:
     pass
 
-# import health_check packages
-from utils.extension import Utils
-
-"""
-Section: Classes
-"""
-
 
 class ArakoonHealthCheck:
+    """
+    A healthcheck for the arakoon persistent store
+    """
+
     def __init__(self, utility=Utils(False)):
         self.module = "arakoon"
         self.utility = utility

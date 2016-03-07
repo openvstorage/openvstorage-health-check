@@ -18,18 +18,15 @@
 Module for HealthCheckController
 """
 
-# general packages
 import sys
 import os
-
-# import health check utilities
-from openvstorage.openvstoragecluster_health_check import OpenvStorageHealthCheck
-from arakoon.arakooncluster_health_check import ArakoonHealthCheck
-from alba.alba_health_check import AlbaHealthCheck
-from utils.extension import Utils
+from ovs.extensions.healthcheck.openvstorage.openvstoragecluster_health_check import OpenvStorageHealthCheck
+from ovs.extensions.healthcheck.arakoon.arakooncluster_health_check import ArakoonHealthCheck
+from ovs.extensions.healthcheck.alba.alba_health_check import AlbaHealthCheck
+from ovs.extensions.healthcheck.utils.extension import Utils
 
 
-class Main:
+class HealthCheckController:
 
     def __init__(self, unattended_run=False, silent_run=False):
 
@@ -119,7 +116,7 @@ class Main:
 
     def get_results(self):
         """
-        Gets the result of the healthcheck
+        Gets the result of the Open vStorage healthcheck
         """
 
         self.utility.logger("Recap of Health Check!", self.module, 3, 'starting_recap_hc', False)
@@ -144,10 +141,10 @@ if __name__ == '__main__':
 
     unattended = False
     silent_mode = False
-    module = "healthcheck"
+    module = "healthcheck_controller"
 
     try:
-        main = Main(unattended, silent_mode)
+        main = HealthCheckController(unattended, silent_mode)
         main.check_openvstorage()
         main.check_arakoon()
         main.check_alba()

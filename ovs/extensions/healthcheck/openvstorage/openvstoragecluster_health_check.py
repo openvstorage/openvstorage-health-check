@@ -15,47 +15,35 @@
 # limitations under the License.
 
 """
-Title: Open vStorage Health Check
-Description: Checks the OVS health
+Open vStorage Health Check module
 """
 
-"""
-Section: Import package(s)
-"""
-
-# general packages
 import os
 import grp
-import sys
 import stat
 import glob
 import time
-import socket
-import signal
 import psutil
+import signal
+import socket
 import threading
 import subprocess
 from pwd import getpwuid
-
-# ovs packages
-sys.path.append('/opt/OpenvStorage')
 from ovs.dal.lists.vpoollist import VPoolList
 from ovs.extensions.generic.system import System
 from ovs.dal.lists.servicelist import ServiceList
 from ovs.dal.lists.pmachinelist import PMachineList
 from ovs.dal.lists.mgmtcenterlist import MgmtCenterList
 from ovs.lib.storagerouter import StorageRouterController
+from ovs.extensions.healthcheck.utils.extension import Utils
 import volumedriver.storagerouter.storagerouterclient as src
-
-# import health check utilities
-from utils.extension import Utils
-
-"""
-Section: Classes
-"""
 
 
 class OpenvStorageHealthCheck:
+    """
+    A healthcheck for the Open vStorage framework
+    """
+
     def __init__(self, utility=Utils(False)):
         self.module = 'openvstorage'
         self.utility = utility
