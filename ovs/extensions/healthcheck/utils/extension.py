@@ -20,10 +20,8 @@ Utilities module for OVS health check
 
 import subprocess
 import xmltodict
-import datetime
 import commands
 import json
-import os
 from ovs.extensions.services.service import ServiceManager
 from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.generic.system import System
@@ -47,18 +45,18 @@ class Utils:
     General utilities for Open vStorage healthcheck
     """
 
-    def __init__(self, unattended_mode, silent_mode=False):
+    def __init__(self):
+        """ Init method """
+
         # module specific
         self.module = "utils"
 
         # load config file
-        # PARENT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
-        with open("/opt/OpenvStorage/config/healthcheck/settings.json") as settings_file:
+        self.settings_loc = "/opt/OpenvStorage/config/healthcheck/settings.json"
+        with open(self.settings_loc) as settings_file:
             self.settings = json.load(settings_file)
 
         # fetch from config file
-        self.HEALTHCHECK_DIR = self.settings["healthcheck"]["logging"]["directory"]
-        self.HEALTHCHECK_FILE = self.settings["healthcheck"]["logging"]["file"]
         self.debug = self.settings["healthcheck"]["debug_mode"]
         self.max_log_size = self.settings["healthcheck"]["max_check_log_size"]  # in MB
 
@@ -72,32 +70,29 @@ class Utils:
         self.ovs_version = self.detectOvsVersion()
         self.cluster_id = self.getClusterId()
 
-        # utils log settings
-        if silent_mode:
-            # if silent_mode is true, the unattended is also true
-            self.unattended_mode = True
-            self.silent_mode = True
-        else:
-            self.unattended_mode = unattended_mode
-            self.silent_mode = False
-
-        # HC counters
-        self.failure = 0
-        self.success = 0
-        self.warning = 0
-        self.info = 0
-        self.exception = 0
-        self.skip = 0
-        self.debug = 0
-
-        # result of healthcheck in dict form
-        self.healthcheck_dict = {}
-
-        # create if dir does not exists
-        if not os.path.isdir(self.HEALTHCHECK_DIR):
-            os.makedirs(self.HEALTHCHECK_DIR)
-
     def fetchConfigFilePath(self, name, node_id, product, guid=None):
+        """
+        Gets the location of a certain service via local or etcd path
+
+        @param name: name of the PRODUCT (e.g. vpool01 or backend01-abm)
+        @param node_id: the ID of the local node
+        @param product: the id of the desired product
+            * arakoon = 0
+            * vpool = 1
+            * alba_backend = 2
+            * alba_asd = 3
+            * ovs framework = 4
+        @param guid: guid of a certain vpool (only required if one desires the config of a vpool)
+
+        @type name: str
+        @type node_id: str
+        @type product: int
+        @type guid: str
+
+        @return: location of a config file
+
+        @rtype: str
+        """
 
         # INFO
         # guid is only for volumedriver (vpool) config and proxy configs
@@ -132,15 +127,40 @@ class Utils:
 
 
     def detectOvsType(self):
+        """
+        Gets the TYPE of the Open vStorage local node
+
+        @return: TYPE of openvstorage local node
+            * MASTER
+            * EXTRA
+
+        @rtype: str
+        """
+
         return System.get_my_storagerouter().node_type
 
     def detectOvsVersion(self):
+        """
+        Gets the VERSION of the Open vStorage cluster
+
+        @return: version of openvstorage cluster
+
+        @rtype: str
+        """
+
         with open("/opt/OpenvStorage/webapps/frontend/locales/en-US/ovs.json") as ovs_json:
             ovs = json.load(ovs_json)
 
         return ovs["releasename"]
 
     def getClusterId(self):
+        """
+        Gets the cluster ID of the Open vStorage cluster
+
+        @return: cluster id of openvstorage cluster
+
+        @rtype: str
+        """
 
         if self.etcd:
             return self.getEtcdInformation("/ovs/framework/cluster_id")[0].translate(None, '\"')
@@ -151,6 +171,14 @@ class Utils:
             return ovs["support"]["cid"]
 
     def detectEtcd(self):
+        """
+        Detects if ETCD is available on the local machine
+
+        @return: result if ETCD is available on the local machine
+
+        @rtype: bool
+        """
+
         result = self.executeBashCommand("dpkg -l | grep etcd")
 
         if result[0] == '':
@@ -159,175 +187,94 @@ class Utils:
             return True
 
     def getEtcdInformation(self, location):
+        """
+        Gets information from etcd by location
+
+        @param location: a etcd location
+
+        @type location: str
+
+        @return: result of file in etcd
+
+        @rtype: list
+        """
+
         return self.executeBashCommand("etcdctl get {0}".format(location))
 
     def parseXMLtoJSON(self, xml):
+        """
+        Converts XML to JSON
+
+        @param xml: a xml file
+
+        @type: str
+
+        @return: json file
+
+        @rtype: json
+        """
+
         # dumps converts to general json, loads converts to python value
         return json.loads(json.dumps(xmltodict.parse(str(xml))))
 
     def getStatusOfService(self, service_name):
+        """
+        Gets the status of a linux service
+
+        @param service_name: name of a linux service
+
+        @type service_name: str
+
+        @return: status of the service
+
+        @rtype: bool
+        """
+
         return ServiceManager.get_service_status(str(service_name), self.client)
 
     def executeBashCommand(self, cmd, subpro=False):
+        """
+        Execute a bash command through a standard way, already processed and served on a silver platter
+
+        @param cmd: a bash command
+        @param subpro: determines if you are using subprocess or commands module
+            * Bash piping or other special cases: False (use commands)
+            * General bash command: True (use subprocess)
+
+        @type cmd: str
+        @type subpro: bool
+
+        @return: bash command output
+
+        @rtype: list
+        """
+
         if not subpro:
             return commands.getstatusoutput(str(cmd))[1].split('\n')
         else:
             return subprocess.check_output(str(cmd), stderr=subprocess.STDOUT, shell=True)
 
     def detectServiceManager(self):
+        """
+        Detects the Service Manager on the local system
 
-        # service_types:
-        #
-        # init = 1
-        # systemd = 0
-        # other(s) (not supported) = -1
+        @return: systemd or init/upstart
+            * systemd = 0
+            * init/upstart = 1
+
+        @rtype: int
+
+        @raises RuntimeError
+        """
 
         # detects what service manager your system has
-        DETSYS = "pidof systemd && echo 'systemd' || pidof /sbin/init && echo 'sysvinit' || echo 'other'"
-        OUTPUT = commands.getoutput(DETSYS)
+        det_sys = "pidof systemd && echo 'systemd' || pidof /sbin/init && echo 'sysvinit' || echo 'other'"
+        result = commands.getoutput(det_sys)
 
         # process output
-        if 'systemd' in OUTPUT:
+        if 'systemd' in result:
             return 0
         elif 'sysvinit':
             return 1
         else:
-            raise Exception("Unsupported Service Manager detected, please contact support or file a bug @github")
-
-    def logger(self, message, module, log_type, unattended_mode_name, unattended_print_mode=True):
-
-        # unattended_print_mode & unattended_mode_name are required together
-        #
-        # log_types:
-        #
-        # failure = 0
-        # success = 1
-        # warning = 2
-        # info = 3
-        # exception = 4
-        # skip = 5
-        # debug = 6
-
-        try:
-            target = open('{0}/{1}'.format(self.HEALTHCHECK_DIR, self.HEALTHCHECK_FILE), 'a')
-            now = datetime.datetime.now()
-
-            if log_type == 0:
-                target.write("{0} - [FAILURE] - [{1}] - {2}\n".format(now, module, message))
-                self.failure += 1
-
-                if not self.silent_mode:
-                    if self.unattended_mode:
-                        if unattended_print_mode:
-                            print "{0} FAILURE".format(unattended_mode_name)
-                            self.healthcheck_dict[unattended_mode_name] = "FAILURE"
-                    else:
-                        print _Colors.FAIL + "[FAILURE] " + _Colors.ENDC + "%s" % (str(message))
-                else:
-                    if unattended_print_mode:
-                        self.healthcheck_dict[unattended_mode_name] = "FAILURE"
-
-            elif log_type == 1:
-                target.write("{0} - [SUCCESS] - [{1}] - {2}\n".format(now, module, message))
-                self.success += 1
-
-                if not self.silent_mode:
-                    if self.unattended_mode:
-                        if unattended_print_mode:
-                            print "{0} SUCCESS".format(unattended_mode_name)
-                            self.healthcheck_dict[unattended_mode_name] = "SUCCESS"
-                    else:
-                        print _Colors.OKGREEN + "[SUCCESS] " + _Colors.ENDC + "%s" % (str(message))
-                else:
-                    if unattended_print_mode:
-                        self.healthcheck_dict[unattended_mode_name] = "SUCCESS"
-
-            elif log_type == 2:
-                target.write("{0} - [WARNING] - [{1}] - {2}\n".format(now, module, message))
-                self.warning += 1
-
-                if not self.silent_mode:
-                    if self.unattended_mode:
-                        if unattended_print_mode:
-                            print "{0} WARNING".format(unattended_mode_name)
-                            self.healthcheck_dict[unattended_mode_name] = "WARNING"
-                    else:
-                        print _Colors.WARNING + "[WARNING] " + _Colors.ENDC + "%s" % (str(message))
-                else:
-                    if unattended_print_mode:
-                        self.healthcheck_dict[unattended_mode_name] = "WARNING"
-
-            elif log_type == 3:
-                target.write("{0} - [INFO] - [{1}] - {2}\n".format(now, module, message))
-                self.info += 1
-
-                # info_mode is NOT logged silently
-                if not self.silent_mode:
-                    if self.unattended_mode:
-                        if unattended_print_mode:
-                            print "{0} INFO".format(unattended_mode_name)
-                            self.healthcheck_dict[unattended_mode_name] = "INFO"
-                    else:
-                        print _Colors.OKBLUE + "[INFO] " + _Colors.ENDC + "%s" % (str(message))
-
-            elif log_type == 4:
-                target.write("{0} - [EXCEPTION] - [{1}] - {2}\n".format(now, module, message))
-                self.exception += 1
-
-                if not self.silent_mode:
-                    if self.unattended_mode:
-                        if unattended_print_mode:
-                            print "{0} EXCEPTION".format(unattended_mode_name)
-                            self.healthcheck_dict[unattended_mode_name] = "EXCEPTION"
-                    else:
-                        print _Colors.FAIL + "[EXCEPTION] " + _Colors.ENDC + "%s" % (str(message))
-                else:
-                    if unattended_print_mode:
-                        self.healthcheck_dict[unattended_mode_name] = "EXCEPTION"
-
-            elif log_type == 5:
-                target.write("{0} - [SKIPPED] - [{1}] - {2}\n".format(now, module, message))
-                self.skip += 1
-
-                if not self.silent_mode:
-                    if self.unattended_mode:
-                        if unattended_print_mode:
-                            print "{0} SKIPPED".format(unattended_mode_name)
-                            self.healthcheck_dict[unattended_mode_name] = "SKIPPED"
-                    else:
-                        print _Colors.SKIP + "[SKIPPED] " + _Colors.ENDC + "%s" % (str(message))
-                else:
-                    if unattended_print_mode:
-                        self.healthcheck_dict[unattended_mode_name] = "SKIPPED"
-
-            elif log_type == 6:
-                if self.debug:
-                    target.write("{0} - [DEBUG] - [{1}] - {2}\n".format(now, module, message))
-                    self.debug += 1
-                    print _Colors.OKBLUE + "[DEBUG] " + _Colors.ENDC + "%s" % (str(message))
-                    self.healthcheck_dict[unattended_mode_name] = "DEBUG"
-
-            else:
-                target.write("{0} - [UNEXPECTED_EXCEPTION] - [{1}] - {2}\n".format(now, module, message))
-                self.exception += 1
-
-                if not self.silent_mode:
-                    if self.unattended_mode:
-                        if unattended_print_mode:
-                            print "{0} UNEXPECTED_EXCEPTION".format(unattended_mode_name)
-                            self.healthcheck_dict[unattended_mode_name] = "UNEXPECTED_EXCEPTION"
-                    else:
-                        print _Colors.FAIL + "[UNEXPECTED_EXCEPTION] " + _Colors.ENDC + "%s" % (str(message))
-                else:
-                    if unattended_print_mode:
-                        self.healthcheck_dict[unattended_mode_name] = "UNEXPECTED_EXCEPTION"
-
-            target.close()
-
-        except Exception, e:
-            print "An unexpected exception occured during logging in '{0}': \n{1}".format(self.HEALTHCHECK_DIR, e)
-
-
-"""
-Section: Main
-"""
+            raise RuntimeError("Unsupported Service Manager detected, please contact support or file a bug @github")

@@ -37,8 +37,8 @@ if not self.unattended: print ""
 **One critical component:**
 ```
 # Checking Alba
-self.utility.logger("Starting Alba Health Check!", self.module, 3, 'starting_alba_hc', False)
-self.utility.logger("===========================\n", self.module, 3, 'starting_alba_hc_ul', False)
+self.LOGGER.logger("Starting Alba Health Check!", self.module, 3, 'starting_alba_hc', False)
+self.LOGGER.logger("===========================\n", self.module, 3, 'starting_alba_hc_ul', False)
 
 self.alba.checkAlba()
 if not self.unattended: print ""
@@ -47,8 +47,8 @@ if not self.unattended: print ""
 **Multiple critical components:**
 ```
 # Checking Open vStorage
-self.utility.logger("Starting Open vStorage Health Check!",self.module, 3, 'starting_ovs_hc', False)
-self.utility.logger("====================================\n",self.module, 3, 'starting_ovs_hc_ul', False)
+self.LOGGER.logger("Starting Open vStorage Health Check!",self.module, 3, 'starting_ovs_hc', False)
+self.LOGGER.logger("====================================\n",self.module, 3, 'starting_ovs_hc_ul', False)
 
 self.ovs.checkOvsProcesses()
 if not self.unattended: print ""

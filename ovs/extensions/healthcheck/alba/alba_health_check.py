@@ -24,8 +24,10 @@ import time
 import uuid
 import json
 import os
+
 from ovs.extensions.healthcheck.utils.extension import Utils
 from ovs.dal.lists.albabackendlist import AlbaBackendList
+from ovs.log.healthcheck_logHandler import HCLogHandler
 from ovs.dal.lists.albanodelist import AlbaNodeList
 from ovs.dal.lists.servicelist import ServiceList
 from ovs.extensions.generic.system import System
@@ -36,9 +38,18 @@ class AlbaHealthCheck:
     A healthcheck for Alba storage layer
     """
 
-    def __init__(self, utility=Utils(False)):
+    def __init__(self, logging=HCLogHandler(False)):
+        """
+        Init method for Alba health check module
+
+        @param logging: ovs.log.healthcheck_logHandler
+
+        @type logging: Class
+        """
+
         self.module = "alba"
-        self.utility = utility
+        self.utility = Utils()
+        self.LOGGER = logging
         self.show_disks_in_monitoring = False
         self.machine_details = System.get_my_storagerouter()
         self.machine_id = System.get_my_machine_id()
@@ -47,6 +58,14 @@ class AlbaHealthCheck:
         self.temp_file_size = 1048576  # bytes
 
     def _fetchAvailableAlbaBackends(self):
+        """
+        Fetches the available alba backends
+
+        @return: information about each alba backend
+
+        @rtype: list that consists of dicts
+        """
+
         result = []
         for abl in AlbaBackendList.get_albabackends():
 
@@ -77,9 +96,13 @@ class AlbaHealthCheck:
         return result
 
     def _checkIfProxyWorks(self):
+        """
+        Checks if all Alba Proxies work on a local machine, it creates a namespace and tries to put and object
+        """
+
         amount_of_presets_not_working = []
 
-        self.utility.logger("Checking seperate proxies to see if they work ...",self.module, 3, 'checkAlba', False)
+        self.LOGGER.logger("Checking seperate proxies to see if they work ...",self.module, 3, 'checkAlba', False)
 
         # ignore possible subprocess output
         FNULL = open(os.devnull, 'w')
@@ -122,7 +145,7 @@ class AlbaHealthCheck:
                             if json_nam['success']:
 
                                 # get & put is successfully executed
-                                self.utility.logger("Namespace successfully created or already existed "
+                                self.LOGGER.logger("Namespace successfully created or already existed "
                                                     "via proxy '{0}' ""with preset '{1}'!".format(sr.name,
                                                                                                   preset.get('name')),
                                                     self.module, 1, '{0}_preset_{1}_create_namespace'
@@ -150,14 +173,14 @@ class AlbaHealthCheck:
                                                                .read()).hexdigest()
 
                                     if hash_original == hash_fetched:
-                                        self.utility.logger("Creation of a object in namespace '{0}' on proxy '{1}' "
+                                        self.LOGGER.logger("Creation of a object in namespace '{0}' on proxy '{1}' "
                                                             "with"" preset '{2}' succeeded!".format(namespace_key,
                                                                                                     sr.name,
                                                                                                     preset.get('name')),
                                                             self.module, 1, '{0}_preset_{1}_create_object'
                                                             .format(sr.name, preset.get('name')))
                                     else:
-                                        self.utility.logger("Creation of a object '{0}' in namespace '{1}' on proxy"
+                                        self.LOGGER.logger("Creation of a object '{0}' in namespace '{1}' on proxy"
                                                             " '{2}' with preset '{3}' failed!".format(object_key,
                                                                                                       namespace_key,
                                                                                                       sr.name,
@@ -179,25 +202,25 @@ class AlbaHealthCheck:
 
                             if 'not found' in get_nam:
                                 # put was not successfully executed, so get return success = False
-                                self.utility.logger("Creating/fetching namespace '{0}' with preset '{1}' on proxy '{2}'"
+                                self.LOGGER.logger("Creating/fetching namespace '{0}' with preset '{1}' on proxy '{2}'"
                                                     " failed! ".format(namespace_key, preset.get('name'), sr.name),
                                                     self.module, 0, '{0}_preset_{1}_create_namespace'
                                                     .format(sr.name, preset.get('name')))
 
                                 # for unattended install
-                                self.utility.logger("Failed to put object because namespace failed to be"
+                                self.LOGGER.logger("Failed to put object because namespace failed to be"
                                                     " created/fetched on proxy '{0}'! ".format(sr.name), self.module,
                                                     0, '{0}_preset_{1}_create_object'.format(sr.name, preset.get('name')))
                             else:
                                 # for unattended install
-                                self.utility.logger("Failed to put object on namespace '{0}' failed on proxy"
+                                self.LOGGER.logger("Failed to put object on namespace '{0}' failed on proxy"
                                                     " '{0}'! ".format(sr.name), self.module, 0,
                                                     '{0}_preset_{1}_create_object'.format(sr.name, preset.get('name')))
 
                         except Exception as e:
                             amount_of_presets_not_working.append(preset.get('name'))
 
-                            self.utility.logger("Something unexpected went wrong during the check of the alba"
+                            self.LOGGER.logger("Something unexpected went wrong during the check of the alba"
                                                 " proxies: {0}".format(e), self.module, 4,
                                                 '{0}_preset_{1}_create_object'.format(sr.name, preset.get('name')))
 
@@ -212,10 +235,22 @@ class AlbaHealthCheck:
         return amount_of_presets_not_working
 
     def _checkIfBackendASDSWorks(self, disks):
+        """
+        Checks if Alba ASD's work
+
+        @param disks: list of alba ASD's
+
+        @type disks: list
+
+        @return: returns a tuple that consists of lists: (workingDisks, defectiveDisks)
+
+        @rtype: tuple that consists of lists
+        """
+
         workingDisks = []
         defectiveDisks = []
 
-        self.utility.logger("Checking seperate ASD's to see if they work ...",self.module, 3, 'checkAsds', False)
+        self.LOGGER.logger("Checking seperate ASD's to see if they work ...",self.module, 3, 'checkAsds', False)
 
         # check if disks are working
         if len(disks) != 0:
@@ -240,7 +275,7 @@ class AlbaHealthCheck:
                             raise Exception(g)
                         else:
                             # test successfull!
-                            self.utility.logger("ASD test with DISK_ID '{0}' succeeded!".format(disk.get('asd_id')),
+                            self.LOGGER.logger("ASD test with DISK_ID '{0}' succeeded!".format(disk.get('asd_id')),
                                                 self.module, 1, 'alba_asd_{0}'.format(disk.get('asd_id')),
                                                 self.show_disks_in_monitoring)
 
@@ -255,19 +290,23 @@ class AlbaHealthCheck:
 
                 except Exception as e:
                     defectiveDisks.append(disk.get('asd_id'))
-                    self.utility.logger("ASD test with DISK_ID '{0}' failed on NODE '{1}' ..."
+                    self.LOGGER.logger("ASD test with DISK_ID '{0}' failed on NODE '{1}' ..."
                                         .format(disk.get('asd_id'), ip_address), self.module, 0,
                                         'alba_asd_{0}'.format(disk.get('asd_id')), self.show_disks_in_monitoring)
 
         return workingDisks, defectiveDisks
 
     def checkAlba(self):
-        self.utility.logger("Fetching all Available ALBA backends ...", self.module, 3, 'checkAlba', False)
+        """
+        Checks Alba as a whole
+        """
+
+        self.LOGGER.logger("Fetching all Available ALBA backends ...", self.module, 3, 'checkAlba', False)
         try:
             alba_backends = self._fetchAvailableAlbaBackends()
 
             if len(alba_backends) != 0:
-                self.utility.logger("We found {0} backend(s)!".format(len(alba_backends)),self.module, 1,
+                self.LOGGER.logger("We found {0} backend(s)!".format(len(alba_backends)),self.module, 1,
                                     'alba_backends_found'.format(len(alba_backends)))
                 for backend in alba_backends:
 
@@ -275,10 +314,10 @@ class AlbaHealthCheck:
                     result_proxies = self._checkIfProxyWorks()
                     if len(result_proxies) == 0:
                         # all proxies work
-                        self.utility.logger("All Alba proxies should be fine!", self.module, 1, 'alba_proxy')
+                        self.LOGGER.logger("All Alba proxies should be fine!", self.module, 1, 'alba_proxy')
                     else:
                         # not all proxies work
-                        self.utility.logger("Some alba proxies are NOT working: {0}".format(', '.join(result_proxies)),
+                        self.LOGGER.logger("Some alba proxies are NOT working: {0}".format(', '.join(result_proxies)),
                                             self.module, 0, 'alba_proxy')
 
                     # check disks
@@ -289,11 +328,11 @@ class AlbaHealthCheck:
                     # check if backend is available for vPOOL attachment / use
                     if backend.get('is_available_for_vpool'):
                         if len(defectiveDisks) == 0:
-                            self.utility.logger("Alba backend '{0}' should be AVAILABLE FOR vPOOL USE,"
+                            self.LOGGER.logger("Alba backend '{0}' should be AVAILABLE FOR vPOOL USE,"
                                                 " ALL disks are working fine!".format(backend.get('name')),
                                                 self.module, 1, 'alba_backend_{0}'.format(backend.get('name')))
                         else:
-                            self.utility.logger("Alba backend '{0}' should be AVAILABLE FOR vPOOL USE with {1} disks,"
+                            self.LOGGER.logger("Alba backend '{0}' should be AVAILABLE FOR vPOOL USE with {1} disks,"
                                                 " BUT there are {2} defective disks: {3}".format(backend.get('name'),
                                                                                                  len(workingDisks),
                                                                                                  len(defectiveDisks),
@@ -302,26 +341,19 @@ class AlbaHealthCheck:
                                                                                           len(defectiveDisks)))
                     else:
                         if len(workingDisks) == 0 and len(defectiveDisks) == 0:
-                            self.utility.logger("Alba backend '{0}' is NOT available for vPool use, there are no"
+                            self.LOGGER.logger("Alba backend '{0}' is NOT available for vPool use, there are no"
                                                 " disks assigned to this backend!".format(backend.get('name')),
                                                 self.module, 5, 'alba_backend_{0}'.format(backend.get('name')))
                         else:
-                            self.utility.logger("Alba backend '{0}' is NOT available for vPool use, preset"
+                            self.LOGGER.logger("Alba backend '{0}' is NOT available for vPool use, preset"
                                                 " requirements NOT SATISFIED! There are {1} working disks AND {2}"
                                                 " defective disks!".format(backend.get('name'), len(workingDisks),
                                                                            len(defectiveDisks)), self.module, 0,
                                                 'alba_backend_{0}'.format(backend.get('name')))
 
             else:
-                self.utility.logger("No backends found ...",self.module, 5, 'alba_backends_found')
+                self.LOGGER.logger("No backends found ...",self.module, 5, 'alba_backends_found')
             return None
         except Exception as e:
-            self.utility.logger("One ore more Arakoon clusters cannot be reached due to error: {0}".format(e),
+            self.LOGGER.logger("One ore more Arakoon clusters cannot be reached due to error: {0}".format(e),
                                 self.module, 0, 'arakoon_connected', False)
-
-    def _fetchAlbaInformation(self):
-        return True
-
-"""
-Section: Main
-"""
