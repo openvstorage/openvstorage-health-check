@@ -57,7 +57,7 @@ class Utils:
 
         # load config file
         PARENT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
-        with open("{0}/conf/settings.json".format(PARENT)) as settings_file:
+        with open("{0}/config/healthcheck/settings.json".format(PARENT)) as settings_file:
             self.settings = json.load(settings_file)
 
         # fetch from config file
