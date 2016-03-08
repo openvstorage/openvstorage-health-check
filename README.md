@@ -74,7 +74,7 @@ ovs healthcheck silent
 ### In-code usage
 
 ```
-from healthcheck import HealthCheckController
+from ovs.lib.healthcheck import HealthCheckController
 
 # running in silent mode
 hc = HealthCheckController(silent_run=True)
