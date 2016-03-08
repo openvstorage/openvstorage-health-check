@@ -18,6 +18,7 @@
 Module for HealthCheckController
 """
 
+from ovs.celery_run import celery
 from ovs.extensions.healthcheck.openvstorage.openvstoragecluster_health_check import OpenvStorageHealthCheck
 from ovs.extensions.healthcheck.arakoon.arakooncluster_health_check import ArakoonHealthCheck
 from ovs.extensions.healthcheck.alba.alba_health_check import AlbaHealthCheck
