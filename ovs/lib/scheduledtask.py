@@ -395,7 +395,7 @@ class ScheduledTaskController(object):
         logger.info('Starting Open vStorage healthcheck ...')
 
         try:
-            results = HealthCheckController(silent_run=True).check_all()
+            results = HealthCheckController().check_silent()
             logger.info("Finished Open vStorage healthcheck with status 'SUCCESS'")
             return results
         except Exception as e:

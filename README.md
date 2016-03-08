@@ -27,13 +27,13 @@ elif [ "$1" = "healthcheck" ] ; then
     cd /opt/OpenvStorage/ovs/lib
     if [ "$2" = "unattended" ] ; then
         # launch unattended healthcheck
-        python -c "from healthcheck import HealthCheckController; HealthCheckController(unattended_run=True).check_all()"
+        python -c "from healthcheck import HealthCheckController; HealthCheckController().check_unattended()"
     elif [ "$2" = "silent" ] ; then
 	    # launch silent healthcheck
-	    python -c "from healthcheck import HealthCheckController; HealthCheckController(silent_run=True).check_all()"
+	    python -c "from healthcheck import HealthCheckController; HealthCheckController().check_silent()"
     else
         # launch healthcheck
-        python healthcheck.py
+        python -c "from healthcheck import HealthCheckController; HealthCheckController().check_attended()"
     fi
 ```
 
