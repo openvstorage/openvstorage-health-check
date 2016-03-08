@@ -390,9 +390,17 @@ class ScheduledTaskController(object):
     def healthcheck():
         """
         Run the Open vStorage healthcheck
-        :return: dict
+        :return: dict or None (If healthcheck failed)
         """
-        logger.info('Starting Open vStorage healthcheck')
-        results = HealthCheckController(silent_run=True).check_all()
-        logger.info('Finishing Open vStorage healthcheck')
-        return results
+        logger.info('Starting Open vStorage healthcheck ...')
+
+        try:
+            results = HealthCheckController(silent_run=True).check_all()
+            logger.info("Finished Open vStorage healthcheck with status 'SUCCESS'")
+            return results
+        except Exception as e:
+            logger.error("Finished Open vStorage healthcheck with status 'FAILED' and exception: {0}".format(e))
+            return None
+
+
+
