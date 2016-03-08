@@ -29,8 +29,8 @@ elif [ "$1" = "healthcheck" ] ; then
         # launch unattended healthcheck
         python -c "from healthcheck import HealthCheckController; HealthCheckController(unattended_run=True).check_all()"
     elif [ "$2" = "silent" ] ; then
-	# launch silent healthcheck
-	python -c "from healthcheck import HealthCheckController; HealthCheckController(silent_run=True).check_all()"
+	    # launch silent healthcheck
+	    python -c "from healthcheck import HealthCheckController; HealthCheckController(silent_run=True).check_all()"
     else
         # launch healthcheck
         python healthcheck.py
