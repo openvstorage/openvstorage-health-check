@@ -67,7 +67,8 @@ class OpenvStorageHealthCheck:
                                              "openvstorage-backend-webapps", "openvstorage-core", "openvstorage-hc",
                                              "openvstorage-sdm", "openvstorage-webapps", "openvstorage-test",
                                              "alba", "volumedriver-base", "volumedriver-server", "nginx", "memcached",
-                                             "rabbitmq-server", "qemu-kvm", "virtinst", "openvpn", "ntp"
+                                             "rabbitmq-server", "qemu-kvm", "virtinst", "openvpn", "ntp",
+                                             "swiftstack-node"
                                              ]
         # 1. key -> service name (string)
         #

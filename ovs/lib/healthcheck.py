@@ -51,8 +51,11 @@ class HealthCheckController:
         self.alba = AlbaHealthCheck(self.LOGGER)
         self.arakoon = ArakoonHealthCheck(self.LOGGER)
         self.ovs = OpenvStorageHealthCheck(self.LOGGER)
+
+        # determine platform on startup of healthcheck
         self.platform = 0
 
+    @celery.task(name='ovs.healthcheck.check_all')
     def check_all(self):
         """
         Executes all available checks for the chosen platform
@@ -78,6 +81,7 @@ class HealthCheckController:
 
         return self.get_results()
 
+    @celery.task(name='ovs.healthcheck.check_openvstorage')
     def check_openvstorage(self):
         """
         Checks all critical components of Open vStorage
@@ -129,6 +133,7 @@ class HealthCheckController:
         if not self.unattended and not self.silent_mode:
             print ""
 
+    @celery.task(name='ovs.healthcheck.check_arakoon')
     def check_arakoon(self):
         """
         Checks all critical components of Arakoon
@@ -141,6 +146,7 @@ class HealthCheckController:
         if not self.unattended and not self.silent_mode:
             print ""
 
+    @celery.task(name='ovs.healthcheck.check_alba')
     def check_alba(self):
         """
         Checks all critical components of Alba
@@ -153,6 +159,7 @@ class HealthCheckController:
         if not self.unattended and not self.silent_mode:
             print ""
 
+    @celery.task(name='ovs.healthcheck.get_results')
     def get_results(self):
         """
         Gets the result of the Open vStorage healthcheck
