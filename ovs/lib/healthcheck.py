@@ -54,6 +54,35 @@ class HealthCheckController:
         self.arakoon = ArakoonHealthCheck(self.LOGGER)
         self.ovs = OpenvStorageHealthCheck(self.LOGGER)
 
+    def check_all(self, platform):
+        """
+        Executes all available checks for the chosen platform
+
+        @param platform: describes the platform
+            * Vanilla (Open vStorage + Arakoon + Alba) = 0
+            * Swift (Open vStorage + Arakoon + Swift) = 1
+            * Ceph (Open vStorage + Arakoon + Ceph) = 2
+            * Distributed (Open vStorage + Arakoon + Distributed FS) = 3
+            * S3 (Open vStorage + Arakoon + S3) = 4
+
+        @type platform: int
+
+        @return: results of the healthcheck
+
+        @rtype: dict
+
+        @raises: Exception (When platform is not supported)
+        """
+
+        if platform == 0:
+            self.check_openvstorage()
+            self.check_arakoon()
+            self.check_alba()
+        else:
+            raise Exception("No other platform than 'Vanilla' or platform nr. 0 is CURRENTLY supported")
+
+        return self.get_results()
+
     def check_openvstorage(self):
         """
         Checks all critical components of Open vStorage
@@ -132,6 +161,10 @@ class HealthCheckController:
     def get_results(self):
         """
         Gets the result of the Open vStorage healthcheck
+
+        @return: results & recap
+
+        @rtype: dict with nested dicts
         """
 
         self.LOGGER.logger("Recap of Health Check!", self.module, 3, 'starting_recap_hc', False)
