@@ -39,6 +39,11 @@ class _Colors:
     SKIP = '\033[95m'
     ENDC = '\033[0m'
 
+    def __init__(self):
+        """ Init method """
+
+        pass
+
 
 class Utils:
     """
@@ -64,13 +69,13 @@ class Utils:
         self.client = SSHClient('127.0.0.1', username='root')
 
         # init at runtime
-        self.etcd = self.detectEtcd()
-        self.serviceManager = self.detectServiceManager()
-        self.node_type = self.detectOvsType()
-        self.ovs_version = self.detectOvsVersion()
-        self.cluster_id = self.getClusterId()
+        self.etcd = self.check_etcd()
+        self.serviceManager = self.get_service_manager()
+        self.node_type = self.get_ovs_type()
+        self.ovs_version = self.get_ovs_version()
+        self.cluster_id = self.get_cluster_id()
 
-    def fetchConfigFilePath(self, name, node_id, product, guid=None):
+    def get_config_file_path(self, name, node_id, product, guid=None):
         """
         Gets the location of a certain service via local or etcd path
 
@@ -125,8 +130,8 @@ class Utils:
             elif product == 4:
                 return "etcd://127.0.0.1:2379/ovs/framework"
 
-
-    def detectOvsType(self):
+    @staticmethod
+    def get_ovs_type():
         """
         Gets the TYPE of the Open vStorage local node
 
@@ -139,7 +144,8 @@ class Utils:
 
         return System.get_my_storagerouter().node_type
 
-    def detectOvsVersion(self):
+    @staticmethod
+    def get_ovs_version():
         """
         Gets the VERSION of the Open vStorage cluster
 
@@ -153,7 +159,7 @@ class Utils:
 
         return ovs["releasename"]
 
-    def getClusterId(self):
+    def get_cluster_id(self):
         """
         Gets the cluster ID of the Open vStorage cluster
 
@@ -163,14 +169,14 @@ class Utils:
         """
 
         if self.etcd:
-            return self.getEtcdInformation("/ovs/framework/cluster_id")[0].translate(None, '\"')
+            return self.get_etcd_information_by_location("/ovs/framework/cluster_id")[0].translate(None, '\"')
         else:
             with open("/opt/OpenvStorage/config/ovs.json") as ovs_json:
                 ovs = json.load(ovs_json)
 
             return ovs["support"]["cid"]
 
-    def detectEtcd(self):
+    def check_etcd(self):
         """
         Detects if ETCD is available on the local machine
 
@@ -179,16 +185,16 @@ class Utils:
         @rtype: bool
         """
 
-        result = self.executeBashCommand("dpkg -l | grep etcd")
+        result = self.execute_bash_command("dpkg -l | grep etcd")
 
         if result[0] == '':
             return False
         else:
             return True
 
-    def getEtcdInformation(self, location):
+    def get_etcd_information_by_location(self, location):
         """
-        Gets information from etcd by location
+        Gets information from etcd by ABSOLUTE location (e.g. /ovs/framework)
 
         @param location: a etcd location
 
@@ -199,9 +205,10 @@ class Utils:
         @rtype: list
         """
 
-        return self.executeBashCommand("etcdctl get {0}".format(location))
+        return self.execute_bash_command("etcdctl get {0}".format(location))
 
-    def parseXMLtoJSON(self, xml):
+    @staticmethod
+    def convert_xml_to_json(xml):
         """
         Converts XML to JSON
 
@@ -217,7 +224,7 @@ class Utils:
         # dumps converts to general json, loads converts to python value
         return json.loads(json.dumps(xmltodict.parse(str(xml))))
 
-    def getStatusOfService(self, service_name):
+    def check_status_of_service(self, service_name):
         """
         Gets the status of a linux service
 
@@ -232,7 +239,8 @@ class Utils:
 
         return ServiceManager.get_service_status(str(service_name), self.client)
 
-    def executeBashCommand(self, cmd, subpro=False):
+    @staticmethod
+    def execute_bash_command(cmd, subpro=False):
         """
         Execute a bash command through a standard way, already processed and served on a silver platter
 
@@ -254,7 +262,8 @@ class Utils:
         else:
             return subprocess.check_output(str(cmd), stderr=subprocess.STDOUT, shell=True)
 
-    def detectServiceManager(self):
+    @staticmethod
+    def get_service_manager():
         """
         Detects the Service Manager on the local system
 

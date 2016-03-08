@@ -30,7 +30,7 @@ from ovs.log.healthcheck_logHandler import HCLogHandler
 
 try:
     from ovs.extensions.db.etcd.configuration import EtcdConfiguration
-except Exception:
+except ImportError:
     pass
 
 
@@ -43,16 +43,16 @@ class ArakoonHealthCheck:
         """
         Init method for Arakoon health check module
 
-        @param utility: ovs.extensions.healthcheck.utils.extension.Utils()
+        @param logging: ovs.log.healthcheck_logHandler
 
-        @type utility: Class
+        @type logging: Class
         """
 
         self.module = "arakoon"
         self.utility = Utils()
         self.LOGGER = logging
 
-    def _fetchAvailableArakoonClusters(self):
+    def fetch_available_clusters(self):
         """
         Fetches the available arakoon clusters of a cluster
 
@@ -61,7 +61,7 @@ class ArakoonHealthCheck:
         @rtype: list
         """
 
-        if self.utility.etcd == False:
+        if not self.utility.etcd:
             aramex = ArakoonManagementEx()
             arakoon_clusters = aramex.listClusters()
         else:
@@ -74,7 +74,7 @@ class ArakoonHealthCheck:
                 # add node that is available for arakoon cluster
                 nodes_per_cluster_result = {}
 
-                if self.utility.etcd == False:
+                if not self.utility.etcd:
                     master_node_ids = aramex.getCluster(str(cluster)).listNodes()
                 else:
                     ak = ArakoonClusterConfig(str(cluster))
@@ -98,10 +98,11 @@ class ArakoonHealthCheck:
             return result
         else:
             # no arakoon clusters on node
-            self.LOGGER.logger("No installed arakoon clusters detected on this system ...", self.module, 2, 'arakoon_no_clusters_found', False)
+            self.LOGGER.logger("No installed arakoon clusters detected on this system ...", self.module, 2,
+                               'arakoon_no_clusters_found', False)
             return None
 
-    def _verifyArakoonIntegrity(self, arakoon_overview):
+    def _verify_integrity(self, arakoon_overview):
         """
         Verifies the integrity of a list of arakoons
 
@@ -109,15 +110,15 @@ class ArakoonHealthCheck:
 
         @type arakoon_overview: list that consists of strings
 
-        @return: (ArakoonPerfWorking_list, ArakoonNoMaster_list, ArakoonDown_list, ArakoonUnknown_list)
+        @return: (arakoonperfworking_list, arakoonnomaster_list, arakoondown_list, arakoonunknown_list)
 
         @rtype: tuple that consists of lists
         """
 
-        ArakoonUnknown_list = []
-        ArakoonPerfWorking_list = []
-        ArakoonNoMaster_list = []
-        ArakoonDown_list = []
+        arakoonunknown_list = []
+        arakoonperfworking_list = []
+        arakoonnomaster_list = []
+        arakoondown_list = []
 
         # verify integrity of arakoon clusters
         for cluster_name, cluster_info in arakoon_overview.iteritems():
@@ -126,7 +127,8 @@ class ArakoonHealthCheck:
             max_tries = 2  # should be 5 but .nop is taking WAY to long
 
             while tries <= max_tries:
-                self.LOGGER.logger("Try {0} on cluster '{1}'".format(tries, cluster_name), self.module, 3, 'arakoonTryCheck', False)
+                self.LOGGER.logger("Try {0} on cluster '{1}'".format(tries, cluster_name), self.module, 3,
+                                   'arakoonTryCheck', False)
 
                 key = 'ovs-healthcheck-{0}'.format(str(uuid.uuid4()))
                 value = str(time.time())
@@ -140,47 +142,49 @@ class ArakoonHealthCheck:
                     client.set(key, value)
                     if client.get(key) == value:
                         client.delete(key)
-                        ArakoonPerfWorking_list.append(cluster_name)
+                        arakoonperfworking_list.append(cluster_name)
                         break
 
                 except ArakoonNotFound:
                     if tries == max_tries:
-                        ArakoonDown_list.append(cluster_name)
+                        arakoondown_list.append(cluster_name)
                         break
 
                 except (ArakoonNoMaster, ArakoonNoMasterResult):
                     if tries == max_tries:
-                        ArakoonNoMaster_list.append(cluster_name)
+                        arakoonnomaster_list.append(cluster_name)
                         break
 
                 except Exception:
                     if tries == max_tries:
                         print "Exception!"
-                        ArakoonUnknown_list.append(cluster_name)
+                        arakoonunknown_list.append(cluster_name)
                         break
 
                 # finish try if failed
                 tries += 1
 
-        return ArakoonPerfWorking_list, ArakoonNoMaster_list, ArakoonDown_list, ArakoonUnknown_list
+        return arakoonperfworking_list, arakoonnomaster_list, arakoondown_list, arakoonunknown_list
 
-    def checkArakoons(self):
+    def check_arakoons(self):
         """
         Verifies/validates the integrity of all available arakoons
         """
 
         self.LOGGER.logger("Fetching available arakoon clusters: ", self.module, 3, 'checkArakoons', False)
         try:
-            arakoon_overview = self._fetchAvailableArakoonClusters()
+            arakoon_overview = self.fetch_available_clusters()
 
             # fetch overview of arakoon clusters on local node
             if arakoon_overview:
-                self.LOGGER.logger(
-                    "{0} available Arakoons successfully fetched, starting verification of clusters ...".format(
-                        len(arakoon_overview)), self.module, 1, 'arakoon_amount_on_cluster {0}'.format(len(arakoon_overview)), False)
-                ver_result = self._verifyArakoonIntegrity(arakoon_overview)
+                self.LOGGER.logger("{0} available Arakoons successfully fetched, starting verification of clusters ..."
+                                   .format(len(arakoon_overview)), self.module, 1,
+                                   'arakoon_amount_on_cluster {0}'.format(len(arakoon_overview)), False)
+
+                ver_result = self._verify_integrity(arakoon_overview)
                 if len(ver_result[0]) == len(arakoon_overview):
-                    self.LOGGER.logger("ALL available Arakoon(s) their integrity are/is OK! ", self.module, 1, 'arakoon_integrity')
+                    self.LOGGER.logger("ALL available Arakoon(s) their integrity are/is OK! ", self.module, 1,
+                                       'arakoon_integrity')
                 else:
                     # less output for unattended_mode
                     if not self.LOGGER.unattended_mode:
@@ -192,29 +196,32 @@ class ArakoonHealthCheck:
                         # check amount NO-MASTER arakoons
                         if len(ver_result[1]) > 0:
                             self.LOGGER.logger("{0} Arakoon(s) cannot find a MASTER: {1}".format(len(ver_result[1]),
-                                                                                                   ', '.join(
-                                                                                                           ver_result[1])),
-                                                 self.module, 0, 'arakoon_no_master_exception'.format(len(ver_result[1])))
+                                                                                                 ', '.join(ver_result[1]
+                                                                                                           )),
+                                               self.module, 0, 'arakoon_no_master_exception'.format(len(ver_result[1])))
 
                         # check amount DOWN arakoons
                         if len(ver_result[2]) > 0:
                             self.LOGGER.logger("{0} Arakoon(s) seem(s) to be DOWN!: {1}".format(len(ver_result[2]),
-                                                                                                  ', '.join(ver_result[2])),
-                                                 self.module, 0, 'arakoon_down_exception'.format(len(ver_result[2])))
+                                                                                                ', '.join(ver_result[2]
+                                                                                                          )),
+                                               self.module, 0, 'arakoon_down_exception'.format(len(ver_result[2])))
 
                         # check amount UNKNOWN_ERRORS arakoons
                         if len(ver_result[3]) > 0:
-                            self.LOGGER.logger(
-                                "{0} Arakoon(s) seem(s) to have UNKNOWN ERRORS, please check the logs @ "
-                                "'/var/log/ovs/arakoon.log' or '/var/log/upstart/ovs-arakoon-*.log': {1}".format(
-                                    len(ver_result[3]), ', '.join(ver_result[3])), self.module, 0,
-                                    'arakoon_unknown_exception')
+                            self.LOGGER.logger("{0} Arakoon(s) seem(s) to have UNKNOWN ERRORS, please check the logs @"
+                                               " '/var/log/ovs/arakoon.log' or"
+                                               " '/var/log/upstart/ovs-arakoon-*.log': {1}".format(len(ver_result[3]),
+                                                                                                   ', '.join(
+                                                                                                           ver_result[3]
+                                                                                                   )), self.module, 0,
+                                               'arakoon_unknown_exception')
                     else:
                         self.LOGGER.logger("Some Arakoon(s) have problems, please check this!", self.module, 0,
-                                            'arakoon_integrity')
+                                           'arakoon_integrity')
             else:
                 self.LOGGER.logger("No clusters found on this node, so stopping arakoon checks ...", self.module, 5,
-                                    'arakoon_integrity')
+                                   'arakoon_integrity')
         except Exception as e:
             self.LOGGER.logger("One ore more Arakoon clusters cannot be reached :(, due to: {0}".format(e),
-                                 self.module, 4, 'arakoon_integrity')
+                               self.module, 4, 'arakoon_integrity')

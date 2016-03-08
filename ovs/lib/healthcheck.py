@@ -25,6 +25,7 @@ from ovs.extensions.healthcheck.arakoon.arakooncluster_health_check import Arako
 from ovs.extensions.healthcheck.alba.alba_health_check import AlbaHealthCheck
 from ovs.log.healthcheck_logHandler import HCLogHandler
 
+
 class HealthCheckController:
 
     def __init__(self, unattended_run=False, silent_run=False):
@@ -61,46 +62,46 @@ class HealthCheckController:
         self.LOGGER.logger("Starting Open vStorage Health Check!", self.module, 3, 'starting_ovs_hc', False)
         self.LOGGER.logger("====================================\n", self.module, 3, 'starting_ovs_hc_ul', False)
 
-        self.ovs.getLocalSettings()
+        self.ovs.get_local_settings()
         if not self.unattended and not self.silent_mode:
             print ""
-        self.ovs.checkOvsProcesses()
+        self.ovs.check_ovs_processes()
         if not self.unattended and not self.silent_mode:
             print ""
-        self.ovs.checkOvsWorkers()
+        self.ovs.check_ovs_workers()
         if not self.unattended and not self.silent_mode:
             print ""
-        self.ovs.checkOvsPackages()
+        self.ovs.check_ovs_packages()
         if not self.unattended and not self.silent_mode:
             print ""
-        self.ovs.checkRequiredPorts()
+        self.ovs.check_required_ports()
         if not self.unattended and not self.silent_mode:
             print ""
-        self.ovs.findZombieAndDeadProcesses()
+        self.ovs.get_zombied_and_dead_processes()
         if not self.unattended and not self.silent_mode:
             print ""
-        self.ovs.checkRequiredDirs()
+        self.ovs.check_required_dirs()
         if not self.unattended and not self.silent_mode:
             print ""
-        self.ovs.checkHypervisorManagementInformation()
+        self.ovs.check_hypervisor_management_information()
         if not self.unattended and not self.silent_mode:
             print ""
-        self.ovs.checkSizeOfLogFiles()
+        self.ovs.check_size_of_log_files()
         if not self.unattended and not self.silent_mode:
             print ""
-        self.ovs.checkIfDNSResolves()
+        self.ovs.check_if_dns_resolves()
         if not self.unattended and not self.silent_mode:
             print ""
-        self.ovs.checkModelConsistency()
+        self.ovs.check_model_consistency()
         if not self.unattended and not self.silent_mode:
             print ""
-        self.ovs.checkForHaltedVolumes()
+        self.ovs.check_for_halted_volumes()
         if not self.unattended and not self.silent_mode:
             print ""
-        self.ovs.checkFileDriver()
+        self.ovs.check_filedrivers()
         if not self.unattended and not self.silent_mode:
             print ""
-        self.ovs.checkVolumeDriver()
+        self.ovs.check_volumedrivers()
         if not self.unattended and not self.silent_mode:
             print ""
 
@@ -112,7 +113,7 @@ class HealthCheckController:
         self.LOGGER.logger("Starting Arakoon Health Check!", self.module, 3, 'starting_arakoon_hc', False)
         self.LOGGER.logger("==============================\n", self.module, 3, 'starting_arakoon_hc_ul', False)
 
-        self.arakoon.checkArakoons()
+        self.arakoon.check_arakoons()
         if not self.unattended and not self.silent_mode:
             print ""
 
@@ -124,7 +125,7 @@ class HealthCheckController:
         self.LOGGER.logger("Starting Alba Health Check!", self.module, 3, 'starting_alba_hc', False)
         self.LOGGER.logger("===========================\n", self.module, 3, 'starting_alba_hc_ul', False)
 
-        self.alba.checkAlba()
+        self.alba.check_alba()
         if not self.unattended and not self.silent_mode:
             print ""
 
@@ -137,16 +138,16 @@ class HealthCheckController:
         self.LOGGER.logger("======================\n", self.module, 3, 'starting_recap_hc_ul', False)
 
         self.LOGGER.logger("SUCCESSFULL={0} FAILED={1} SKIPPED={2} WARNING={3} EXCEPTION={4}"
-                            .format(self.LOGGER.success, self.LOGGER.failure, self.LOGGER.skip, self.LOGGER.warning,
-                                    self.LOGGER.exception), self.module, 1, 'exception_occured')
+                           .format(self.LOGGER.success, self.LOGGER.failure, self.LOGGER.skip, self.LOGGER.warning,
+                                   self.LOGGER.exception), self.module, 1, 'exception_occured')
 
         if self.silent_mode or self.unattended:
             # returns dict with minimal and detailed information
             return {'result': self.LOGGER.healthcheck_dict, 'recap': {'SUCCESSFULL': self.LOGGER.success,
-                                                                       'FAILED': self.LOGGER.failure,
-                                                                       'SKIPPED': self.LOGGER.skip,
-                                                                       'WARNING': self.LOGGER.warning,
-                                                                       'EXCEPTION': self.LOGGER.exception}
+                                                                      'FAILED': self.LOGGER.failure,
+                                                                      'SKIPPED': self.LOGGER.skip,
+                                                                      'WARNING': self.LOGGER.warning,
+                                                                      'EXCEPTION': self.LOGGER.exception}
                     }
         else:
             return None
