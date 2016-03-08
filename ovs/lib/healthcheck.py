@@ -51,19 +51,16 @@ class HealthCheckController:
         self.alba = AlbaHealthCheck(self.LOGGER)
         self.arakoon = ArakoonHealthCheck(self.LOGGER)
         self.ovs = OpenvStorageHealthCheck(self.LOGGER)
+        self.platform = 0
 
-    def check_all(self, platform):
+    def check_all(self):
         """
         Executes all available checks for the chosen platform
-
-        @param platform: describes the platform
             * Vanilla (Open vStorage + Arakoon + Alba) = 0
             * Swift (Open vStorage + Arakoon + Swift) = 1
             * Ceph (Open vStorage + Arakoon + Ceph) = 2
-            * Distributed (Open vStorage + Arakoon + Distributed FS) = 3
+            * Distributed FS (Open vStorage + Arakoon + Distributed FS) = 3
             * S3 (Open vStorage + Arakoon + S3) = 4
-
-        @type platform: int
 
         @return: results of the healthcheck
 
@@ -72,7 +69,7 @@ class HealthCheckController:
         @raises: Exception (When platform is not supported)
         """
 
-        if platform == 0:
+        if self.platform == 0:
             self.check_openvstorage()
             self.check_arakoon()
             self.check_alba()

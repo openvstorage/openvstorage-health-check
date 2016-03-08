@@ -24,13 +24,16 @@ vim /usr/bin/ovs
 
 ```
 elif [ "$1" = "healthcheck" ] ; then
-    cd /opt/OpenvStorage-healthcheck
+    cd /opt/OpenvStorage/ovs/lib
     if [ "$2" = "unattended" ] ; then
         # launch unattended healthcheck
-        python -c "from ovs_health_check.main import Main; Main(True)"
+        python -c "from healthcheck import HealthCheckController; HealthCheckController(unattended_run=True).check_all()"
+    elif [ "$2" = "silent" ] ; then
+	# launch silent healthcheck
+	python -c "from healthcheck import HealthCheckController; HealthCheckController(silent_run=True).check_all()"
     else
         # launch healthcheck
-        python ovs_health_check/main.py
+        python healthcheck.py
     fi
 ```
 
@@ -41,14 +44,14 @@ elif [ "$1" = "healthcheck" ] ; then
 ovs healthcheck
 
 # native python execution
-cd /opt/OpenvStorage-healthcheck/
+cd /opt/OpenvStorage/ovs/lib
 
-python ovs_health_check/main.py
+python healthcheck.py
 ```
 
 ## Monitoring with CheckMK or other server-deamon monitoring systems
 
-### OUTPUT for CheckMK or other monitoring systems
+### RUN for CheckMK or other monitoring systems
 
 ```
 ovs healthcheck unattended
@@ -59,7 +62,36 @@ ovs healthcheck unattended
 ```
 * *   * * *  root  /usr/bin/ovs healthcheck unattended
 ```
+ 
+## Implementing the healthcheck in your system. 
 
+### RUN for coding purposes
+
+```
+ovs healthcheck silent
+```
+
+### In-code usage
+
+```
+from healthcheck import HealthCheckController
+
+# running in silent mode
+hc = HealthCheckController(silent_run=True)
+
+# checking all components and getting the results
+results = hc.check_all()
+
+# checking all desired components and getting the results
+hc.check_openvstorage()
+
+hc.check_arakoon()
+
+hc.check_alba()
+
+results = hc.get_results()
+```
+ 
 # Important to know!
 * No files in the vPools may be named after: `ovs-healthcheck-test-{storagerouter_id}.xml`
 * No volumes in the vPools may be named after: `ovs-healthcheck-test-{storagerouter_id}.raw`
