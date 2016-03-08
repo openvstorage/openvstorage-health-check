@@ -77,7 +77,7 @@ class HealthCheckController:
             self.check_arakoon()
             self.check_alba()
         else:
-            raise Exception("No other platform than 'Vanilla' or platform nr. 0 is CURRENTLY supported")
+            raise Exception("Platform '{0}' is CURRENTLY NOT supported".format(platform))
 
         return self.get_results()
 
