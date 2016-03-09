@@ -236,7 +236,7 @@ class AlbaHealthCheck:
         # for unattended
         return amount_of_presets_not_working
 
-    def _check_backend_asds(self, disks):
+    def _check_backend_asds(self, disks, backend_name):
         """
         Checks if Alba ASD's work
 
@@ -252,7 +252,7 @@ class AlbaHealthCheck:
         workingdisks = []
         defectivedisks = []
 
-        self.LOGGER.logger("Checking seperate ASD's to see if they work ...", self.module, 3, 'checkAsds', False)
+        self.LOGGER.logger("Checking seperate ASD's for backend '{0}' to see if they work ...".format(backend_name), self.module, 3, 'checkAsds', False)
 
         # check if disks are working
         if len(disks) != 0:
@@ -271,8 +271,11 @@ class AlbaHealthCheck:
                                         stderr=subprocess.STDOUT)
 
                         # get object
-                        g = subprocess.check_output(['alba', 'asd-multi-get', '--long-id', disk.get('asd_id'), '-p',
-                                                     str(disk.get('port')), '-h', ip_address, key])
+                        try:
+                            g = subprocess.check_output(['alba', 'asd-multi-get', '--long-id', disk.get('asd_id'), '-p',
+                                                        str(disk.get('port')), '-h', ip_address, key])
+                        except Exception as e:
+                            raise Exception('Connection failed to disk ...')
 
                         # check if put/get is successfull
                         if 'None' in g:
@@ -326,7 +329,7 @@ class AlbaHealthCheck:
                                            self.module, 0, 'alba_proxy')
 
                     # check disks
-                    result_disks = self._check_backend_asds(backend.get('all_disks'))
+                    result_disks = self._check_backend_asds(backend.get('all_disks'), backend.get('name'))
                     workingdisks = result_disks[0]
                     defectivedisks = result_disks[1]
 
