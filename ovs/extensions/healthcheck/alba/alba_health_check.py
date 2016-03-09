@@ -263,7 +263,7 @@ class AlbaHealthCheck:
 
                 try:
                     # check if disk is missing
-                    if not disk.get('port'):
+                    if disk.get('port'):
                         # put object but ignore crap for a moment
                         fnull = open(os.devnull, 'w')
                         subprocess.call(['alba', 'asd-set', '--long-id', disk.get('asd_id'), '-p',
@@ -291,12 +291,12 @@ class AlbaHealthCheck:
                                                  str(disk.get('port')), '-h', ip_address, key])
                     else:
                         # disk is missing
-                        raise Exception
+                        raise Exception('Disk is missing')
 
-                except Exception:
+                except Exception as e:
                     defectivedisks.append(disk.get('asd_id'))
-                    self.LOGGER.logger("ASD test with DISK_ID '{0}' failed on NODE '{1}' ..."
-                                       .format(disk.get('asd_id'), ip_address), self.module, 0,
+                    self.LOGGER.logger("ASD test with DISK_ID '{0}' failed on NODE '{1}' with exception: {2}"
+                                       .format(disk.get('asd_id'), ip_address, e), self.module, 0,
                                        'alba_asd_{0}'.format(disk.get('asd_id')), self.show_disks_in_monitoring)
 
         return workingdisks, defectivedisks
