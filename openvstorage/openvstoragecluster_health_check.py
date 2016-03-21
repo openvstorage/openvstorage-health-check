@@ -38,7 +38,6 @@ import subprocess
 from pwd import getpwuid
 
 # ovs packages
-sys.path.append('/opt/OpenvStorage')
 from ovs.dal.lists.vpoollist import VPoolList
 from ovs.extensions.generic.system import System
 from ovs.dal.lists.servicelist import ServiceList
@@ -466,17 +465,10 @@ class OpenvStorageHealthCheck:
         return grp.getgrgid(os.stat(filename).st_gid).gr_name
 
     def _checkRightsOfFile(self, filename, rights):
-        # convert default rights to octal
-        oct_rights = int(str(rights), 8)
 
         # fetch file to start compare
-        octal_rights_file = stat.S_IMODE(os.stat(filename).st_mode)
-
-        # determine if rights are correct
-        if oct_rights == octal_rights_file:
-            return True
-        else:
-            return False
+        st = os.stat(filename)
+        return oct(st.st_mode)[-3:] == str(rights)
 
     def checkIfDNSResolves(self, fqdn="google.com"):
         self.utility.logger("Checking DNS resolving: ", self.module, 3, 'titleDnsResolving', False)
