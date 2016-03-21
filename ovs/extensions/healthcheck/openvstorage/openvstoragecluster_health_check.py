@@ -621,17 +621,9 @@ class OpenvStorageHealthCheck:
         @rtype: bool
         """
 
-        # convert default rights to octal
-        oct_rights = int(str(rights), 8)
-
         # fetch file to start compare
-        octal_rights_file = stat.S_IMODE(os.stat(filename).st_mode)
-
-        # determine if rights are correct
-        if oct_rights == octal_rights_file:
-            return True
-        else:
-            return False
+        st = os.stat(filename)
+        return oct(st.st_mode)[-3:] == str(rights)
 
     def check_if_dns_resolves(self, fqdn="google.com"):
         """
