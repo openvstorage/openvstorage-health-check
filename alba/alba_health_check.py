@@ -334,7 +334,3 @@ class AlbaHealthCheck:
 
     def _fetchAlbaInformation(self):
         return True
-
-"""
-Section: Main
-"""

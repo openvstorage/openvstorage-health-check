@@ -195,8 +195,3 @@ class ArakoonHealthCheck:
         except Exception as e:
             self.utility.logger("One ore more Arakoon clusters cannot be reached :(, due to: {0}".format(e),
                                  self.module, 4, 'arakoon_integrity')
-
-
-"""
-Section: Main
-"""

@@ -330,8 +330,3 @@ class Utils:
 
         except Exception, e:
             print "An unexpected exception occured during logging in '{0}': \n{1}".format(self.HEALTHCHECK_DIR, e)
-
-
-"""
-Section: Main
-"""

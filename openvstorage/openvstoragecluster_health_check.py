@@ -735,8 +735,3 @@ class OpenvStorageHealthCheck:
 
         else:
             self.utility.logger("No vPools found!".format(len(vpools)), self.module, 5, 'halted')
-
-
-"""
-Section: Main
-"""
