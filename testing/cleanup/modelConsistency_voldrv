@@ -1,13 +1,14 @@
 from ovs.dal.lists.vpoollist import VPoolList
 import volumedriver.storagerouter.storagerouterclient as src
 
-voldrv_client = src.LocalStorageRouterClient("/opt/OpenvStorage/config/storagedriver/storagedriver/vmstor.json")
-voldrv_volume_list = voldrv_client.list_volumes()
+voldrv_client = src.LocalStorageRouterClient("/opt/OpenvStorage/config/storagedriver/storagedriver/bepool.json")
 
 for vp in VPoolList.get_vpools():
-	vol_ids=(vdisk.volume_id for vdisk in vp.vdisks)
-	#print list(vol_ids)
+	# fetch all volumes by volume_id in voldrv
+	voldrv_volume_list = voldrv_client.list_volumes()
+	# fetch vdisks in ovsdb their volume_id
+	vol_ids=[vdisk.volume_id for vdisk in vp.vdisks]
 
-	for vol in voldrv_volume_list:
-		if str(vol) in vol_ids:
-			print vol
+	for voldrv_id in voldrv_volume_list:
+		if voldrv_id not in vol_ids:
+			print "volume '{0}' is in voldrv but not in ovsdb!".format(voldrv_id)

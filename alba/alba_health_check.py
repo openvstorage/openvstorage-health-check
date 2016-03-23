@@ -230,7 +230,7 @@ class AlbaHealthCheck:
 
         self.utility.logger("Checking seperate ASD's to see if they work ...",self.module, 3, 'checkAsds', False)
 
-        #check if disks are working
+        # check if disks are working
         if len(disks) != 0:
             for disk in disks:
                 key = 'ovs-healthcheck-{0}'.format(str(uuid.uuid4()))

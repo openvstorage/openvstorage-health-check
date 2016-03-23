@@ -26,8 +26,6 @@ Section: Import package(s)
 # general packages
 import os
 import grp
-import sys
-import stat
 import glob
 import time
 import socket
@@ -638,7 +636,7 @@ class OpenvStorageHealthCheck:
                     self.utility.logger("Seems like the RabbitMQ cluster has 'partition' problems, please check this...",
                                         self.module, 0, 'process_rabbitmq', False)
                 else:
-                    self.utility.logger("RabbitMQ does not seem to have 'partition' problems :D", self.module, 1,
+                    self.utility.logger("RabbitMQ does not seem to have 'partition' problems!", self.module, 1,
                                         'process_rabbitmq', False)
             else:
                 self.utility.logger("Seems like the RabbitMQ cluster has errors, maybe it is offline?", self.module, 0,
@@ -672,18 +670,17 @@ class OpenvStorageHealthCheck:
 
             # collect data from model
             model_vdisk_list = vp.vdisks
+            vol_ids = [vdisk.volume_id for vdisk in vp.vdisks]
 
             # crossreference model vs. volumedriver
-            for vdisk in model_vdisk_list:
-                if not vdisk.volume_id in voldrv_volume_list:
-                    missingInVolumedriver.append(vdisk.volume_id)
+            for vdisk in vol_ids:
+                if vdisk not in voldrv_volume_list:
+                    missingInVolumedriver.append(vdisk)
 
             # crossreference volumedriver vs. model
-            # (This can be a performance bottleneck on heavy env. due to nested for loops)
-            for volume in voldrv_volume_list:
-                for vdisk in model_vdisk_list:
-                    if str(volume) != vdisk.volume_id and len(model_vdisk_list) == (model_vdisk_list.index(vdisk)+1):
-                        missingInModel.append(volume)
+            for voldrv_id in voldrv_volume_list:
+                if voldrv_id not in vol_ids:
+                    missingInModel.append(voldrv_id)
 
             # display discrepancies for vPool
             if len(missingInVolumedriver) != 0:

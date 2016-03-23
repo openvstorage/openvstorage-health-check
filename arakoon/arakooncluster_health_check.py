@@ -137,7 +137,6 @@ class ArakoonHealthCheck:
 
                 except Exception:
                     if tries == max_tries:
-                        print "Exception!"
                         ArakoonUnknown_list.append(cluster_name)
                         break
 
