@@ -725,7 +725,8 @@ class OpenvStorageHealthCheck:
                                    ["boost_serialization"]["XMLRPCVolumeInfo"]["halted"]):
                             haltedVolumes.append(volume)
                     except ObjectNotFoundException:
-                        # ignore ovsdb invalid entrees; model consistency will handle it.
+                        # ignore ovsdb invalid entrees
+                        # model consistency will handle it.
                         continue
 
                 # print all results
