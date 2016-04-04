@@ -42,6 +42,7 @@ from ovs.dal.lists.servicelist import ServiceList
 from ovs.dal.lists.pmachinelist import PMachineList
 from ovs.dal.lists.mgmtcenterlist import MgmtCenterList
 from ovs.lib.storagerouter import StorageRouterController
+from ovs.dal.exceptions import ObjectNotFoundException
 import volumedriver.storagerouter.storagerouterclient as src
 
 # import health check utilities
@@ -719,9 +720,13 @@ class OpenvStorageHealthCheck:
 
                 for volume in voldrv_client.list_volumes():
                     # check if volume is halted, returns: 0 or 1
-                    if int(self.utility.parseXMLtoJSON(voldrv_client.info_volume(volume))
-                               ["boost_serialization"]["XMLRPCVolumeInfo"]["halted"]):
-                        haltedVolumes.append(volume)
+                    try:
+                        if int(self.utility.parseXMLtoJSON(voldrv_client.info_volume(volume))
+                                   ["boost_serialization"]["XMLRPCVolumeInfo"]["halted"]):
+                            haltedVolumes.append(volume)
+                    except ObjectNotFoundException:
+                        # ignore ovsdb invalid entrees; model consistency will handle it.
+                        continue
 
                 # print all results
                 if len(haltedVolumes) > 0:
