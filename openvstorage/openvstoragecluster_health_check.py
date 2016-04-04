@@ -166,7 +166,7 @@ class OpenvStorageHealthCheck:
                                     'log_{0}'.format(c_files), False)
             else:
                 to_big.append(c_files)
-                self.utility.logger("Logfile '{0}' is a big ass logfile!".format(c_files), self.module, 0,
+                self.utility.logger("Logfile '{0}' is A BIG logfile!".format(c_files), self.module, 0,
                                     'log_{0}'.format(c_files), False)
 
         # end for unattended_install
