@@ -1,24 +1,24 @@
 # Health check for Open vStorage, Alba & Arakoon
 
-## Description
+## 1. Description
 
 The health check is classified as a monitoring, detection and healing tool for Open vStorage.
 
-## Pulling this repository
+## 2. Pulling this repository
 ```
 sudo apt-get install -y git
 git clone -b ovs-impl https://github.com/openvstorage/openvstorage-health-check.git
 ```
 
-## Installation (BY POST-INSTALL SCRIPT)
+## 3. Installation (BY POST-INSTALL SCRIPT)
 ```
 cd openvstorage-health-check/bin/
 bash post-install.sh
 ```
 
-## Installation (MANUAL)
+## 4. Installation (MANUAL)
 
-## Required packages for Health Check
+### Required packages for Health Check
 ```
 wget https://bootstrap.pypa.io/get-pip.py; python get-pip.py
 pip install flower
@@ -47,7 +47,7 @@ elif [ "$1" = "healthcheck" ] ; then
     fi
 ```
 
-## Execution by hand
+## 5. Execution by hand
 
 ```
 # via Open vStorage commands
@@ -59,7 +59,7 @@ cd /opt/OpenvStorage/ovs/lib
 python healthcheck.py
 ```
 
-## Monitoring with CheckMK or other server-deamon monitoring systems
+## 6. Monitoring with CheckMK or other server-deamon monitoring systems
 
 **Recommended:** Run on 30 min. - hourly base (on every node), to check the health of your Open vStorage.
 
@@ -75,7 +75,7 @@ ovs healthcheck unattended
 * *   * * *  root  /usr/bin/ovs healthcheck unattended
 ```
  
-## Implementing the healthcheck in your system. 
+## 7. Implementing the healthcheck in your system. 
 
 ### RUN for coding purposes
 
@@ -104,16 +104,16 @@ hc.check_alba()
 results = hc.get_results()
 ```
  
-# Important to know!
+## 8. Important to know!
 * No files in the vPools may be named after: `ovs-healthcheck-test-{storagerouter_id}.xml`
 * No volumes in the vPools may be named after: `ovs-healthcheck-test-{storagerouter_id}.raw`
 
-## Branch Info or contributions
+## 9. Branch Info or contributions
 * The 'master' branch is marked as the main but unstable branch
 * The 'release' branches are the official releases of the HEALTH CHECK Project
 * We'd love to have your contributions, read [Community Information](CONTRIBUTION.md) and [Rules of conduct](RULES.md) for notes on how to get started.
 
-## File a bug
+## 10. File a bug
 Open vStorage and it's automation is quality checked to the highest level.
 Unfortunately we might have overlooked some tiny topics here or there.
 The Open vStorage HEALTH CHECK Project maintains a [public issue tracker](https://github.com/openvstorage/openvstorage-health-check/issues)
@@ -122,5 +122,5 @@ This issue tracker is not a customer support forum but an error, flaw, failure, 
 
 If you want to submit a bug, please read the [Community Information](CONTRIBUTION.md) for notes on how to get started.
 
-# License
+# 11. License
 The Open vStorage Healthcheck is released under the [Apache 2 license](http://www.apache.org/licenses/LICENSE-2.0).
