@@ -47,16 +47,10 @@ elif [ "$1" = "healthcheck" ] ; then
     fi
 ```
 
-## 5. Execution by hand
+## 5. Execution by hand in ATTENDED MODUS
 
 ```
-# via Open vStorage commands
 ovs healthcheck
-
-# native python execution
-cd /opt/OpenvStorage/ovs/lib
-
-python healthcheck.py
 ```
 
 ## 6. Monitoring with CheckMK or other server-deamon monitoring systems
@@ -77,8 +71,9 @@ ovs healthcheck unattended
  
 ## 7. Implementing the healthcheck in your system. 
 
-### RUN for coding purposes
+### RUN in silent mode
 
+Although this is available, we only use this in code 
 ```
 ovs healthcheck silent
 ```
@@ -86,22 +81,25 @@ ovs healthcheck silent
 ### In-code usage
 
 ```
-from ovs.lib.healthcheck import HealthCheckController
+In [1]: from ovs.lib.healthcheck import HealthCheckController
 
-# running in silent mode
-hc = HealthCheckController(silent_run=True)
+In [2]: HealthCheckController.check_silent()
+Out[2]: 
+{'recap': {'EXCEPTION': 0,
+  'FAILED': 2,
+  'SKIPPED': 2,
+  'SUCCESSFULL': 114,
+  'WARNING': 1},
+ 'result': {'alba_backend_be-backend': 'SUCCESS',
+  'alba_backends_found': 'SUCCESS',
+  'alba_proxy': 'SUCCESS',
+  'albaproxy_bepool_preset_bepreset_create_namespace': 'SUCCESS',
+  'albaproxy_bepool_preset_bepreset_create_object': 'SUCCESS',
+  'albaproxy_bepool_preset_default_create_namespace': 'SUCCESS',
+  'albaproxy_bepool_preset_default_create_object': 'SUCCESS',
+  'arakoon_integrity': 'SUCCESS',
 
-# checking all components and getting the results
-results = hc.check_all()
-
-# checking all desired components and getting the results
-hc.check_openvstorage()
-
-hc.check_arakoon()
-
-hc.check_alba()
-
-results = hc.get_results()
+  ...
 ```
  
 ## 8. Important to know!
