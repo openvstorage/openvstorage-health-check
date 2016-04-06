@@ -26,8 +26,6 @@ pip install psutil
 pip install xmltodict
 ```
 
-**Recommended:** Run on 30 min. - hourly base (on every node), to check the health of your Open vStorage.
-
 ### Add following code to Health Check Open vStorage commands
 
 ```
@@ -49,7 +47,7 @@ elif [ "$1" = "healthcheck" ] ; then
     fi
 ```
 
-### Execution by hand
+## Execution by hand
 
 ```
 # via Open vStorage commands
@@ -62,6 +60,8 @@ python healthcheck.py
 ```
 
 ## Monitoring with CheckMK or other server-deamon monitoring systems
+
+**Recommended:** Run on 30 min. - hourly base (on every node), to check the health of your Open vStorage.
 
 ### RUN for CheckMK or other monitoring systems
 
