@@ -20,7 +20,6 @@ Open vStorage Health Check module
 
 import os
 import grp
-import stat
 import glob
 import time
 import psutil
@@ -33,12 +32,13 @@ from ovs.dal.lists.vpoollist import VPoolList
 from ovs.extensions.generic.system import System
 from ovs.dal.lists.servicelist import ServiceList
 from ovs.dal.lists.pmachinelist import PMachineList
+from ovs.dal.exceptions import ObjectNotFoundException
 from ovs.dal.lists.mgmtcenterlist import MgmtCenterList
 from ovs.lib.storagerouter import StorageRouterController
 from ovs.extensions.healthcheck.utils.extension import Utils
 from ovs.log.healthcheck_logHandler import HCLogHandler
 import volumedriver.storagerouter.storagerouterclient as src
-
+from volumedriver.storagerouter.storagerouterclient import MaxRedirectsExceededException
 
 class OpenvStorageHealthCheck:
     """
@@ -944,8 +944,15 @@ class OpenvStorageHealthCheck:
 
                 for volume in voldrv_client.list_volumes():
                     # check if volume is halted, returns: 0 or 1
-                    if int(self.utility.convert_xml_to_json(voldrv_client.info_volume(volume))["boost_serialization"]
-                           ["XMLRPCVolumeInfo"]["halted"]):
+                    try:
+                        if int(voldrv_client.info_volume(volume).halted):
+                            haltedvolumes.append(volume)
+                    except ObjectNotFoundException:
+                        # ignore ovsdb invalid entrees
+                        # model consistency will handle it.
+                        continue
+                    except MaxRedirectsExceededException:
+                        # this means the volume is not halted but detached or unreachable for the volumedriver
                         haltedvolumes.append(volume)
 
                 # print all results
