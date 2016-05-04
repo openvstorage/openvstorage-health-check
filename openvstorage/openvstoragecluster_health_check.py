@@ -44,6 +44,7 @@ from ovs.dal.lists.mgmtcenterlist import MgmtCenterList
 from ovs.lib.storagerouter import StorageRouterController
 from ovs.dal.exceptions import ObjectNotFoundException
 import volumedriver.storagerouter.storagerouterclient as src
+from volumedriver.storagerouter.storagerouterclient import MaxRedirectsExceededException
 
 # import health check utilities
 from utils.extension import Utils
@@ -728,6 +729,9 @@ class OpenvStorageHealthCheck:
                         # ignore ovsdb invalid entrees
                         # model consistency will handle it.
                         continue
+                    except MaxRedirectsExceededException:
+                        # this means the volume is not halted but detached or unreachable for the volumedriver
+                        haltedvolumes.append(volume)
 
                 # print all results
                 if len(haltedVolumes) > 0:
