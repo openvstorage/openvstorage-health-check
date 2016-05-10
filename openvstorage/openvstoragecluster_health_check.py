@@ -435,28 +435,36 @@ class OpenvStorageHealthCheck:
 
         self.utility.logger("Checking if OWNERS are set correctly on certain maps: ", self.module, 3,
                             'checkRequiredMaps_owners', False)
+        
         for map, owner_settings in self.req_map_owners.iteritems():
-            if owner_settings.get('user') == self._findOwnerOfFile(map) and owner_settings.get(
-                    'group') == self._findGroupOfFile(map):
-                self.utility.logger("Directory '{0}' has correct owners!".format(map), self.module, 1,
-                                    'dir_{0}'.format(map))
+            if os.path.exists(map):
+                if owner_settings.get('user') == self._findOwnerOfFile(map) and owner_settings.get(
+                        'group') == self._findGroupOfFile(map):
+                    self.utility.logger("Directory '{0}' has correct owners!".format(map), self.module, 1,
+                                        'dir_owners_{0}'.format(map))
+                else:
+                    self.utility.logger(
+                        "Directory '{0}' has INCORRECT owners! It must be OWNED by USER={1} and GROUP={2}"
+                            .format(map, owner_settings.get('user'), owner_settings.get('group')),
+                            self.module, 0, 'dir_owners_{0}'.format(map))
             else:
-                self.utility.logger(
-                    "Directory '{0}' has INCORRECT owners! It must be OWNED by USER={1} and GROUP={2}"
-                        .format(map, owner_settings.get('user'), owner_settings.get('group')),
-                        self.module, 0, 'dir_{0}'.format(map))
+                self.utility.logger("Directory '{0}' does not exists!".format(map),self.module, 2, 'dir_owners_{0}'.format(map))
 
         self.utility.logger("Checking if Rights are set correctly on certain maps: ", self.module, 3,
                             'checkRequiredMaps_rights', False)
+                            
         for map, rights in self.req_map_rights.iteritems():
-            if self._checkRightsOfFile(map, rights):
-                self.utility.logger("Directory '{0}' has correct rights!".format(map), self.module, 1,
-                                    'dir_{0}'.format(map))
+            if os.path.exists(map):
+                if self._checkRightsOfFile(map, rights):
+                    self.utility.logger("Directory '{0}' has correct rights!".format(map), self.module, 1,
+                                        'dir_rights_{0}'.format(map))
+                else:
+                    self.utility.logger("Directory '{0}' has INCORRECT rights! It must be CHMOD={1} ".format(map, rights),
+                                         self.module, 0, 'dir_rights_{0}'.format(map))
             else:
-                self.utility.logger("Directory '{0}' has INCORRECT rights! It must be CHMOD={1} ".format(map, rights),
-                                     self.module, 0, 'dir_{0}'.format(map))
+                self.utility.logger("Directory '{0}' does not exists!".format(map),self.module, 2, 'dir_rights_{0}'.format(map))
 
-        return True
+        return None
 
     def _findOwnerOfFile(self, filename):
         return getpwuid(os.stat(filename).st_uid).pw_name
