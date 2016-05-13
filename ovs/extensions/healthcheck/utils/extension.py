@@ -184,9 +184,16 @@ class Utils:
 
         @rtype: bool
         """
-
-        result = self.execute_bash_command("dpkg -l | grep etcd")
-
+        
+        #add check os-release version
+            release_version_return = self.execute_bash_command('cat /etc/os-release')
+            # All OS distribution classes used in below code should share the exact same interface!
+        if 'CentOS Linux' in release_version_return[0]:
+            result = self.execute_bash_command("rpm -qa | grep etcd")
+        elif 'Ubuntu' in release_version_return[0]:
+            result = self.execute_bash_command("dpkg -l | grep etcd")
+        else:
+            raise RuntimeError('The OS is not supported')
         if result[0] == '':
             return False
         else:

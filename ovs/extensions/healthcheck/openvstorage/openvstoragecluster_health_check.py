@@ -366,16 +366,23 @@ class OpenvStorageHealthCheck:
         """
 
         self.LOGGER.logger("Checking OVS packages: ", self.module, 3, 'check_ovs_packages', False)
-
+        release_version_return = self.utility.execute_bash_command('cat /etc/os-release')
         for package in self.openvstorageTotalPackageList:
-            result = self.utility.execute_bash_command("apt-cache policy %s" % package)
-            if len(result) != 1:
-                self.LOGGER.logger(
-                    "Package '%s' is present, with version '%s'" % (package, result[2].split(':')[1].strip()),
-                    self.module, 1, 'package_{0}'.format(package))
+            if "CentOS Linux" in release_version_return[0]:
+                result = self.utility.execute_bash_command("rpm -q {0}".format(package))
+                if len(("".join(result)).split()) == 1:
+                    self.LOGGER.logger("Package '%s' is present, with version '%s'" % (package, result), self.module, 1, 'package_{0}'.format(package))
+                else:
+                    self.LOGGER.logger("Package '{0}' is NOT present ...".format(package), self.module, 5, 'package_{0}'.format(package))
+            elif "Ubuntu" in release_version_return[0]:
+                result = self.utility.execute_bash_command("apt-cache policy {0}".format(package))
+                if len(result) != 1:
+                    self.LOGGER.logger("Package '%s' is present, with version '%s'" % (package, result[2].split(':')[1].strip()), self.module, 1, 'package_{0}'.format(package))
+                else:
+                    self.LOGGER.logger("Package '{0}' is NOT present ...".format(package), self.module, 5, 'package_{0}'.format(package))
             else:
-                self.LOGGER.logger("Package '{0}' is NOT present ...".format(package), self.module, 5,
-                                   'package_{0}'.format(package))
+                self.LOGGER.logger('The OS is not supported', self.module, 0, 'check_os_release')
+                raise RuntimeError('The OS is not supported')
         return None
 
     def check_ovs_processes(self):
@@ -846,12 +853,12 @@ class OpenvStorageHealthCheck:
 
             if "Error" not in cluster_status[1]:
 
-                # this can happen
+                # this can happen , there is difference between Ubuntu and CentOS
+                # get the partition info from the last item
                 if len(cluster_status) <= 3:
-                    partition_status = cluster_status[2]
+                    partition_status = cluster_status[-1]
                 else:
-                    partition_status = cluster_status[3]
-
+                    partition_status = cluster_status[-1]
                 # check parition status
                 if '@' in partition_status:
                     self.LOGGER.logger("Seems like the RabbitMQ cluster has 'partition' problems, please check this...",
@@ -901,8 +908,14 @@ class OpenvStorageHealthCheck:
             # (This can be a performance bottleneck on heavy env. due to nested for loops)
             for volume in voldrv_volume_list:
                 for vdisk in model_vdisk_list:
-                    if str(volume) != vdisk.volume_id and len(model_vdisk_list) == (model_vdisk_list.index(vdisk)+1):
-                        missinginmodel.append(volume)
+                    if str(volume) != vdisk.volume_id:
+                        flag = False
+                        for volume_temp in voldrv_volume_list:
+                            if str(volume_temp) == vdisk.volume_id:
+                                flag = True
+                                break
+                        if not flag:
+                            missinginmodel.append(volume)
 
             # display discrepancies for vPool
             if len(missinginvolumedriver) != 0:
