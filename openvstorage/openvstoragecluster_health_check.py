@@ -739,7 +739,7 @@ class OpenvStorageHealthCheck:
                         continue
                     except MaxRedirectsExceededException:
                         # this means the volume is not halted but detached or unreachable for the volumedriver
-                        haltedvolumes.append(volume)
+                        haltedVolumes.append(volume)
 
                 # print all results
                 if len(haltedVolumes) > 0:
