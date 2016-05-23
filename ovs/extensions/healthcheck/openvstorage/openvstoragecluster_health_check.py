@@ -1,18 +1,20 @@
 #!/usr/bin/python
 
-# Copyright 2014 iNuron NV
+# Copyright (C) 2016 iNuron NV
 #
-# Licensed under the Open vStorage Modified Apache License (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# This file is part of Open vStorage Open Source Edition (OSE),
+# as available from
 #
-#     http://www.openvstorage.org/license
+#      http://www.openvstorage.org and
+#      http://www.openvstorage.com.
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# This file is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License v3 (GNU AGPLv3)
+# as published by the Free Software Foundation, in version 3 as it comes
+# in the LICENSE.txt file of the Open vStorage OSE distribution.
+#
+# Open vStorage is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY of any kind.
 
 """
 Open vStorage Health Check module
@@ -857,7 +859,7 @@ class OpenvStorageHealthCheck:
                     self.LOGGER.logger("Seems like the RabbitMQ cluster has 'partition' problems, please check this...",
                                        self.module, 0, 'process_rabbitmq', False)
                 else:
-                    self.LOGGER.logger("RabbitMQ does not seem to have 'partition' problems :D", self.module, 1,
+                    self.LOGGER.logger("RabbitMQ does not seem to have 'partition' problems", self.module, 1,
                                        'process_rabbitmq', False)
             else:
                 self.LOGGER.logger("Seems like the RabbitMQ cluster has errors, maybe it is offline?", self.module, 0,
@@ -891,18 +893,17 @@ class OpenvStorageHealthCheck:
 
             # collect data from model
             model_vdisk_list = vp.vdisks
+            vol_ids = [vdisk.volume_id for vdisk in vp.vdisks]
 
             # crossreference model vs. volumedriver
-            for vdisk in model_vdisk_list:
-                if not vdisk.volume_id in voldrv_volume_list:
-                    missinginvolumedriver.append(vdisk.volume_id)
+            for vdisk in vol_ids:
+                if vdisk not in voldrv_volume_list:
+                    missinginvolumedriver.append(vdisk)
 
             # crossreference volumedriver vs. model
-            # (This can be a performance bottleneck on heavy env. due to nested for loops)
-            for volume in voldrv_volume_list:
-                for vdisk in model_vdisk_list:
-                    if str(volume) != vdisk.volume_id and len(model_vdisk_list) == (model_vdisk_list.index(vdisk)+1):
-                        missinginmodel.append(volume)
+            for voldrv_id in voldrv_volume_list:
+                if voldrv_id not in vol_ids:
+                    missinginmodel.append(voldrv_id)
 
             # display discrepancies for vPool
             if len(missinginvolumedriver) != 0:

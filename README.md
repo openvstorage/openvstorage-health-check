@@ -121,4 +121,5 @@ This issue tracker is not a customer support forum but an error, flaw, failure, 
 If you want to submit a bug, please read the [Community Information](CONTRIBUTION.md) for notes on how to get started.
 
 # 11. License
-The Open vStorage Healthcheck is released under the [Apache 2 license](http://www.apache.org/licenses/LICENSE-2.0).
+The Open vStorage HealthCheck is licensed under the [GNU AFFERO GENERAL PUBLIC LICENSE Version 3](https://www.gnu.org/licenses/agpl.html).
+
