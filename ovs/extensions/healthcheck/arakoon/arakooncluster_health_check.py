@@ -25,7 +25,6 @@ import uuid
 from ovs.dal.lists.storagerouterlist import StorageRouterList
 from ovs.extensions.storage.persistent.pyrakoonstore import PyrakoonStore
 from ovs.extensions.db.arakoon.ArakoonInstaller import ArakoonClusterConfig
-from ovs.extensions.db.arakoon.arakoon.ArakoonManagement import ArakoonManagementEx
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 from ovs.extensions.healthcheck.utils.extension import Utils
 from ovs.log.healthcheck_logHandler import HCLogHandler
