@@ -65,7 +65,7 @@ class HCLogHandler:
         self.module = "utils"
 
         # load config file
-        with open(Utils().settings_loc) as settings_file:
+        with open(Utils.SETTINGS_LOC) as settings_file:
             self.settings = json.load(settings_file)
 
         # fetch from config file

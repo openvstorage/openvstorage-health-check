@@ -51,6 +51,7 @@ class Utils:
     """
     General utilities for Open vStorage healthcheck
     """
+    SETTINGS_LOC = "/opt/OpenvStorage/config/healthcheck/settings.json"
 
     def __init__(self):
         """ Init method """
@@ -59,8 +60,7 @@ class Utils:
         self.module = "utils"
 
         # load config file
-        self.settings_loc = "/opt/OpenvStorage/config/healthcheck/settings.json"
-        with open(self.settings_loc) as settings_file:
+        with open(self.SETTINGS_LOC) as settings_file:
             self.settings = json.load(settings_file)
 
         # fetch from config file
@@ -289,3 +289,5 @@ class Utils:
             return 1
         else:
             raise RuntimeError("Unsupported Service Manager detected, please contact support or file a bug @github")
+
+
