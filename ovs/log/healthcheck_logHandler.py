@@ -122,14 +122,12 @@ class HCLogHandler:
         @type unattended_print_mode: bool
         @type unattended_mode_name: str
         """
+        target = ''
+        now = datetime.datetime.now()
 
         try:
             if self.enable:
                 target = open('{0}/{1}'.format(self.HEALTHCHECK_DIR, self.HEALTHCHECK_FILE), 'a')
-            else:
-                target = ''
-
-            now = datetime.datetime.now()
 
             if log_type == 0:
                 if self.enable:
