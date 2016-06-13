@@ -72,6 +72,7 @@ class HCLogHandler:
         self.HEALTHCHECK_DIR = self.settings["healthcheck"]["logging"]["directory"]
         self.HEALTHCHECK_FILE = self.settings["healthcheck"]["logging"]["file"]
         self.debug = self.settings["healthcheck"]["debug_mode"]
+        self.enable = self.settings["healthcheck"]["logging"]["enable"]
 
         # utils log settings (determine modus)
         if silent_mode:
@@ -123,11 +124,17 @@ class HCLogHandler:
         """
 
         try:
-            target = open('{0}/{1}'.format(self.HEALTHCHECK_DIR, self.HEALTHCHECK_FILE), 'a')
+            if self.enable:
+                target = open('{0}/{1}'.format(self.HEALTHCHECK_DIR, self.HEALTHCHECK_FILE), 'a')
+            else:
+                target = ''
+
             now = datetime.datetime.now()
 
             if log_type == 0:
-                target.write("{0} - [FAILURE] - [{1}] - {2}\n".format(now, module, message))
+                if self.enable:
+                    target.write("{0} - [FAILURE] - [{1}] - {2}\n".format(now, module, message))
+
                 self.failure += 1
 
                 if not self.silent_mode:
@@ -142,7 +149,8 @@ class HCLogHandler:
                         self.healthcheck_dict[unattended_mode_name] = "FAILURE"
 
             elif log_type == 1:
-                target.write("{0} - [SUCCESS] - [{1}] - {2}\n".format(now, module, message))
+                if self.enable:
+                    target.write("{0} - [SUCCESS] - [{1}] - {2}\n".format(now, module, message))
                 self.success += 1
 
                 if not self.silent_mode:
@@ -157,7 +165,8 @@ class HCLogHandler:
                         self.healthcheck_dict[unattended_mode_name] = "SUCCESS"
 
             elif log_type == 2:
-                target.write("{0} - [WARNING] - [{1}] - {2}\n".format(now, module, message))
+                if self.enable:
+                    target.write("{0} - [WARNING] - [{1}] - {2}\n".format(now, module, message))
                 self.warning += 1
 
                 if not self.silent_mode:
@@ -172,7 +181,8 @@ class HCLogHandler:
                         self.healthcheck_dict[unattended_mode_name] = "WARNING"
 
             elif log_type == 3:
-                target.write("{0} - [INFO] - [{1}] - {2}\n".format(now, module, message))
+                if self.enable:
+                    target.write("{0} - [INFO] - [{1}] - {2}\n".format(now, module, message))
                 self.info += 1
 
                 # info_mode is NOT logged silently
@@ -185,7 +195,8 @@ class HCLogHandler:
                         print _Colors.OKBLUE + "[INFO] " + _Colors.ENDC + "%s" % (str(message))
 
             elif log_type == 4:
-                target.write("{0} - [EXCEPTION] - [{1}] - {2}\n".format(now, module, message))
+                if self.enable:
+                    target.write("{0} - [EXCEPTION] - [{1}] - {2}\n".format(now, module, message))
                 self.exception += 1
 
                 if not self.silent_mode:
@@ -200,7 +211,8 @@ class HCLogHandler:
                         self.healthcheck_dict[unattended_mode_name] = "EXCEPTION"
 
             elif log_type == 5:
-                target.write("{0} - [SKIPPED] - [{1}] - {2}\n".format(now, module, message))
+                if self.enable:
+                    target.write("{0} - [SKIPPED] - [{1}] - {2}\n".format(now, module, message))
                 self.skip += 1
 
                 if not self.silent_mode:
@@ -216,13 +228,15 @@ class HCLogHandler:
 
             elif log_type == 6:
                 if self.debug:
-                    target.write("{0} - [DEBUG] - [{1}] - {2}\n".format(now, module, message))
+                    if self.enable:
+                        target.write("{0} - [DEBUG] - [{1}] - {2}\n".format(now, module, message))
                     self.debug += 1
                     print _Colors.OKBLUE + "[DEBUG] " + _Colors.ENDC + "%s" % (str(message))
                     self.healthcheck_dict[unattended_mode_name] = "DEBUG"
 
             else:
-                target.write("{0} - [UNEXPECTED_EXCEPTION] - [{1}] - {2}\n".format(now, module, message))
+                if self.enable:
+                    target.write("{0} - [UNEXPECTED_EXCEPTION] - [{1}] - {2}\n".format(now, module, message))
                 self.exception += 1
 
                 if not self.silent_mode:
@@ -236,7 +250,8 @@ class HCLogHandler:
                     if unattended_print_mode:
                         self.healthcheck_dict[unattended_mode_name] = "UNEXPECTED_EXCEPTION"
 
-            target.close()
+            if self.enable:
+                target.close()
 
         except Exception, e:
             print "An unexpected exception occured during logging in '{0}': \n{1}".format(self.HEALTHCHECK_DIR, e)
