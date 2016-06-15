@@ -32,6 +32,7 @@ unattended = False
 silent_mode = False
 LOGGER = HCLogHandler(unattended, silent_mode)
 
+
 class HealthCheckController:
 
     @staticmethod
@@ -146,8 +147,8 @@ class HealthCheckController:
         Checks all critical components of Open vStorage
         """
 
-        LOGGER.logger("Starting Open vStorage Health Check!", module, 3, 'starting_ovs_hc', False)
-        LOGGER.logger("====================================\n", module, 3, 'starting_ovs_hc_ul', False)
+        LOGGER.info("Starting Open vStorage Health Check!", 'starting_ovs_hc', False)
+        LOGGER.info("====================================", 'starting_ovs_hc_ul', False)
 
         ovs = OpenvStorageHealthCheck(LOGGER)
 
@@ -201,8 +202,8 @@ class HealthCheckController:
         Checks all critical components of Arakoon
         """
 
-        LOGGER.logger("Starting Arakoon Health Check!", module, 3, 'starting_arakoon_hc', False)
-        LOGGER.logger("==============================\n", module, 3, 'starting_arakoon_hc_ul', False)
+        LOGGER.info("Starting Arakoon Health Check!", 'starting_arakoon_hc', False)
+        LOGGER.info("==============================", 'starting_arakoon_hc_ul', False)
 
         arakoon = ArakoonHealthCheck(LOGGER)
 
@@ -217,8 +218,8 @@ class HealthCheckController:
         Checks all critical components of Alba
         """
 
-        LOGGER.logger("Starting Alba Health Check!", module, 3, 'starting_alba_hc', False)
-        LOGGER.logger("===========================\n", module, 3, 'starting_alba_hc_ul', False)
+        LOGGER.info("Starting Alba Health Check!", 'starting_alba_hc', False)
+        LOGGER.info("===========================", 'starting_alba_hc_ul', False)
 
         alba = AlbaHealthCheck(LOGGER)
 
@@ -237,20 +238,20 @@ class HealthCheckController:
         @rtype: dict with nested dicts
         """
 
-        LOGGER.logger("Recap of Health Check!", module, 3, 'starting_recap_hc', False)
-        LOGGER.logger("======================\n", module, 3, 'starting_recap_hc_ul', False)
+        LOGGER.info("Recap of Health Check!", 'starting_recap_hc', False)
+        LOGGER.info("======================", 'starting_recap_hc_ul', False)
 
-        LOGGER.logger("SUCCESSFULL={0} FAILED={1} SKIPPED={2} WARNING={3} EXCEPTION={4}"
-                      .format(LOGGER.success, LOGGER.failure, LOGGER.skip, LOGGER.warning,
-                              LOGGER.exception), module, 1, 'exception_occured')
+        LOGGER.success("SUCCESSFULL={0} FAILED={1} SKIPPED={2} WARNING={3} EXCEPTION={4}"
+                       .format(LOGGER.HC_success, LOGGER.HC_failure, LOGGER.HC_skip, LOGGER.HC_warning,
+                               LOGGER.HC_exception), 'exception_occured')
 
         if silent_mode or unattended:
             # returns dict with minimal and detailed information
-            return {'result': LOGGER.healthcheck_dict, 'recap': {'SUCCESSFULL': LOGGER.success,
-                                                                 'FAILED': LOGGER.failure,
-                                                                 'SKIPPED': LOGGER.skip,
-                                                                 'WARNING': LOGGER.warning,
-                                                                 'EXCEPTION': LOGGER.exception}
+            return {'result': LOGGER.healthcheck_dict, 'recap': {'SUCCESSFULL': LOGGER.HC_success,
+                                                                 'FAILED': LOGGER.HC_failure,
+                                                                 'SKIPPED': LOGGER.HC_skip,
+                                                                 'WARNING': LOGGER.HC_warning,
+                                                                 'EXCEPTION': LOGGER.HC_exception}
                     }
         else:
             return None

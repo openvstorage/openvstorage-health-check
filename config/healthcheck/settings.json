@@ -2,9 +2,7 @@
     "healthcheck": {
         "library": "/opt/OpenvStorage",
         "logging": {
-            "enable": false,
-            "directory": "/var/log/ovs",
-            "file": "healthcheck.log"
+            "enable": false
         },
         "debug_mode": false,
         "max_check_log_size": 500
