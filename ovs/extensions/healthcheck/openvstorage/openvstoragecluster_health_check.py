@@ -41,6 +41,7 @@ from ovs.extensions.healthcheck.utils.extension import Utils
 from ovs.log.healthcheck_logHandler import HCLogHandler
 from timeout_decorator.timeout_decorator import TimeoutError
 import volumedriver.storagerouter.storagerouterclient as src
+from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException
 from volumedriver.storagerouter.storagerouterclient import MaxRedirectsExceededException
 
 
@@ -871,10 +872,13 @@ class OpenvStorageHealthCheck:
             voldrv_client = src.LocalStorageRouterClient(config_file)
 
             # collect data from volumedriver
-            voldrv_volume_list = voldrv_client.list_volumes()
+            try:
+                voldrv_volume_list = voldrv_client.list_volumes()
+            except ClusterNotReachableException:
+                self.LOGGER.failure("Seems like the Volumedriver {0} is not running.".format(vp.name),
+                                    'discrepancies_ovsdb_{0}'.format(vp.name))
+                continue
 
-            # collect data from model
-            model_vdisk_list = vp.vdisks
             vol_ids = [vdisk.volume_id for vdisk in vp.vdisks]
 
             # crossreference model vs. volumedriver
@@ -925,7 +929,14 @@ class OpenvStorageHealthCheck:
                 config_file = self.utility.get_config_file_path(vp.name, self.machine_id, 1, vp.guid)
                 voldrv_client = src.LocalStorageRouterClient(config_file)
 
-                for volume in voldrv_client.list_volumes():
+                try:
+                    voldrv_volume_list = voldrv_client.list_volumes()
+                except ClusterNotReachableException:
+                    self.LOGGER.failure("Seems like the Volumedriver {0} is not running.".format(vp.name),
+                                        'halted')
+                    continue
+
+                for volume in voldrv_volume_list:
                     # check if volume is halted, returns: 0 or 1
                     try:
                         if int(voldrv_client.info_volume(volume).halted):
