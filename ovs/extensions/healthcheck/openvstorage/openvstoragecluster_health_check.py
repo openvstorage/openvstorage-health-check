@@ -25,9 +25,9 @@ import grp
 import glob
 import time
 import psutil
-import signal
 import socket
 import threading
+import timeout_decorator
 import subprocess
 from pwd import getpwuid
 from ovs.dal.lists.vpoollist import VPoolList
@@ -39,6 +39,7 @@ from ovs.dal.lists.mgmtcenterlist import MgmtCenterList
 from ovs.lib.storagerouter import StorageRouterController
 from ovs.extensions.healthcheck.utils.extension import Utils
 from ovs.log.healthcheck_logHandler import HCLogHandler
+from timeout_decorator.timeout_decorator import TimeoutError
 import volumedriver.storagerouter.storagerouterclient as src
 from volumedriver.storagerouter.storagerouterclient import MaxRedirectsExceededException
 
@@ -398,31 +399,20 @@ class OpenvStorageHealthCheck:
             self.LOGGER.exception("Other service managers than 'init' are not yet supported!",
                                   'hc_process_supported', False)
 
-    def _method_handler(self, signum, frame):
-        """
-        Method handler for python signals, specifically used to time-out when a call to a process is taking too long.
-        Use in combination with: `signal.signal(signal.SIGALRM, self._method_handler)`
-
-        @raises Exception
-        """
-
-        warning = "SPOTTED a PROCESS who is taking to long! Signum: {0} ; Frame {1}".format(signum, frame)
-        self.LOGGER.info(warning, 'spotted_idle_process', False)
-        raise Exception(warning)
-
+    @timeout_decorator.timeout(7)
     def _check_celery(self):
         """
         Preliminary/Simple check for Celery and RabbitMQ component
         """
 
         # try if celery works smoothly
-        guid = self.machine_details.guid
-        machine_id = self.machine_details.machine_id
-        obj = StorageRouterController.get_support_info.s(guid).apply_async(
-              routing_key='sr.{0}'.format(machine_id)).get()
-
-        # reset possible alarm
-        signal.alarm(0)
+        try:
+            guid = self.machine_details.guid
+            machine_id = self.machine_details.machine_id
+            obj = StorageRouterController.get_support_info.s(guid).apply_async(
+                  routing_key='sr.{0}'.format(machine_id)).get()
+        except TimeoutError as ex:
+            raise TimeoutError("{0}: Process is taking to long!".format(ex.value))
 
         if obj:
             return True
@@ -514,18 +504,12 @@ class OpenvStorageHealthCheck:
 
         self.LOGGER.info("Checking if OVS-WORKERS are running smoothly: ", 'check_ovs_workers', False)
 
-        # init timout for x amount of sec for celery
-        signal.signal(signal.SIGALRM, self._method_handler)
-        signal.alarm(7)
-
         # checking celery
         try:
             # basic celery check
             self._check_celery()
             self.LOGGER.success("The OVS-WORKERS are working smoothly!", 'process_celery')
-        except Exception, ex:
-            # kill alarm
-            signal.alarm(0)
+        except TimeoutError, ex:
 
             # apparently the basic check failed, so we are going crazy
             self.LOGGER.failure(
