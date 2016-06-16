@@ -4,7 +4,21 @@
 
 The health check is classified as a monitoring, detection and healing tool for Open vStorage.
 
-## Required packages for Health Check
+## Pulling this repository
+```
+sudo apt-get install -y git
+git clone -b master https://github.com/openvstorage/openvstorage-health-check.git
+```
+
+## Installation (AUTOMATIC)
+
+### Deploying by script
+```
+cd openvstorage-health-check; bash bin/post-install.sh
+```
+
+## Installation (MANUAL)
+### Required packages for Health Check (eugene-updates)
 ```
 wget https://bootstrap.pypa.io/get-pip.py; python get-pip.py
 pip install flower
@@ -12,9 +26,10 @@ pip install psutil
 pip install xmltodict
 ```
 
-## Installation
-
-**Recommended:** Run on 30 min. - hourly base (on every node), to check the health of your Open vStorage cluster.
+### Add the Open vStorage healtcheck to the required directory
+```
+cd openvstorage-health-check; mkdir -p /opt/OpenvStorage-healthcheck; cp -r * /opt/OpenvStorage-healthcheck
+```
 
 ### Add following code to Health Check Open vStorage commands
 
