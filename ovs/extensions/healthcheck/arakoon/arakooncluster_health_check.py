@@ -22,17 +22,14 @@ Arakoon Health Check module
 
 import time
 import uuid
+from etcd import EtcdConnectionFailed, EtcdKeyNotFound, EtcdException
 from ovs.dal.lists.storagerouterlist import StorageRouterList
 from ovs.extensions.storage.persistent.pyrakoonstore import PyrakoonStore
 from ovs.extensions.db.arakoon.ArakoonInstaller import ArakoonClusterConfig
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 from ovs.extensions.healthcheck.utils.extension import Utils
 from ovs.log.healthcheck_logHandler import HCLogHandler
-
-try:
-    from ovs.extensions.db.etcd.configuration import EtcdConfiguration
-except ImportError:
-    pass
+from ovs.extensions.db.etcd.configuration import EtcdConfiguration
 
 
 class ArakoonHealthCheck:
@@ -61,12 +58,10 @@ class ArakoonHealthCheck:
 
         @rtype: list
         """
-
-        if not self.utility.etcd:
-            aramex = ArakoonManagementEx()
-            arakoon_clusters = aramex.listClusters()
-        else:
+        try:
             arakoon_clusters = list(EtcdConfiguration.list('/ovs/{0}'.format(self.module)))
+        except (EtcdConnectionFailed, EtcdException) as ex:
+            raise EtcdConnectionFailed(ex)
 
         result = {}
         if len(arakoon_clusters) != 0:
@@ -75,12 +70,9 @@ class ArakoonHealthCheck:
                 # add node that is available for arakoon cluster
                 nodes_per_cluster_result = {}
 
-                if not self.utility.etcd:
-                    master_node_ids = aramex.getCluster(str(cluster)).listNodes()
-                else:
-                    ak = ArakoonClusterConfig(str(cluster))
-                    ak.load_config()
-                    master_node_ids = list((node.name for node in ak.nodes))
+                ak = ArakoonClusterConfig(str(cluster))
+                ak.load_config()
+                master_node_ids = list((node.name for node in ak.nodes))
 
                 for node_id in master_node_ids:
                     node_info = StorageRouterList.get_by_machine_id(node_id)
@@ -220,6 +212,9 @@ class ArakoonHealthCheck:
             else:
                 self.LOGGER.skip("No clusters found on this node, so stopping arakoon checks ...",
                                  'arakoon_integrity')
+        except (EtcdException, EtcdConnectionFailed) as e:
+            self.LOGGER.exception("One ore more Arakoon clusters cannot be reached :(, due to: {0}".format(e),
+                                  'arakoon_integrity')
         except Exception as e:
             self.LOGGER.exception("One ore more Arakoon clusters cannot be reached :(, due to: {0}".format(e),
                                   'arakoon_integrity')
