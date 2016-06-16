@@ -2,7 +2,9 @@
 
 ## Description
 
-The health check is classified as a monitoring, detection and healing tool for Open vStorage.
+The health check is classified as a monitoring, detection and healing tool for Open vStorage `Eugene-updates`.
+
+**Note:** You will have to deploy this on every Open vStorage node.
 
 ## Pulling this repository
 ```
