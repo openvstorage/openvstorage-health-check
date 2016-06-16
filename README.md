@@ -12,8 +12,7 @@ git clone -b ovs-impl https://github.com/openvstorage/openvstorage-health-check.
 
 ## 3. Installation (BY POST-INSTALL SCRIPT)
 ```
-cd openvstorage-health-check/bin/
-bash post-install.sh
+cd openvstorage-health-check/; bash /bin/post-install.sh
 ```
 
 ## 4. Installation (MANUAL)
