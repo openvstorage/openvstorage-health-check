@@ -770,9 +770,6 @@ class OpenvStorageHealthCheck:
         Checks if the VOLUMEDRIVERS work on a local machine (compatible with multiple vPools)
         """
 
-        volumedriversnotworking = []
-        name = "ovs-healthcheck-test-{0}".format(self.machine_id)
-
         self.LOGGER.info("Checking volumedrivers: ", 'check_volumedrivers', False)
 
         vpools = VPoolList.get_vpools()
@@ -781,28 +778,26 @@ class OpenvStorageHealthCheck:
             # perform tests
             for vp in vpools:
 
-                # check volumedrivers
-                t = threading.Thread(target=self._check_volumedriver, args=(1, vp.name, name))
-                t.daemon = True
-                t.start()
+                name = "ovs-healthcheck-test-{0}".format(self.machine_id)
 
-                time.sleep(5)
+                if vp.guid in self.machine_details.vpools_guids:
+                    # check volumedrivers
+                    t = threading.Thread(target=self._check_volumedriver, args=(1, vp.name, name))
+                    t.daemon = True
+                    t.start()
 
-                # if thread is still alive after x seconds or got exception, something is wrong
-                if t.isAlive() or not os.path.exists("/mnt/{0}/{1}.raw".format(vp.name, name)):
-                    volumedriversnotworking.append(vp.name)
+                    time.sleep(5)
 
-                # clean-up
-                if len(volumedriversnotworking) == 0:
-                    self.utility.execute_bash_command("rm -f /mnt/{0}/{1}.raw".format(vp.name, name))
-
-            # check if filedrivers are OK!
-            if len(volumedriversnotworking) == 0:
-                self.LOGGER.success("All volumedrivers seem to be working fine!", 'volumedrivers')
-            else:
-                self.LOGGER.failure("Some volumedrivers seem to have some problems: {0}"
-                                    .format(', '.join(volumedriversnotworking)), 'volumedrivers')
-
+                    # if thread is still alive after x seconds or got exception, something is wrong
+                    if t.isAlive() or not os.path.exists("/mnt/{0}/{1}.raw".format(vp.name, name)):
+                        # not working
+                        self.LOGGER.failure("Volumedriver of vPool '{0}' seems to have problems".format(vp.name), 'volumedriver_{0}'.format(vp.name))
+                    else:
+                        # working
+                        self.LOGGER.success("Volumedriver of vPool '{0}' is working fine!".format(vp.name), 'volumedriver_{0}'.format(vp.name))
+                        self.utility.execute_bash_command("rm -f /mnt/{0}/{1}.raw".format(vp.name, name))
+                else:
+                    self.LOGGER.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name), 'volumedriver_{0}'.format(vp.name))
         else:
             self.LOGGER.skip("No vPools found!", 'volumedrivers')
 
