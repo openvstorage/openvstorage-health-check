@@ -732,7 +732,6 @@ class OpenvStorageHealthCheck:
         Checks if the FILEDRIVERS work on a local machine (compatible with multiple vPools)
         """
 
-        filedriversnotworking = []
         name = "ovs-healthcheck-test-{0}".format(self.machine_id)
 
         self.LOGGER.info("Checking filedrivers: ", 'check_filedriver', False)
@@ -744,30 +743,29 @@ class OpenvStorageHealthCheck:
 
             for vp in vpools:
 
-                # check filedriver
-                t = threading.Thread(target=self._check_filedriver, args=(1, vp.name, name))
-                t.daemon = True
-                t.start()
+                name = "ovs-healthcheck-test-{0}".format(self.machine_id)
 
-                time.sleep(5)
+                if vp.guid in self.machine_details.vpools_guids:
 
-                # if thread is still alive after x seconds or got exception, something is wrong
-                if t.isAlive() or not os.path.exists("/mnt/{0}/{1}.xml".format(vp.name, name)):
-                    filedriversnotworking.append(vp.name)
+                    # check filedriver
+                    t = threading.Thread(target=self._check_filedriver, args=(1, vp.name, name))
+                    t.daemon = True
+                    t.start()
 
-                # clean-up
-                if len(filedriversnotworking) == 0:
-                    self.utility.execute_bash_command("rm -f /mnt/{0}/{1}.xml".format(vp.name, name))
+                    time.sleep(5)
 
-            # check if filedrivers are OK!
-            if len(filedriversnotworking) == 0:
-                self.LOGGER.success("All filedrivers seem to be working fine!", 'filedrivers')
-            else:
-                self.LOGGER.failure("Some filedrivers seem to have some problems: {0}"
-                                    .format(', '.join(filedriversnotworking)), 'filedrivers')
-
+                    # if thread is still alive after x seconds or got exception, something is wrong
+                    if t.isAlive() or not os.path.exists("/mnt/{0}/{1}.xml".format(vp.name, name)):
+                        # not working
+                        self.LOGGER.failure("Filedriver for vPool '{0}' seems to have problems!".format(vp.name), 'filedriver_{0}'.format(vp.name))
+                    else:
+                        # working
+                        self.LOGGER.success("Filedriver for vPool '{0}' is working fine!".format(vp.name), 'filedriver_{0}'.format(vp.name))
+                        self.utility.execute_bash_command("rm -f /mnt/{0}/{1}.xml".format(vp.name, name))
+                else:
+                    self.LOGGER.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name), 'filedriver_{0}'.format(vp.name))
         else:
-            self.LOGGER.skip("No vPools found!", 'filedrivers')
+            self.LOGGER.skip("No vPools found!", 'filedriver_nofound')
 
     def check_volumedrivers(self):
         """
@@ -965,4 +963,4 @@ class OpenvStorageHealthCheck:
                     self.LOGGER.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name), 'halted_{0}'.format(vp.name))
 
         else:
-            self.LOGGER.skip("No vPools found!".format(len(vpools)), 'halted')
+            self.LOGGER.skip("No vPools found!".format(len(vpools)), 'halted_nofound')
