@@ -732,8 +732,6 @@ class OpenvStorageHealthCheck:
         Checks if the FILEDRIVERS work on a local machine (compatible with multiple vPools)
         """
 
-        name = "ovs-healthcheck-test-{0}".format(self.machine_id)
-
         self.LOGGER.info("Checking filedrivers: ", 'check_filedriver', False)
 
         vpools = VPoolList.get_vpools()
