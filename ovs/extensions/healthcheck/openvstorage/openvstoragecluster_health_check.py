@@ -857,56 +857,59 @@ class OpenvStorageHealthCheck:
         #
 
         for vp in VPoolList.get_vpools():
-
-            self.LOGGER.info("Checking consistency of volumedriver vs. ovsdb for vPool '{0}': ".format(vp.name),
-                             'checkDiscrepanciesVoldrvOvsdb', False)
-
-            # list of vdisks that are in model but are not in volumedriver
-            missinginvolumedriver = []
-
-            # list of volumes that are in volumedriver but are not in model
-            missinginmodel = []
-
-            # fetch configfile of vpool for the volumedriver
-            config_file = self.utility.get_config_file_path(vp.name, self.machine_id, 1, vp.guid)
-            voldrv_client = src.LocalStorageRouterClient(config_file)
-
-            # collect data from volumedriver
-            try:
-                voldrv_volume_list = voldrv_client.list_volumes()
-            except ClusterNotReachableException:
-                self.LOGGER.failure("Seems like the Volumedriver {0} is not running.".format(vp.name),
-                                    'discrepancies_ovsdb_{0}'.format(vp.name))
-                continue
-
-            vol_ids = [vdisk.volume_id for vdisk in vp.vdisks]
-
-            # crossreference model vs. volumedriver
-            for vdisk in vol_ids:
-                if vdisk not in voldrv_volume_list:
-                    missinginvolumedriver.append(vdisk)
-
-            # crossreference volumedriver vs. model
-            for voldrv_id in voldrv_volume_list:
-                if voldrv_id not in vol_ids:
-                    missinginmodel.append(voldrv_id)
-
-            # display discrepancies for vPool
-            if len(missinginvolumedriver) != 0:
-                self.LOGGER.failure("Detected volumes that are MISSING in volumedriver but ARE in ovsdb in vPool "
-                                    "'{0}': {1}".format(vp.name, ', '.join(missinginvolumedriver)),
-                                    'discrepancies_ovsdb_{0}'.format(vp.name))
+            if vp.guid in self.machine_details.vpools_guids:
+                self.LOGGER.info("Checking consistency of volumedriver vs. ovsdb for vPool '{0}': ".format(vp.name),
+                                 'checkDiscrepanciesVoldrvOvsdb', False)
+    
+                # list of vdisks that are in model but are not in volumedriver
+                missinginvolumedriver = []
+    
+                # list of volumes that are in volumedriver but are not in model
+                missinginmodel = []
+    
+                # fetch configfile of vpool for the volumedriver
+                config_file = self.utility.get_config_file_path(vp.name, self.machine_id, 1, vp.guid)
+                voldrv_client = src.LocalStorageRouterClient(config_file)
+    
+                # collect data from volumedriver
+                try:
+                    voldrv_volume_list = voldrv_client.list_volumes()
+                except ClusterNotReachableException:
+                    self.LOGGER.failure("Seems like the Volumedriver {0} is not running.".format(vp.name),
+                                        'discrepancies_ovsdb_{0}'.format(vp.name))
+                    continue
+    
+                vol_ids = [vdisk.volume_id for vdisk in vp.vdisks]
+    
+                # crossreference model vs. volumedriver
+                for vdisk in vol_ids:
+                    if vdisk not in voldrv_volume_list:
+                        missinginvolumedriver.append(vdisk)
+    
+                # crossreference volumedriver vs. model
+                for voldrv_id in voldrv_volume_list:
+                    if voldrv_id not in vol_ids:
+                        missinginmodel.append(voldrv_id)
+    
+                # display discrepancies for vPool
+                if len(missinginvolumedriver) != 0:
+                    self.LOGGER.failure("Detected volumes that are MISSING in volumedriver but ARE in ovsdb in vPool "
+                                        "'{0}': {1}".format(vp.name, ', '.join(missinginvolumedriver)),
+                                        'discrepancies_ovsdb_{0}'.format(vp.name))
+                else:
+                    self.LOGGER.success("NO discrepancies found for ovsdb in vPool '{0}'".format(vp.name),
+                                        'discrepancies_ovsdb_{0}'.format(vp.name))
+    
+                if len(missinginmodel) != 0:
+                    self.LOGGER.failure("Detected volumes that are AVAILABLE in volumedriver but ARE NOT in ovsdb in vPool "
+                                        "'{0}': {1}".format(vp.name, ', '.join(missinginmodel)),
+                                        'discrepancies_voldrv_{0}'.format(vp.name))
+                else:
+                    self.LOGGER.success("NO discrepancies found for voldrv in vPool '{0}'".format(vp.name),
+                                        'discrepancies_voldrv_{0}'.format(vp.name))
             else:
-                self.LOGGER.success("NO discrepancies found for ovsdb in vPool '{0}'".format(vp.name),
-                                    'discrepancies_ovsdb_{0}'.format(vp.name))
-
-            if len(missinginmodel) != 0:
-                self.LOGGER.failure("Detected volumes that are AVAILABLE in volumedriver but ARE NOT in ovsdb in vPool "
-                                    "'{0}': {1}".format(vp.name, ', '.join(missinginmodel)),
-                                    'discrepancies_voldrv_{0}'.format(vp.name))
-            else:
-                self.LOGGER.success("NO discrepancies found for voldrv in vPool '{0}'".format(vp.name),
-                                    'discrepancies_voldrv_{0}'.format(vp.name))
+                self.LOGGER.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name),
+                                 'discrepancies_voldrv_{0}'.format(vp.name))
 
     def check_for_halted_volumes(self):
         """
