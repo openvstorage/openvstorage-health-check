@@ -732,9 +732,6 @@ class OpenvStorageHealthCheck:
         Checks if the FILEDRIVERS work on a local machine (compatible with multiple vPools)
         """
 
-        filedriversnotworking = []
-        name = "ovs-healthcheck-test-{0}".format(self.machine_id)
-
         self.LOGGER.info("Checking filedrivers: ", 'check_filedriver', False)
 
         vpools = VPoolList.get_vpools()
@@ -744,38 +741,34 @@ class OpenvStorageHealthCheck:
 
             for vp in vpools:
 
-                # check filedriver
-                t = threading.Thread(target=self._check_filedriver, args=(1, vp.name, name))
-                t.daemon = True
-                t.start()
+                name = "ovs-healthcheck-test-{0}".format(self.machine_id)
 
-                time.sleep(5)
+                if vp.guid in self.machine_details.vpools_guids:
 
-                # if thread is still alive after x seconds or got exception, something is wrong
-                if t.isAlive() or not os.path.exists("/mnt/{0}/{1}.xml".format(vp.name, name)):
-                    filedriversnotworking.append(vp.name)
+                    # check filedriver
+                    t = threading.Thread(target=self._check_filedriver, args=(1, vp.name, name))
+                    t.daemon = True
+                    t.start()
 
-                # clean-up
-                if len(filedriversnotworking) == 0:
-                    self.utility.execute_bash_command("rm -f /mnt/{0}/{1}.xml".format(vp.name, name))
+                    time.sleep(5)
 
-            # check if filedrivers are OK!
-            if len(filedriversnotworking) == 0:
-                self.LOGGER.success("All filedrivers seem to be working fine!", 'filedrivers')
-            else:
-                self.LOGGER.failure("Some filedrivers seem to have some problems: {0}"
-                                    .format(', '.join(filedriversnotworking)), 'filedrivers')
-
+                    # if thread is still alive after x seconds or got exception, something is wrong
+                    if t.isAlive() or not os.path.exists("/mnt/{0}/{1}.xml".format(vp.name, name)):
+                        # not working
+                        self.LOGGER.failure("Filedriver for vPool '{0}' seems to have problems!".format(vp.name), 'filedriver_{0}'.format(vp.name))
+                    else:
+                        # working
+                        self.LOGGER.success("Filedriver for vPool '{0}' is working fine!".format(vp.name), 'filedriver_{0}'.format(vp.name))
+                        self.utility.execute_bash_command("rm -f /mnt/{0}/{1}.xml".format(vp.name, name))
+                else:
+                    self.LOGGER.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name), 'filedriver_{0}'.format(vp.name))
         else:
-            self.LOGGER.skip("No vPools found!", 'filedrivers')
+            self.LOGGER.skip("No vPools found!", 'filedriver_nofound')
 
     def check_volumedrivers(self):
         """
         Checks if the VOLUMEDRIVERS work on a local machine (compatible with multiple vPools)
         """
-
-        volumedriversnotworking = []
-        name = "ovs-healthcheck-test-{0}".format(self.machine_id)
 
         self.LOGGER.info("Checking volumedrivers: ", 'check_volumedrivers', False)
 
@@ -785,28 +778,26 @@ class OpenvStorageHealthCheck:
             # perform tests
             for vp in vpools:
 
-                # check volumedrivers
-                t = threading.Thread(target=self._check_volumedriver, args=(1, vp.name, name))
-                t.daemon = True
-                t.start()
+                name = "ovs-healthcheck-test-{0}".format(self.machine_id)
 
-                time.sleep(5)
+                if vp.guid in self.machine_details.vpools_guids:
+                    # check volumedrivers
+                    t = threading.Thread(target=self._check_volumedriver, args=(1, vp.name, name))
+                    t.daemon = True
+                    t.start()
 
-                # if thread is still alive after x seconds or got exception, something is wrong
-                if t.isAlive() or not os.path.exists("/mnt/{0}/{1}.raw".format(vp.name, name)):
-                    volumedriversnotworking.append(vp.name)
+                    time.sleep(5)
 
-                # clean-up
-                if len(volumedriversnotworking) == 0:
-                    self.utility.execute_bash_command("rm -f /mnt/{0}/{1}.raw".format(vp.name, name))
-
-            # check if filedrivers are OK!
-            if len(volumedriversnotworking) == 0:
-                self.LOGGER.success("All volumedrivers seem to be working fine!", 'volumedrivers')
-            else:
-                self.LOGGER.failure("Some volumedrivers seem to have some problems: {0}"
-                                    .format(', '.join(volumedriversnotworking)), 'volumedrivers')
-
+                    # if thread is still alive after x seconds or got exception, something is wrong
+                    if t.isAlive() or not os.path.exists("/mnt/{0}/{1}.raw".format(vp.name, name)):
+                        # not working
+                        self.LOGGER.failure("Volumedriver of vPool '{0}' seems to have problems".format(vp.name), 'volumedriver_{0}'.format(vp.name))
+                    else:
+                        # working
+                        self.LOGGER.success("Volumedriver of vPool '{0}' is working fine!".format(vp.name), 'volumedriver_{0}'.format(vp.name))
+                        self.utility.execute_bash_command("rm -f /mnt/{0}/{1}.raw".format(vp.name, name))
+                else:
+                    self.LOGGER.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name), 'volumedriver_{0}'.format(vp.name))
         else:
             self.LOGGER.skip("No vPools found!", 'volumedrivers')
 
@@ -857,56 +848,59 @@ class OpenvStorageHealthCheck:
         #
 
         for vp in VPoolList.get_vpools():
-
-            self.LOGGER.info("Checking consistency of volumedriver vs. ovsdb for vPool '{0}': ".format(vp.name),
-                             'checkDiscrepanciesVoldrvOvsdb', False)
-
-            # list of vdisks that are in model but are not in volumedriver
-            missinginvolumedriver = []
-
-            # list of volumes that are in volumedriver but are not in model
-            missinginmodel = []
-
-            # fetch configfile of vpool for the volumedriver
-            config_file = self.utility.get_config_file_path(vp.name, self.machine_id, 1, vp.guid)
-            voldrv_client = src.LocalStorageRouterClient(config_file)
-
-            # collect data from volumedriver
-            try:
-                voldrv_volume_list = voldrv_client.list_volumes()
-            except ClusterNotReachableException:
-                self.LOGGER.failure("Seems like the Volumedriver {0} is not running.".format(vp.name),
-                                    'discrepancies_ovsdb_{0}'.format(vp.name))
-                continue
-
-            vol_ids = [vdisk.volume_id for vdisk in vp.vdisks]
-
-            # crossreference model vs. volumedriver
-            for vdisk in vol_ids:
-                if vdisk not in voldrv_volume_list:
-                    missinginvolumedriver.append(vdisk)
-
-            # crossreference volumedriver vs. model
-            for voldrv_id in voldrv_volume_list:
-                if voldrv_id not in vol_ids:
-                    missinginmodel.append(voldrv_id)
-
-            # display discrepancies for vPool
-            if len(missinginvolumedriver) != 0:
-                self.LOGGER.failure("Detected volumes that are MISSING in volumedriver but ARE in ovsdb in vPool "
-                                    "'{0}': {1}".format(vp.name, ', '.join(missinginvolumedriver)),
-                                    'discrepancies_ovsdb_{0}'.format(vp.name))
+            if vp.guid in self.machine_details.vpools_guids:
+                self.LOGGER.info("Checking consistency of volumedriver vs. ovsdb for vPool '{0}': ".format(vp.name),
+                                 'checkDiscrepanciesVoldrvOvsdb', False)
+    
+                # list of vdisks that are in model but are not in volumedriver
+                missinginvolumedriver = []
+    
+                # list of volumes that are in volumedriver but are not in model
+                missinginmodel = []
+    
+                # fetch configfile of vpool for the volumedriver
+                config_file = self.utility.get_config_file_path(vp.name, self.machine_id, 1, vp.guid)
+                voldrv_client = src.LocalStorageRouterClient(config_file)
+    
+                # collect data from volumedriver
+                try:
+                    voldrv_volume_list = voldrv_client.list_volumes()
+                except ClusterNotReachableException:
+                    self.LOGGER.failure("Seems like the Volumedriver {0} is not running.".format(vp.name),
+                                        'discrepancies_ovsdb_{0}'.format(vp.name))
+                    continue
+    
+                vol_ids = [vdisk.volume_id for vdisk in vp.vdisks]
+    
+                # crossreference model vs. volumedriver
+                for vdisk in vol_ids:
+                    if vdisk not in voldrv_volume_list:
+                        missinginvolumedriver.append(vdisk)
+    
+                # crossreference volumedriver vs. model
+                for voldrv_id in voldrv_volume_list:
+                    if voldrv_id not in vol_ids:
+                        missinginmodel.append(voldrv_id)
+    
+                # display discrepancies for vPool
+                if len(missinginvolumedriver) != 0:
+                    self.LOGGER.failure("Detected volumes that are MISSING in volumedriver but ARE in ovsdb in vPool "
+                                        "'{0}': {1}".format(vp.name, ', '.join(missinginvolumedriver)),
+                                        'discrepancies_ovsdb_{0}'.format(vp.name))
+                else:
+                    self.LOGGER.success("NO discrepancies found for ovsdb in vPool '{0}'".format(vp.name),
+                                        'discrepancies_ovsdb_{0}'.format(vp.name))
+    
+                if len(missinginmodel) != 0:
+                    self.LOGGER.failure("Detected volumes that are AVAILABLE in volumedriver but ARE NOT in ovsdb in vPool "
+                                        "'{0}': {1}".format(vp.name, ', '.join(missinginmodel)),
+                                        'discrepancies_voldrv_{0}'.format(vp.name))
+                else:
+                    self.LOGGER.success("NO discrepancies found for voldrv in vPool '{0}'".format(vp.name),
+                                        'discrepancies_voldrv_{0}'.format(vp.name))
             else:
-                self.LOGGER.success("NO discrepancies found for ovsdb in vPool '{0}'".format(vp.name),
-                                    'discrepancies_ovsdb_{0}'.format(vp.name))
-
-            if len(missinginmodel) != 0:
-                self.LOGGER.failure("Detected volumes that are AVAILABLE in volumedriver but ARE NOT in ovsdb in vPool "
-                                    "'{0}': {1}".format(vp.name, ', '.join(missinginmodel)),
-                                    'discrepancies_voldrv_{0}'.format(vp.name))
-            else:
-                self.LOGGER.success("NO discrepancies found for voldrv in vPool '{0}'".format(vp.name),
-                                    'discrepancies_voldrv_{0}'.format(vp.name))
+                self.LOGGER.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name),
+                                 'discrepancies_voldrv_{0}'.format(vp.name))
 
     def check_for_halted_volumes(self):
         """
@@ -920,42 +914,46 @@ class OpenvStorageHealthCheck:
         if len(vpools) != 0:
 
             for vp in vpools:
+                
+                if vp.guid in self.machine_details.vpools_guids:
 
-                haltedvolumes = []
-
-                self.LOGGER.info("Checking vPool '{0}': ".format(vp.name),
-                                 'checkVPOOL_{0}'.format(vp.name), False)
-
-                config_file = self.utility.get_config_file_path(vp.name, self.machine_id, 1, vp.guid)
-                voldrv_client = src.LocalStorageRouterClient(config_file)
-
-                try:
-                    voldrv_volume_list = voldrv_client.list_volumes()
-                except ClusterNotReachableException:
-                    self.LOGGER.failure("Seems like the Volumedriver {0} is not running.".format(vp.name),
-                                        'halted')
-                    continue
-
-                for volume in voldrv_volume_list:
-                    # check if volume is halted, returns: 0 or 1
+                    haltedvolumes = []
+    
+                    self.LOGGER.info("Checking vPool '{0}': ".format(vp.name),
+                                     'checkVPOOL_{0}'.format(vp.name), False)
+    
+                    config_file = self.utility.get_config_file_path(vp.name, self.machine_id, 1, vp.guid)
+                    voldrv_client = src.LocalStorageRouterClient(config_file)
+    
                     try:
-                        if int(voldrv_client.info_volume(volume).halted):
-                            haltedvolumes.append(volume)
-                    except ObjectNotFoundException:
-                        # ignore ovsdb invalid entrees
-                        # model consistency will handle it.
+                        voldrv_volume_list = voldrv_client.list_volumes()
+                    except ClusterNotReachableException:
+                        self.LOGGER.failure("Seems like the Volumedriver {0} is not running.".format(vp.name),
+                                            'halted_{0}'.format(vp.name))
                         continue
-                    except MaxRedirectsExceededException:
-                        # this means the volume is not halted but detached or unreachable for the volumedriver
-                        haltedvolumes.append(volume)
-
-                # print all results
-                if len(haltedvolumes) > 0:
-                    self.LOGGER.failure("Detected volumes that are HALTED in volumedriver in vPool '{0}': {1}"
-                                        .format(vp.name, ', '.join(haltedvolumes)), 'halted')
+    
+                    for volume in voldrv_volume_list:
+                        # check if volume is halted, returns: 0 or 1
+                        try:
+                            if int(voldrv_client.info_volume(volume).halted):
+                                haltedvolumes.append(volume)
+                        except ObjectNotFoundException:
+                            # ignore ovsdb invalid entrees
+                            # model consistency will handle it.
+                            continue
+                        except MaxRedirectsExceededException:
+                            # this means the volume is not halted but detached or unreachable for the volumedriver
+                            haltedvolumes.append(volume)
+    
+                    # print all results
+                    if len(haltedvolumes) > 0:
+                        self.LOGGER.failure("Detected volumes that are HALTED in volumedriver in vPool '{0}': {1}"
+                                            .format(vp.name, ', '.join(haltedvolumes)), 'halted_{0}'.format(vp.name))
+                    else:
+                        self.LOGGER.success("No halted volumes detected in vPool '{0}'"
+                                            .format(vp.name), 'halted_{0}'.format(vp.name))
                 else:
-                    self.LOGGER.success("No halted volumes detected in vPool '{0}'"
-                                        .format(vp.name), 'halted')
+                    self.LOGGER.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name), 'halted_{0}'.format(vp.name))
 
         else:
-            self.LOGGER.skip("No vPools found!".format(len(vpools)), 'halted')
+            self.LOGGER.skip("No vPools found!".format(len(vpools)), 'halted_nofound')
