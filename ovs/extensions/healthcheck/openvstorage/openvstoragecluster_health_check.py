@@ -742,6 +742,10 @@ class OpenvStorageHealthCheck:
                         # timeout occured, action took too long
                         self.LOGGER.failure("Filedriver of vPool '{0}' seems to have problems: {0}"
                                             .format(vp.name, e), 'filedriver_{0}'.format(vp.name))
+                    except subprocess.CalledProcessError as e:
+                        # can be input/output error by filedriver
+                        self.LOGGER.failure("Filedriver of vPool '{0}' seems to have problems: {0}"
+                                            .format(vp.name, e), 'filedriver_{0}'.format(vp.name))
                 else:
                     self.LOGGER.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name),
                                      'filedriver_{0}'.format(vp.name))
@@ -775,6 +779,10 @@ class OpenvStorageHealthCheck:
                                                 .format(vp.name), 'volumedriver_{0}'.format(vp.name))
                     except TimeoutError as e:
                         # timeout occured, action took too long
+                        self.LOGGER.failure("Volumedriver of vPool '{0}' seems to have problems: {0}"
+                                            .format(vp.name, e), 'volumedriver_{0}'.format(vp.name))
+                    except subprocess.CalledProcessError as e:
+                        # can be input/output error by volumedriver
                         self.LOGGER.failure("Volumedriver of vPool '{0}' seems to have problems: {0}"
                                             .format(vp.name, e), 'volumedriver_{0}'.format(vp.name))
 
