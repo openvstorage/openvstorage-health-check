@@ -240,9 +240,10 @@ class AlbaHealthCheck:
                                             stdout=fnull, stderr=subprocess.STDOUT)
                             subprocess.call(['rm', str(self.temp_file_loc)])
                             subprocess.call(['rm', str(self.temp_file_fetched_loc)])
-                    except subprocess.CalledProcessError as e:
-                        self.LOGGER.failure("Proxy '{0}' has some problems: {1}"
-                                            .format(sr.name, e), 'proxy_{0}'.format(sr.name))
+                    except subprocess.CalledProcessError:
+                        amount_of_presets_not_working.append(sr.name)
+                        self.LOGGER.failure("Proxy '{0}' has some problems ..."
+                                            .format(sr.name), 'proxy_{0}'.format(sr.name))
 
         # for unattended
         return amount_of_presets_not_working
@@ -270,7 +271,11 @@ class AlbaHealthCheck:
             for disk in disks:
                 key = 'ovs-healthcheck-{0}'.format(str(uuid.uuid4()))
                 value = str(time.time())
+
+                print disk.get('node_id')
+
                 ip_address = AlbaNodeList.get_albanode_by_node_id(disk.get('node_id')).ip
+
 
                 try:
                     # check if disk is missing
@@ -323,23 +328,14 @@ class AlbaHealthCheck:
         self.LOGGER.info("Checking available ALBA backends ...", 'check_alba', False)
         try:
             alba_backends = self._fetch_available_backends()
-
             if len(alba_backends) != 0:
                 self.LOGGER.success("We found {0} backend(s)!".format(len(alba_backends)),
                                     'alba_backends_found'.format(len(alba_backends)))
                 for backend in alba_backends:
-
                     # check proxies, and recap for unattended
-                    result_proxies = self._check_if_proxies_work()
-                    if len(result_proxies) == 0:
-                        # all proxies work
-                        self.LOGGER.success("All Alba proxies should be fine!", 'alba_proxy')
-                    else:
-                        # not all proxies work
-                        self.LOGGER.failure("Some alba proxies are NOT working: {0}".format(', '.join(result_proxies)),
-                                            'alba_proxy')
+                    self._check_if_proxies_work()
 
-                    # check disks
+                    # check disks of backend
                     result_disks = self._check_backend_asds(backend.get('all_disks'), backend.get('name'))
                     workingdisks = result_disks[0]
                     defectivedisks = result_disks[1]
@@ -369,7 +365,6 @@ class AlbaHealthCheck:
                                                 " defective disks!".format(backend.get('name'), len(workingdisks),
                                                                            len(defectivedisks)),
                                                 'alba_backend_{0}'.format(backend.get('name')))
-
             else:
                 self.LOGGER.skip("No backends found ...", 'alba_backends_found')
         except (EtcdKeyNotFound, EtcdConnectionFailed, EtcdConnectionFailed) as e:
