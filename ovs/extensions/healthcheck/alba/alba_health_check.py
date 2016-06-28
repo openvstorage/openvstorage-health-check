@@ -34,7 +34,8 @@ from ovs.dal.lists.albabackendlist import AlbaBackendList
 from ovs.extensions.healthcheck.utils.extension import Utils
 from ovs.extensions.db.etcd.configuration import EtcdConfiguration
 from etcd import EtcdConnectionFailed, EtcdKeyNotFound, EtcdException
-from ovs.extensions.healthcheck.utils.exceptions import ObjectNotFoundException, CommandException
+from ovs.extensions.healthcheck.utils.exceptions import ObjectNotFoundException, ConnectionFailedException, \
+    DiskNotFoundException
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 
 
@@ -288,15 +289,15 @@ class AlbaHealthCheck:
 
                             # get object
                             try:
-                                g = subprocess.check_output(['alba', 'asd-multi-get', '--long-id', disk.get('asd_id'), '-p',
-                                                            str(disk.get('port')), '-h', ip_address, key])
+                                g = subprocess.check_output(['alba', 'asd-multi-get', '--long-id', disk.get('asd_id'),
+                                                             '-p', str(disk.get('port')), '-h', ip_address, key])
                             except Exception:
-                                raise CommandException(Exception('Connection failed to disk ...'))
+                                raise ConnectionFailedException('Connection failed to disk')
 
                             # check if put/get is successfull
                             if 'None' in g:
                                 # test failed!
-                                raise ObjectNotFoundException(Exception(g))
+                                raise ObjectNotFoundException(g)
                             else:
                                 # test successfull!
                                 self.LOGGER.success("ASD test with DISK_ID '{0}' succeeded!".format(disk.get('asd_id')),
@@ -310,12 +311,17 @@ class AlbaHealthCheck:
                                                      str(disk.get('port')), '-h', ip_address, key])
                         else:
                             # disk is missing
-                            raise ObjectNotFoundException(Exception('Disk is missing'))
+                            raise DiskNotFoundException('Disk is missing')
 
                     except ObjectNotFoundException as e:
                         defectivedisks.append(disk.get('asd_id'))
                         self.LOGGER.failure("ASD test with DISK_ID '{0}' failed on NODE '{1}' with exception: {2}"
                                             .format(disk.get('asd_id'), ip_address, e),
+                                            'alba_asd_{0}'.format(disk.get('asd_id')), self.show_disks_in_monitoring)
+                    except (ConnectionFailedException, DiskNotFoundException) as e:
+                        defectivedisks.append(disk.get('asd_id'))
+                        self.LOGGER.failure("ASD test with DISK_ID '{0}' failed because: {1}"
+                                            .format(disk.get('asd_id'), e),
                                             'alba_asd_{0}'.format(disk.get('asd_id')), self.show_disks_in_monitoring)
                 else:
                     defectivedisks.append(disk.get('asd_id'))

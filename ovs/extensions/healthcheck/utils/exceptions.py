@@ -32,14 +32,30 @@ class CommandException(Exception):
     """
     pass
 
+
 class UnsupportedPlatformException(Exception):
     """
     Raised when an platform is not supported
     """
     pass
 
+
 class ScrubberException(Exception):
     """
     Raised when scrubber failed
+    """
+    pass
+
+
+class ConnectionFailedException(Exception):
+    """
+    Raised when a connection is failed
+    """
+    pass
+
+
+class DiskNotFoundException(Exception):
+    """
+    Raised when a ASD disk is not found
     """
     pass
