@@ -132,8 +132,10 @@ class AlbaHealthCheck:
                         abm_config = self.utility.get_config_file_path(abm_name, self.machine_id, 0)
 
                         # determine presets / backend
-                        presets_results = subprocess.Popen(['alba', 'list-presets', '--config', abm_config, '--to-json'],
-                                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                        with open(os.devnull, 'w') as devnull:
+                            presets_results = subprocess.check_output(['alba', 'list-presets', '--config', abm_config,
+                                                                       '--to-json'], stderr=devnull)
+
                         presets = json.loads(presets_results.communicate()[0])
 
                         for preset in presets['result']:
