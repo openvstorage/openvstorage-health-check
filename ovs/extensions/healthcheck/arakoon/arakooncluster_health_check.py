@@ -62,11 +62,7 @@ class ArakoonHealthCheck:
         @rtype: list
         """
 
-        if not self.utility.etcd:
-            aramex = ArakoonManagementEx()
-            arakoon_clusters = aramex.listClusters()
-        else:
-            arakoon_clusters = list(EtcdConfiguration.list('/ovs/{0}'.format(self.module)))
+        arakoon_clusters = list(EtcdConfiguration.list('/ovs/{0}'.format(self.module)))
 
         result = {}
         if len(arakoon_clusters) != 0:
@@ -75,12 +71,9 @@ class ArakoonHealthCheck:
                 # add node that is available for arakoon cluster
                 nodes_per_cluster_result = {}
 
-                if not self.utility.etcd:
-                    master_node_ids = aramex.getCluster(str(cluster)).listNodes()
-                else:
-                    ak = ArakoonClusterConfig(str(cluster))
-                    ak.load_config()
-                    master_node_ids = list((node.name for node in ak.nodes))
+                ak = ArakoonClusterConfig(str(cluster))
+                ak.load_config()
+                master_node_ids = list((node.name for node in ak.nodes))
 
                 for node_id in master_node_ids:
                     node_info = StorageRouterList.get_by_machine_id(node_id)
@@ -158,7 +151,6 @@ class ArakoonHealthCheck:
 
                 except Exception:
                     if tries == max_tries:
-                        print "Exception!"
                         arakoonunknown_list.append(cluster_name)
                         break
 

@@ -523,7 +523,7 @@ class OpenvStorageHealthCheck:
                                     'process_celery', False)
                 return False
             else:
-                self.LOGGER.success("Deep check finished successfully but did not find anything... :(",
+                self.LOGGER.success("Deep check finished successfully and did not find anything",
                                     'process_celery', False)
                 return True
 

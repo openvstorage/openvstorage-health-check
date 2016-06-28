@@ -20,22 +20,22 @@
 Alba Health Check Module
 """
 
-import subprocess
-import hashlib
-import time
-import uuid
-import json
 import os
-
-from etcd import EtcdConnectionFailed, EtcdKeyNotFound, EtcdException
-from ovs.extensions.healthcheck.utils.extension import Utils
-from ovs.extensions.healthcheck.utils.exceptions import ObjectNotFoundException, CommandException
-from ovs.dal.lists.albabackendlist import AlbaBackendList
-from ovs.log.healthcheck_logHandler import HCLogHandler
-from ovs.dal.lists.albanodelist import AlbaNodeList
-from ovs.dal.lists.servicelist import ServiceList
+import json
+import uuid
+import time
+import hashlib
+import subprocess
 from ovs.extensions.generic.system import System
+from ovs.dal.lists.servicelist import ServiceList
+from ovs.dal.lists.albanodelist import AlbaNodeList
+from ovs.log.healthcheck_logHandler import HCLogHandler
+from ovs.dal.lists.albabackendlist import AlbaBackendList
+from ovs.extensions.healthcheck.utils.extension import Utils
 from ovs.extensions.db.etcd.configuration import EtcdConfiguration
+from etcd import EtcdConnectionFailed, EtcdKeyNotFound, EtcdException
+from ovs.extensions.healthcheck.utils.exceptions import ObjectNotFoundException, CommandException
+from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 
 
 class AlbaHealthCheck:
@@ -325,7 +325,7 @@ class AlbaHealthCheck:
         Checks Alba as a whole
         """
 
-        self.LOGGER.info("Fetching all Available ALBA backends ...", 'checkAlba', False)
+        self.LOGGER.info("Checking available ALBA backends ...", 'check_alba', False)
         try:
             alba_backends = self._fetch_available_backends()
 
@@ -377,9 +377,8 @@ class AlbaHealthCheck:
 
             else:
                 self.LOGGER.skip("No backends found ...", 'alba_backends_found')
-            return None
-        except (EtcdKeyNotFound, EtcdConnectionFailed, EtcdConnectionFailed) as ex:
-            self.LOGGER.failure(ex, 'etcd_connection', False)
-        except Exception as e:
-            self.LOGGER.failure("One ore more Arakoon clusters cannot be reached due to error: {0}".format(e),
+        except (EtcdKeyNotFound, EtcdConnectionFailed, EtcdConnectionFailed) as e:
+            self.LOGGER.failure("Failed to connect to ETCD: {0}".format(e), 'etcd_connection', False)
+        except (ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult) as e:
+            self.LOGGER.failure("Seems like a arakoon has some problems: {0}".format(e),
                                 'arakoon_connected', False)
