@@ -917,41 +917,45 @@ class OpenvStorageHealthCheck:
                 
                 if vp.guid in self.machine_details.vpools_guids:
 
-                    haltedvolumes = []
-    
-                    self.LOGGER.info("Checking vPool '{0}': ".format(vp.name),
-                                     'checkVPOOL_{0}'.format(vp.name), False)
-    
-                    config_file = self.utility.get_config_file_path(vp.name, self.machine_id, 1, vp.guid)
-                    voldrv_client = src.LocalStorageRouterClient(config_file)
-    
                     try:
-                        voldrv_volume_list = voldrv_client.list_volumes()
-                    except ClusterNotReachableException:
-                        self.LOGGER.failure("Seems like the Volumedriver {0} is not running.".format(vp.name),
-                                            'halted_{0}'.format(vp.name))
-                        continue
-    
-                    for volume in voldrv_volume_list:
-                        # check if volume is halted, returns: 0 or 1
+                        haltedvolumes = []
+
+                        self.LOGGER.info("Checking vPool '{0}': ".format(vp.name),
+                                         'halted_title', False)
+
+                        config_file = self.utility.get_config_file_path(vp.name, self.machine_id, 1, vp.guid)
+                        voldrv_client = src.LocalStorageRouterClient(config_file)
+
                         try:
-                            if int(voldrv_client.info_volume(volume).halted):
-                                haltedvolumes.append(volume)
-                        except ObjectNotFoundException:
-                            # ignore ovsdb invalid entrees
-                            # model consistency will handle it.
+                            voldrv_volume_list = voldrv_client.list_volumes()
+                        except ClusterNotReachableException:
+                            self.LOGGER.failure("Seems like the Volumedriver {0} is not running.".format(vp.name),
+                                                'halted_{0}'.format(vp.name))
                             continue
-                        except MaxRedirectsExceededException:
-                            # this means the volume is not halted but detached or unreachable for the volumedriver
-                            haltedvolumes.append(volume)
-    
-                    # print all results
-                    if len(haltedvolumes) > 0:
-                        self.LOGGER.failure("Detected volumes that are HALTED in volumedriver in vPool '{0}': {1}"
-                                            .format(vp.name, ', '.join(haltedvolumes)), 'halted_{0}'.format(vp.name))
-                    else:
-                        self.LOGGER.success("No halted volumes detected in vPool '{0}'"
-                                            .format(vp.name), 'halted_{0}'.format(vp.name))
+
+                        for volume in voldrv_volume_list:
+                            # check if volume is halted, returns: 0 or 1
+                            try:
+                                if int(voldrv_client.info_volume(volume).halted):
+                                    haltedvolumes.append(volume)
+                            except ObjectNotFoundException:
+                                # ignore ovsdb invalid entrees
+                                # model consistency will handle it.
+                                continue
+                            except MaxRedirectsExceededException:
+                                # this means the volume is not halted but detached or unreachable for the volumedriver
+                                haltedvolumes.append(volume)
+
+                        # print all results
+                        if len(haltedvolumes) > 0:
+                            self.LOGGER.failure("Detected volumes that are HALTED in volumedriver in vPool '{0}': {1}"
+                                                .format(vp.name, ', '.join(haltedvolumes)), 'halted_{0}'.format(vp.name))
+                        else:
+                            self.LOGGER.success("No halted volumes detected in vPool '{0}'"
+                                                .format(vp.name), 'halted_{0}'.format(vp.name))
+                    except RuntimeError as e:
+                        self.LOGGER.failure("vPool '{0}' seems to have problems: {1}".format(vp.name, e),
+                                            'halted_{0}'.format(vp.name))
                 else:
                     self.LOGGER.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name), 'halted_{0}'.format(vp.name))
 
