@@ -59,8 +59,7 @@ class AlbaHealthCheck:
         self.temp_file_fetched_loc = "/tmp/ovs-hc-fetched.xml"  # fetched (from alba) file location
         self.temp_file_size = 1048576  # bytes
 
-    @staticmethod
-    def _fetch_available_backends():
+    def _fetch_available_backends(self):
         """
         Fetches the available alba backends
 
@@ -70,33 +69,38 @@ class AlbaHealthCheck:
         """
 
         result = []
-        for abl in AlbaBackendList.get_albabackends():
+        try:
+            for abl in AlbaBackendList.get_albabackends():
 
-            # check if backend would be available for vpool
-            for preset in abl.presets:
-                available = False
-                if preset.get('is_available'):
-                    available = True
-                elif len(abl.presets) == abl.presets.index(preset) + 1:
+                # check if backend would be available for vpool
+                for preset in abl.presets:
                     available = False
+                    if preset.get('is_available'):
+                        available = True
+                    elif len(abl.presets) == abl.presets.index(preset) + 1:
+                        available = False
 
-            # collect asd's connected to a backend
-            disks = []
-            for asd in abl.all_disks:
-                if abl.guid == asd.get('alba_backend_guid'):
-                    disks.append(asd)
+                # collect asd's connected to a backend
+                disks = []
+                for asd in abl.local_stack:
+                    if abl.guid == asd.get('alba_backend_guid'):
+                        disks.append(asd)
 
-            # create result
-            result.append({
-                    'name': abl.name,
-                    'alba_id': abl.alba_id,
-                    'is_available_for_vpool': available,
-                    'guid': abl.guid,
-                    'backend_guid': abl.backend_guid,
-                    'all_disks': disks
-                })
+                # create result
+                result.append({
+                        'name': abl.name,
+                        'alba_id': abl.alba_id,
+                        'is_available_for_vpool': available,
+                        'guid': abl.guid,
+                        'backend_guid': abl.backend_guid,
+                        'all_disks': disks
+                    })
 
-        return result
+                return result
+
+        except RuntimeError as e:
+                self.LOGGER.failure("Arakoon '{0}' seems to have problems: {1}".format(abl.name, e),
+                                    'arakoon_connected', False)
 
     def _check_if_proxies_work(self):
         """
@@ -312,13 +316,15 @@ class AlbaHealthCheck:
         """
 
         self.LOGGER.info("Fetching all Available ALBA backends ...", 'checkAlba', False)
-        try:
-            alba_backends = self._fetch_available_backends()
 
-            if len(alba_backends) != 0:
-                self.LOGGER.success("We found {0} backend(s)!".format(len(alba_backends)),
-                                    'alba_backends_found'.format(len(alba_backends)))
-                for backend in alba_backends:
+        alba_backends = self._fetch_available_backends()
+
+        if len(alba_backends) != 0:
+            self.LOGGER.success("We found {0} backend(s)!".format(len(alba_backends)),
+                                'alba_backends_found'.format(len(alba_backends)))
+            for backend in alba_backends:
+
+                try:
 
                     # check proxies, and recap for unattended
                     result_proxies = self._check_if_proxies_work()
@@ -361,9 +367,9 @@ class AlbaHealthCheck:
                                                                            len(defectivedisks)),
                                                 'alba_backend_{0}'.format(backend.get('name')))
 
-            else:
-                self.LOGGER.skip("No backends found ...", 'alba_backends_found')
-            return None
-        except Exception as e:
-            self.LOGGER.failure("One ore more Arakoon clusters cannot be reached due to error: {0}".format(e),
-                                'arakoon_connected', False)
+                except Exception as e:
+                    self.LOGGER.failure("One ore more Arakoon clusters cannot be reached due to error: {0}"
+                                        .format(e), 'arakoon_connected', False)
+
+        else:
+            self.LOGGER.skip("No backends found ...", 'alba_backends_found')
