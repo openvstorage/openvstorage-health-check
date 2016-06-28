@@ -238,8 +238,10 @@ class AlbaHealthCheck:
                             subprocess.call(['alba', 'delete-object', '--config', str(abm_config),
                                             str(namespace_key), str(object_key)],
                                             stdout=fnull, stderr=subprocess.STDOUT)
-                            subprocess.call(['rm', str(self.temp_file_loc)])
-                            subprocess.call(['rm', str(self.temp_file_fetched_loc)])
+                            subprocess.call(['rm', str(self.temp_file_loc)],
+                                            stdout=fnull, stderr=subprocess.STDOUT)
+                            subprocess.call(['rm', str(self.temp_file_fetched_loc)],
+                                            stdout=fnull, stderr=subprocess.STDOUT)
                     except subprocess.CalledProcessError:
                         amount_of_presets_not_working.append(sr.name)
                         self.LOGGER.failure("Proxy '{0}' has some problems ..."
