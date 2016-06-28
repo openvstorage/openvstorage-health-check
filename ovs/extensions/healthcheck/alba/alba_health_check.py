@@ -239,8 +239,8 @@ class AlbaHealthCheck:
                             subprocess.call(['rm', str(self.temp_file_loc)])
                             subprocess.call(['rm', str(self.temp_file_fetched_loc)])
                     except subprocess.CalledProcessError as e:
-                        self.LOGGER.info("Proxy '{0}' has some problems: {1}"
-                                         .format(sr.name, e), 'proxy_{0}'.format(sr.name))
+                        self.LOGGER.failure("Proxy '{0}' has some problems: {1}"
+                                            .format(sr.name, e), 'proxy_{0}'.format(sr.name))
 
         # for unattended
         return amount_of_presets_not_working
@@ -261,8 +261,7 @@ class AlbaHealthCheck:
         workingdisks = []
         defectivedisks = []
 
-        self.LOGGER.info("Checking seperate ASD's for backend '{0}' to see if they work ...".format(backend_name),
-                         'checkAsds', False)
+        self.LOGGER.info("Checking seperate ASD's for backend '{0}':".format(backend_name), 'check_asds', False)
 
         # check if disks are working
         if len(disks) != 0:
