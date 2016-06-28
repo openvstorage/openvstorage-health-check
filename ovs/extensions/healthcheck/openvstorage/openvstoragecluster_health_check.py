@@ -772,7 +772,7 @@ class OpenvStorageHealthCheck:
                             # working
                             self.LOGGER.success("Volumedriver of vPool '{0}' is working fine!".format(vp.name),
                                                 'volumedriver_{0}'.format(vp.name))
-                            self.utility.execute_bash_command("rm -f /mnt/{0}/{1}.raw".format(vp.name, name))
+                            self.utility.execute_bash_command("rm -f /mnt/{0}/ovs-healthcheck-test-*.raw".format(vp.name, name))
                         else:
                             # not working, file does not exists
                             self.LOGGER.failure("Volumedriver of vPool '{0}' seems to have problems"

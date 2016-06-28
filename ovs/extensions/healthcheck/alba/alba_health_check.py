@@ -27,12 +27,15 @@ import uuid
 import json
 import os
 
+from etcd import EtcdConnectionFailed, EtcdKeyNotFound, EtcdException
 from ovs.extensions.healthcheck.utils.extension import Utils
+from ovs.extensions.healthcheck.utils.exceptions import ObjectNotFoundException, CommandException
 from ovs.dal.lists.albabackendlist import AlbaBackendList
 from ovs.log.healthcheck_logHandler import HCLogHandler
 from ovs.dal.lists.albanodelist import AlbaNodeList
 from ovs.dal.lists.servicelist import ServiceList
 from ovs.extensions.generic.system import System
+from ovs.extensions.db.etcd.configuration import EtcdConfiguration
 
 
 class AlbaHealthCheck:
@@ -59,7 +62,8 @@ class AlbaHealthCheck:
         self.temp_file_fetched_loc = "/tmp/ovs-hc-fetched.xml"  # fetched (from alba) file location
         self.temp_file_size = 1048576  # bytes
 
-    def _fetch_available_backends(self):
+    @staticmethod
+    def _fetch_available_backends():
         """
         Fetches the available alba backends
 
@@ -69,43 +73,49 @@ class AlbaHealthCheck:
         """
 
         result = []
-        try:
-            for abl in AlbaBackendList.get_albabackends():
+        for abl in AlbaBackendList.get_albabackends():
 
-                # check if backend would be available for vpool
-                for preset in abl.presets:
+            # check if backend would be available for vpool
+            available = False
+            for preset in abl.presets:
+                available = False
+                if preset.get('is_available'):
+                    available = True
+                elif len(abl.presets) == abl.presets.index(preset) + 1:
                     available = False
-                    if preset.get('is_available'):
-                        available = True
-                    elif len(abl.presets) == abl.presets.index(preset) + 1:
-                        available = False
 
-                # collect asd's connected to a backend
-                disks = []
-                for asd in abl.local_stack:
-                    if abl.guid == asd.get('alba_backend_guid'):
-                        disks.append(asd)
+            # collect asd's connected to a backend
+            disks = []
+            for stack in abl.local_stack.values():
+                for osds in stack.values():
+                    node_id = osds.get('node_id')
+                    for asd in osds.get('asds').values():
+                        if abl.guid == asd.get('alba_backend_guid'):
+                            asd['node_id'] = node_id
+                            asd_id = asd.get('asd_id')
+                            try:
+                                asd['port'] = EtcdConfiguration.get('/ovs/alba/asds/{0}/config|port'
+                                                                    .format(asd_id))
+                                disks.append(asd)
+                            except (EtcdConnectionFailed, EtcdException, EtcdKeyNotFound) as ex:
+                                raise EtcdConnectionFailed(ex)
+            # create result
+            result.append({
+                    'name': abl.name,
+                    'alba_id': abl.alba_id,
+                    'is_available_for_vpool': available,
+                    'guid': abl.guid,
+                    'backend_guid': abl.backend_guid,
+                    'all_disks': disks
+                })
 
-                # create result
-                result.append({
-                        'name': abl.name,
-                        'alba_id': abl.alba_id,
-                        'is_available_for_vpool': available,
-                        'guid': abl.guid,
-                        'backend_guid': abl.backend_guid,
-                        'all_disks': disks
-                    })
-
-                return result
-
-        except RuntimeError as e:
-                self.LOGGER.failure("Arakoon '{0}' seems to have problems: {1}".format(abl.name, e),
-                                    'arakoon_connected', False)
+        return result
 
     def _check_if_proxies_work(self):
         """
         Checks if all Alba Proxies work on a local machine, it creates a namespace and tries to put and object
         """
+        ip = self.machine_details.ip
 
         amount_of_presets_not_working = []
 
@@ -119,7 +129,7 @@ class AlbaHealthCheck:
             if sr.storagerouter_guid == self.machine_details.guid:
                 if 'albaproxy_' in sr.name:
                     # determine what to what backend the proxy is connected
-                    abm_name = subprocess.check_output(['alba', 'proxy-client-cfg', '-h', '127.0.0.1', '-p',
+                    abm_name = subprocess.check_output(['alba', 'proxy-client-cfg', '-h', ip, '-p',
                                                         str(sr.ports[0])]).split()[3]
                     abm_config = self.utility.get_config_file_path(abm_name, self.machine_id, 0)
 
@@ -134,7 +144,7 @@ class AlbaHealthCheck:
                         object_key = 'ovs-healthcheck-obj-{0}'.format(str(uuid.uuid4()))
 
                         # try put namespace
-                        subprocess.call(['alba', 'proxy-create-namespace', '-h', '127.0.0.1', '-p', str(sr.ports[0]),
+                        subprocess.call(['alba', 'proxy-create-namespace', '-h', ip, '-p', str(sr.ports[0]),
                                         str(namespace_key), str(preset.get('name'))], stdout=fnull,
                                         stderr=subprocess.STDOUT)
 
@@ -163,7 +173,7 @@ class AlbaHealthCheck:
                                     fout.write(os.urandom(self.temp_file_size))
 
                                 # try to put object
-                                subprocess.call(['alba', 'proxy-upload-object', '-h', '127.0.0.1', '-p',
+                                subprocess.call(['alba', 'proxy-upload-object', '-h', ip, '-p',
                                                  str(sr.ports[0]), str(namespace_key), str(self.temp_file_loc),
                                                  str(object_key)], stdout=fnull, stderr=subprocess.STDOUT)
 
@@ -198,13 +208,13 @@ class AlbaHealthCheck:
 
                                 else:
                                     # creation of object failed
-                                    raise ValueError
+                                    raise ObjectNotFoundException(ValueError)
 
                             else:
                                 # creation of namespace failed
-                                raise ValueError
+                                raise ObjectNotFoundException(ValueError)
 
-                        except ValueError:
+                        except ObjectNotFoundException:
                             amount_of_presets_not_working.append(preset.get('name'))
 
                             if 'not found' in get_nam:
@@ -280,13 +290,13 @@ class AlbaHealthCheck:
                         try:
                             g = subprocess.check_output(['alba', 'asd-multi-get', '--long-id', disk.get('asd_id'), '-p',
                                                         str(disk.get('port')), '-h', ip_address, key])
-                        except Exception as e:
-                            raise Exception('Connection failed to disk ...')
+                        except Exception:
+                            raise CommandException(Exception('Connection failed to disk ...'))
 
                         # check if put/get is successfull
                         if 'None' in g:
                             # test failed!
-                            raise Exception(g)
+                            raise ObjectNotFoundException(Exception(g))
                         else:
                             # test successfull!
                             self.LOGGER.success("ASD test with DISK_ID '{0}' succeeded!".format(disk.get('asd_id')),
@@ -300,9 +310,9 @@ class AlbaHealthCheck:
                                                  str(disk.get('port')), '-h', ip_address, key])
                     else:
                         # disk is missing
-                        raise Exception('Disk is missing')
+                        raise ObjectNotFoundException(Exception('Disk is missing'))
 
-                except Exception as e:
+                except ObjectNotFoundException as e:
                     defectivedisks.append(disk.get('asd_id'))
                     self.LOGGER.failure("ASD test with DISK_ID '{0}' failed on NODE '{1}' with exception: {2}"
                                         .format(disk.get('asd_id'), ip_address, e),
@@ -316,15 +326,13 @@ class AlbaHealthCheck:
         """
 
         self.LOGGER.info("Fetching all Available ALBA backends ...", 'checkAlba', False)
+        try:
+            alba_backends = self._fetch_available_backends()
 
-        alba_backends = self._fetch_available_backends()
-
-        if len(alba_backends) != 0:
-            self.LOGGER.success("We found {0} backend(s)!".format(len(alba_backends)),
-                                'alba_backends_found'.format(len(alba_backends)))
-            for backend in alba_backends:
-
-                try:
+            if len(alba_backends) != 0:
+                self.LOGGER.success("We found {0} backend(s)!".format(len(alba_backends)),
+                                    'alba_backends_found'.format(len(alba_backends)))
+                for backend in alba_backends:
 
                     # check proxies, and recap for unattended
                     result_proxies = self._check_if_proxies_work()
@@ -367,9 +375,11 @@ class AlbaHealthCheck:
                                                                            len(defectivedisks)),
                                                 'alba_backend_{0}'.format(backend.get('name')))
 
-                except Exception as e:
-                    self.LOGGER.failure("One ore more Arakoon clusters cannot be reached due to error: {0}"
-                                        .format(e), 'arakoon_connected', False)
-
-        else:
-            self.LOGGER.skip("No backends found ...", 'alba_backends_found')
+            else:
+                self.LOGGER.skip("No backends found ...", 'alba_backends_found')
+            return None
+        except (EtcdKeyNotFound, EtcdConnectionFailed, EtcdConnectionFailed) as ex:
+            self.LOGGER.failure(ex, 'etcd_connection', False)
+        except Exception as e:
+            self.LOGGER.failure("One ore more Arakoon clusters cannot be reached due to error: {0}".format(e),
+                                'arakoon_connected', False)
