@@ -272,50 +272,51 @@ class AlbaHealthCheck:
                 key = 'ovs-healthcheck-{0}'.format(str(uuid.uuid4()))
                 value = str(time.time())
 
-                print disk.get('node_id')
+                if disk.get('status') != 'error':
+                    ip_address = AlbaNodeList.get_albanode_by_node_id(disk.get('node_id')).ip
+                    try:
+                        # check if disk is missing
+                        if disk.get('port'):
+                            # put object but ignore crap for a moment
+                            fnull = open(os.devnull, 'w')
+                            subprocess.call(['alba', 'asd-set', '--long-id', disk.get('asd_id'), '-p',
+                                             str(disk.get('port')), '-h', ip_address, key, value], stdout=fnull,
+                                            stderr=subprocess.STDOUT)
 
-                ip_address = AlbaNodeList.get_albanode_by_node_id(disk.get('node_id')).ip
+                            # get object
+                            try:
+                                g = subprocess.check_output(['alba', 'asd-multi-get', '--long-id', disk.get('asd_id'), '-p',
+                                                            str(disk.get('port')), '-h', ip_address, key])
+                            except Exception:
+                                raise CommandException(Exception('Connection failed to disk ...'))
 
+                            # check if put/get is successfull
+                            if 'None' in g:
+                                # test failed!
+                                raise ObjectNotFoundException(Exception(g))
+                            else:
+                                # test successfull!
+                                self.LOGGER.success("ASD test with DISK_ID '{0}' succeeded!".format(disk.get('asd_id')),
+                                                    'alba_asd_{0}'.format(disk.get('asd_id')),
+                                                    self.show_disks_in_monitoring)
 
-                try:
-                    # check if disk is missing
-                    if disk.get('port'):
-                        # put object but ignore crap for a moment
-                        fnull = open(os.devnull, 'w')
-                        subprocess.call(['alba', 'asd-set', '--long-id', disk.get('asd_id'), '-p',
-                                         str(disk.get('port')), '-h', ip_address, key, value], stdout=fnull,
-                                        stderr=subprocess.STDOUT)
+                                workingdisks.append(disk.get('asd_id'))
 
-                        # get object
-                        try:
-                            g = subprocess.check_output(['alba', 'asd-multi-get', '--long-id', disk.get('asd_id'), '-p',
-                                                        str(disk.get('port')), '-h', ip_address, key])
-                        except Exception:
-                            raise CommandException(Exception('Connection failed to disk ...'))
-
-                        # check if put/get is successfull
-                        if 'None' in g:
-                            # test failed!
-                            raise ObjectNotFoundException(Exception(g))
+                            # delete object
+                            subprocess.check_output(['alba', 'asd-delete', '--long-id', disk.get('asd_id'), '-p',
+                                                     str(disk.get('port')), '-h', ip_address, key])
                         else:
-                            # test successfull!
-                            self.LOGGER.success("ASD test with DISK_ID '{0}' succeeded!".format(disk.get('asd_id')),
-                                                'alba_asd_{0}'.format(disk.get('asd_id')),
-                                                self.show_disks_in_monitoring)
+                            # disk is missing
+                            raise ObjectNotFoundException(Exception('Disk is missing'))
 
-                            workingdisks.append(disk.get('asd_id'))
-
-                        # delete object
-                        subprocess.check_output(['alba', 'asd-delete', '--long-id', disk.get('asd_id'), '-p',
-                                                 str(disk.get('port')), '-h', ip_address, key])
-                    else:
-                        # disk is missing
-                        raise ObjectNotFoundException(Exception('Disk is missing'))
-
-                except ObjectNotFoundException as e:
-                    defectivedisks.append(disk.get('asd_id'))
-                    self.LOGGER.failure("ASD test with DISK_ID '{0}' failed on NODE '{1}' with exception: {2}"
-                                        .format(disk.get('asd_id'), ip_address, e),
+                    except ObjectNotFoundException as e:
+                        defectivedisks.append(disk.get('asd_id'))
+                        self.LOGGER.failure("ASD test with DISK_ID '{0}' failed on NODE '{1}' with exception: {2}"
+                                            .format(disk.get('asd_id'), ip_address, e),
+                                            'alba_asd_{0}'.format(disk.get('asd_id')), self.show_disks_in_monitoring)
+                else:
+                    self.LOGGER.failure("ASD test with DISK_ID '{0}' failed because: {1}"
+                                        .format(disk.get('asd_id'), disk.get('status_detail')),
                                         'alba_asd_{0}'.format(disk.get('asd_id')), self.show_disks_in_monitoring)
 
         return workingdisks, defectivedisks
