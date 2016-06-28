@@ -117,7 +117,6 @@ class AlbaHealthCheck:
         """
         amount_of_presets_not_working = []
         ip = self.machine_details.ip
-        self.LOGGER.info("Checking ALBA proxies: ", 'check_alba', False)
 
         # ignore possible subprocess output
         fnull = open(os.devnull, 'w')
@@ -126,6 +125,7 @@ class AlbaHealthCheck:
         for sr in ServiceList.get_services():
             if sr.storagerouter_guid == self.machine_details.guid:
                 if 'albaproxy_' in sr.name:
+                    self.LOGGER.info("Checking ALBA proxy '{0}': ".format(sr.name), 'check_alba', False)
                     try:
                         # determine what to what backend the proxy is connected
                         abm_name = subprocess.check_output(['alba', 'proxy-client-cfg', '-h', ip, '-p',
