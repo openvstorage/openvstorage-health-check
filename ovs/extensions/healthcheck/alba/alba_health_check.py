@@ -347,42 +347,46 @@ class AlbaHealthCheck:
                 self._check_if_proxies_work()
 
                 self.LOGGER.info("Checking the ALBA ASDs ...", 'check_alba_asds', False)
-                for backend in alba_backends:
+                if System.get_my_storagerouter().node_type != 'EXTRA':
+                    self.LOGGER.success("Start checking all the ASDs!", 'check_alba_asds')
+                    for backend in alba_backends:
 
-                    # check disks of backend, ignore global backends
-                    if backend.get('type') == 'LOCAL':
-                        result_disks = self._check_backend_asds(backend.get('all_disks'), backend.get('name'))
-                        workingdisks = result_disks[0]
-                        defectivedisks = result_disks[1]
+                        # check disks of backend, ignore global backends
+                        if backend.get('type') == 'LOCAL':
+                            result_disks = self._check_backend_asds(backend.get('all_disks'), backend.get('name'))
+                            workingdisks = result_disks[0]
+                            defectivedisks = result_disks[1]
 
-                        # check if backend is available for vPOOL attachment / use
-                        if backend.get('is_available_for_vpool'):
-                            if len(defectivedisks) == 0:
-                                self.LOGGER.success("Alba backend '{0}' should be AVAILABLE FOR vPOOL USE,"
-                                                    " ALL disks are working fine!".format(backend.get('name')),
-                                                    'alba_backend_{0}'.format(backend.get('name')))
+                            # check if backend is available for vPOOL attachment / use
+                            if backend.get('is_available_for_vpool'):
+                                if len(defectivedisks) == 0:
+                                    self.LOGGER.success("Alba backend '{0}' should be AVAILABLE FOR vPOOL USE,"
+                                                        " ALL disks are working fine!".format(backend.get('name')),
+                                                        'alba_backend_{0}'.format(backend.get('name')))
+                                else:
+                                    self.LOGGER.warning("Alba backend '{0}' should be AVAILABLE FOR vPOOL USE with {1} disks,"
+                                                        " BUT there are {2} defective disks: {3}".format(backend.get('name'),
+                                                                                                         len(workingdisks),
+                                                                                                         len(defectivedisks),
+                                                                                                         ', '.join(
+                                                                                                             defectivedisks)),
+                                                        'alba_backend_{0}'.format(backend.get('name'), len(defectivedisks)))
                             else:
-                                self.LOGGER.warning("Alba backend '{0}' should be AVAILABLE FOR vPOOL USE with {1} disks,"
-                                                    " BUT there are {2} defective disks: {3}".format(backend.get('name'),
-                                                                                                     len(workingdisks),
-                                                                                                     len(defectivedisks),
-                                                                                                     ', '.join(
-                                                                                                         defectivedisks)),
-                                                    'alba_backend_{0}'.format(backend.get('name'), len(defectivedisks)))
+                                if len(workingdisks) == 0 and len(defectivedisks) == 0:
+                                    self.LOGGER.skip("Alba backend '{0}' is NOT available for vPool use, there are no"
+                                                     " disks assigned to this backend!".format(backend.get('name')),
+                                                     'alba_backend_{0}'.format(backend.get('name')))
+                                else:
+                                    self.LOGGER.failure("Alba backend '{0}' is NOT available for vPool use, preset"
+                                                        " requirements NOT SATISFIED! There are {1} working disks AND {2}"
+                                                        " defective disks!".format(backend.get('name'), len(workingdisks),
+                                                                                   len(defectivedisks)),
+                                                        'alba_backend_{0}'.format(backend.get('name')))
                         else:
-                            if len(workingdisks) == 0 and len(defectivedisks) == 0:
-                                self.LOGGER.skip("Alba backend '{0}' is NOT available for vPool use, there are no"
-                                                 " disks assigned to this backend!".format(backend.get('name')),
-                                                 'alba_backend_{0}'.format(backend.get('name')))
-                            else:
-                                self.LOGGER.failure("Alba backend '{0}' is NOT available for vPool use, preset"
-                                                    " requirements NOT SATISFIED! There are {1} working disks AND {2}"
-                                                    " defective disks!".format(backend.get('name'), len(workingdisks),
-                                                                               len(defectivedisks)),
-                                                    'alba_backend_{0}'.format(backend.get('name')))
-                    else:
-                        self.LOGGER.skip("ALBA backend '{0}' is a 'global' backend ...".format(backend.get('name')),
-                                         'alba_backend_{0}'.format(backend.get('name')))
+                            self.LOGGER.skip("ALBA backend '{0}' is a 'global' backend ...".format(backend.get('name')),
+                                             'alba_backend_{0}'.format(backend.get('name')))
+                else:
+                    self.LOGGER.skip("Skipping ASD check because this is a EXTRA node ...", 'check_alba_asds')
             else:
                 self.LOGGER.skip("No backends found ...", 'alba_backends_found')
         except (EtcdKeyNotFound, EtcdConnectionFailed, EtcdConnectionFailed) as e:
