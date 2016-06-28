@@ -856,7 +856,7 @@ class OpenvStorageHealthCheck:
                 try:
                     voldrv_volume_list = voldrv_client.list_volumes()
                 except ClusterNotReachableException:
-                    self.LOGGER.failure("Seems like the Volumedriver {0} is not running.".format(vp.name),
+                    self.LOGGER.failure("Seems like the volumedriver '{0}' is not running.".format(vp.name),
                                         'discrepancies_ovsdb_{0}'.format(vp.name))
                     continue
     
