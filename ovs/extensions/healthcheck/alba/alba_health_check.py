@@ -328,15 +328,18 @@ class AlbaHealthCheck:
         Checks Alba as a whole
         """
 
-        self.LOGGER.info("Checking available ALBA backends ...", 'check_alba', False)
+        self.LOGGER.info("Checking available ALBA backends ...", 'check_alba_backends', False)
         try:
             alba_backends = self._fetch_available_backends()
             if len(alba_backends) != 0:
                 self.LOGGER.success("We found {0} backend(s)!".format(len(alba_backends)),
                                     'alba_backends_found'.format(len(alba_backends)))
+
+                self.LOGGER.info("Checking the ALBA proxies ...", 'check_alba_proxies', False)
+                self._check_if_proxies_work()
+
+                self.LOGGER.info("Checking the ALBA ASDs ...", 'check_alba_asds', False)
                 for backend in alba_backends:
-                    # check proxies, and recap for unattended
-                    self._check_if_proxies_work()
 
                     # check disks of backend
                     result_disks = self._check_backend_asds(backend.get('all_disks'), backend.get('name'))
