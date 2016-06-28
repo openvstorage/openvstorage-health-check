@@ -128,14 +128,15 @@ class AlbaHealthCheck:
                     self.LOGGER.info("Checking ALBA proxy '{0}': ".format(sr.name), 'check_alba', False)
                     try:
                         # determine what to what backend the proxy is connected
-                        abm_name = subprocess.Popen(['alba', 'proxy-client-cfg', '-h', ip, '-p', str(sr.ports[0])], stdout=subprocess.PIPE, stderr=subprocess.PIPE).split()[3]
+                        with open(os.devnull, 'w') as devnull:
+                            abm_name = subprocess.check_output(['alba', 'proxy-client-cfg', '-h', ip, '-p', str(sr.ports[0])], stderr=devnull).split()[3]
+
                         abm_config = self.utility.get_config_file_path(abm_name, self.machine_id, 0)
 
                         # determine presets / backend
-                        with open(os.devnull, 'w') as devnull:
-                            presets_results = subprocess.check_output(['alba', 'list-presets', '--config', abm_config,
-                                                                       '--to-json'], stderr=devnull)
-
+                        presets_results = subprocess.Popen(['alba', 'list-presets', '--config', abm_config,
+                                                            '--to-json'], stdout=subprocess.PIPE,
+                                                           stderr=subprocess.PIPE)
                         presets = json.loads(presets_results.communicate()[0])
 
                         for preset in presets['result']:
