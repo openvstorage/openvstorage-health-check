@@ -503,14 +503,14 @@ class OpenvStorageHealthCheck:
         Extended check of the Open vStorage workers; When the simple check fails, it will execute a full/deep check.
         """
 
-        self.LOGGER.info("Checking if OVS-WORKERS are running smoothly: ", 'check_ovs_workers', False)
+        self.LOGGER.info("Checking if OVS-WORKERS are running smoothly: ", 'process_celery', False)
 
         # checking celery
         try:
             # basic celery check
             self._check_celery()
             self.LOGGER.success("The OVS-WORKERS are working smoothly!", 'process_celery')
-        except TimeoutError, ex:
+        except TimeoutError as ex:
 
             # apparently the basic check failed, so we are going crazy
             self.LOGGER.failure(
@@ -520,11 +520,11 @@ class OpenvStorageHealthCheck:
             # commencing deep check
             if not self._extended_check_celery():
                 self.LOGGER.failure("Please verify the integrety of 'RabbitMQ' and 'ovs-workers'",
-                                    'CheckIntegrityOfWorkers', False)
+                                    'process_celery', False)
                 return False
             else:
                 self.LOGGER.success("Deep check finished successfully but did not find anything... :(",
-                                    'DeepCheckDidNotFindAnything', False)
+                                    'process_celery', False)
                 return True
 
     def check_required_dirs(self):
@@ -670,17 +670,16 @@ class OpenvStorageHealthCheck:
             self.LOGGER.failure("We DETECTED dead processes on this node: {0}".format(', '.join(dead_processes)),
                                 'process_dead')
 
-    def _check_filedriver(self, args1, vp_name, test_name):
+    @staticmethod
+    @timeout_decorator.timeout(5)
+    def _check_filedriver(vp_name, test_name):
         """
         Async method to checks if a FILEDRIVER works on a vpool
         Always try to check if the file exists after performing this method
 
-        @param args1: thread ID; use like this
-        `t = threading.Thread(target=self._check_filedriver, args=(1, vp.name, name))`
         @param vp_name: name of the vpool
         @param test_name: name of the test file (e.g. `ovs-healthcheck-MACHINE_ID`)
 
-        @type args1: int
         @type vp_name: str
         @type test_name: str
 
@@ -689,26 +688,19 @@ class OpenvStorageHealthCheck:
         @rtype: bool
         """
 
-        # this method is not meant to be executed in serial, it is meant to be executed in parallel as a thread
-        try:
-            self.utility.execute_bash_command("touch /mnt/{0}/{1}.xml".format(vp_name, test_name))
-            return True
-        except Exception as e:
-            self.LOGGER.debug("Filedriver_check on vPool '{0}' got exception: {1}".format(vp_name, e),
-                              'check_filedriver_{0}_thread_exception'.format(vp_name))
-            return False
+        return subprocess.check_output("touch /mnt/{0}/{1}.xml".format(vp_name, test_name),
+                                       stderr=subprocess.STDOUT, shell=True)
 
-    def _check_volumedriver(self, args1, vp_name, test_name):
+    @staticmethod
+    @timeout_decorator.timeout(5)
+    def _check_volumedriver(vp_name, test_name):
         """
         Async method to checks if a VOLUMEDRIVER works on a vpool
         Always try to check if the file exists after performing this method
 
-        @param args1: thread ID; use like this
-        `t = threading.Thread(target=self._check_volumedriver, args=(1, vp.name, name))`
         @param vp_name: name of the vpool
         @param test_name: name of the test file (e.g. `ovs-healthcheck-MACHINE_ID`)
 
-        @type args1: int
         @type vp_name: str
         @type test_name: str
 
@@ -717,53 +709,44 @@ class OpenvStorageHealthCheck:
         @rtype: bool
         """
 
-        # this method is not meant to be executed in serial, it is meant to be executed in parallel as a thread
-        try:
-            subprocess.check_output("truncate -s 10GB /mnt/{0}/{1}.raw".format(vp_name, test_name),
-                                    stderr=subprocess.STDOUT, shell=True)
-            return True
-        except Exception as e:
-            self.LOGGER.debug("Volumedriver_check on vPool '{0}' got exception: {1}".format(vp_name, e),
-                              'check_volumedriver_{0}_thread_exception'.format(vp_name))
-            return False
+        return subprocess.check_output("truncate -s 10GB /mnt/{0}/{1}.raw".format(vp_name, test_name),
+                                       stderr=subprocess.STDOUT, shell=True)
 
     def check_filedrivers(self):
         """
         Checks if the FILEDRIVERS work on a local machine (compatible with multiple vPools)
         """
 
-        self.LOGGER.info("Checking filedrivers: ", 'check_filedriver', False)
+        self.LOGGER.info("Checking filedrivers: ", 'filedriver', False)
 
         vpools = VPoolList.get_vpools()
 
         # perform tests
         if len(vpools) != 0:
-
             for vp in vpools:
-
                 name = "ovs-healthcheck-test-{0}".format(self.machine_id)
-
                 if vp.guid in self.machine_details.vpools_guids:
-
-                    # check filedriver
-                    t = threading.Thread(target=self._check_filedriver, args=(1, vp.name, name))
-                    t.daemon = True
-                    t.start()
-
-                    time.sleep(5)
-
-                    # if thread is still alive after x seconds or got exception, something is wrong
-                    if t.isAlive() or not os.path.exists("/mnt/{0}/{1}.xml".format(vp.name, name)):
-                        # not working
-                        self.LOGGER.failure("Filedriver for vPool '{0}' seems to have problems!".format(vp.name), 'filedriver_{0}'.format(vp.name))
-                    else:
-                        # working
-                        self.LOGGER.success("Filedriver for vPool '{0}' is working fine!".format(vp.name), 'filedriver_{0}'.format(vp.name))
-                        self.utility.execute_bash_command("rm -f /mnt/{0}/{1}.xml".format(vp.name, name))
+                    try:
+                        self._check_filedriver(vp.name, name)
+                        if os.path.exists("/mnt/{0}/{1}.xml".format(vp.name, name)):
+                            # working
+                            self.LOGGER.success("Filedriver for vPool '{0}' is working fine!".format(vp.name),
+                                                'filedriver_{0}'.format(vp.name))
+                            self.utility.execute_bash_command("rm -f /mnt/{0}/ovs-healthcheck-test-*.xml"
+                                                              .format(vp.name, name))
+                        else:
+                            # not working
+                            self.LOGGER.failure("Filedriver for vPool '{0}' seems to have problems!".format(vp.name),
+                                                'filedriver_{0}'.format(vp.name))
+                    except TimeoutError as e:
+                        # timeout occured, action took too long
+                        self.LOGGER.failure("Filedriver of vPool '{0}' seems to have problems: {0}"
+                                            .format(vp.name, e), 'filedriver_{0}'.format(vp.name))
                 else:
-                    self.LOGGER.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name), 'filedriver_{0}'.format(vp.name))
+                    self.LOGGER.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name),
+                                     'filedriver_{0}'.format(vp.name))
         else:
-            self.LOGGER.skip("No vPools found!", 'filedriver_nofound')
+            self.LOGGER.skip("No vPools found!", 'filedrivers_nofound')
 
     def check_volumedrivers(self):
         """
@@ -775,31 +758,30 @@ class OpenvStorageHealthCheck:
         vpools = VPoolList.get_vpools()
 
         if len(vpools) != 0:
-            # perform tests
             for vp in vpools:
-
                 name = "ovs-healthcheck-test-{0}".format(self.machine_id)
-
                 if vp.guid in self.machine_details.vpools_guids:
-                    # check volumedrivers
-                    t = threading.Thread(target=self._check_volumedriver, args=(1, vp.name, name))
-                    t.daemon = True
-                    t.start()
+                    try:
+                        self._check_volumedriver(vp.name, name)
 
-                    time.sleep(5)
+                        if os.path.exists("/mnt/{0}/{1}.raw".format(vp.name, name)):
+                            # working
+                            self.LOGGER.success("Volumedriver of vPool '{0}' is working fine!".format(vp.name),
+                                                'volumedriver_{0}'.format(vp.name))
+                            self.utility.execute_bash_command("rm -f /mnt/{0}/{1}.raw".format(vp.name, name))
+                        else:
+                            # not working, file does not exists
+                            self.LOGGER.failure("Volumedriver of vPool '{0}' seems to have problems"
+                                                .format(vp.name), 'volumedriver_{0}'.format(vp.name))
+                    except TimeoutError as e:
+                        # timeout occured, action took too long
+                        self.LOGGER.failure("Volumedriver of vPool '{0}' seems to have problems: {0}"
+                                            .format(vp.name, e), 'volumedriver_{0}'.format(vp.name))
 
-                    # if thread is still alive after x seconds or got exception, something is wrong
-                    if t.isAlive() or not os.path.exists("/mnt/{0}/{1}.raw".format(vp.name, name)):
-                        # not working
-                        self.LOGGER.failure("Volumedriver of vPool '{0}' seems to have problems".format(vp.name), 'volumedriver_{0}'.format(vp.name))
-                    else:
-                        # working
-                        self.LOGGER.success("Volumedriver of vPool '{0}' is working fine!".format(vp.name), 'volumedriver_{0}'.format(vp.name))
-                        self.utility.execute_bash_command("rm -f /mnt/{0}/{1}.raw".format(vp.name, name))
                 else:
                     self.LOGGER.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name), 'volumedriver_{0}'.format(vp.name))
         else:
-            self.LOGGER.skip("No vPools found!", 'volumedrivers')
+            self.LOGGER.skip("No vPools found!", 'volumedrivers_nofound')
 
     def check_model_consistency(self):
         """
