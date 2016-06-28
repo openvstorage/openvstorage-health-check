@@ -344,7 +344,7 @@ class AlbaHealthCheck:
                 for backend in alba_backends:
 
                     # check disks of backend, ignore global backends
-                    if backend.get('type') != 'LOCAL':
+                    if backend.get('type') == 'LOCAL':
                         result_disks = self._check_backend_asds(backend.get('all_disks'), backend.get('name'))
                         workingdisks = result_disks[0]
                         defectivedisks = result_disks[1]
