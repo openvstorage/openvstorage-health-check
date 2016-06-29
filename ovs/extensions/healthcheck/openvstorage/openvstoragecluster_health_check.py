@@ -41,8 +41,8 @@ from ovs.extensions.healthcheck.utils.extension import Utils
 from ovs.log.healthcheck_logHandler import HCLogHandler
 from timeout_decorator.timeout_decorator import TimeoutError
 import volumedriver.storagerouter.storagerouterclient as src
-from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException
-from volumedriver.storagerouter.storagerouterclient import MaxRedirectsExceededException
+from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, ObjectNotRegisteredException, \
+    MaxRedirectsExceededException
 
 
 class OpenvStorageHealthCheck:
@@ -928,13 +928,14 @@ class OpenvStorageHealthCheck:
                             try:
                                 if int(voldrv_client.info_volume(volume).halted):
                                     haltedvolumes.append(volume)
-                            except ObjectNotFoundException:
+                            except (ObjectNotFoundException, ObjectNotRegisteredException):
                                 # ignore ovsdb invalid entrees
                                 # model consistency will handle it.
                                 continue
                             except MaxRedirectsExceededException:
                                 # this means the volume is not halted but detached or unreachable for the volumedriver
                                 haltedvolumes.append(volume)
+
 
                         # print all results
                         if len(haltedvolumes) > 0:
