@@ -874,7 +874,7 @@ class OpenvStorageHealthCheck:
     
                 # display discrepancies for vPool
                 if len(missinginvolumedriver) != 0:
-                    self.LOGGER.failure("Detected volumes that are MISSING in volumedriver but ARE in ovsdb in vPool "
+                    self.LOGGER.warning("Detected volumes that are MISSING in volumedriver but ARE in ovsdb in vPool "
                                         "'{0}': {1}".format(vp.name, ', '.join(missinginvolumedriver)),
                                         'discrepancies_ovsdb_{0}'.format(vp.name))
                 else:
@@ -882,7 +882,8 @@ class OpenvStorageHealthCheck:
                                         'discrepancies_ovsdb_{0}'.format(vp.name))
     
                 if len(missinginmodel) != 0:
-                    self.LOGGER.failure("Detected volumes that are AVAILABLE in volumedriver but ARE NOT in ovsdb in vPool "
+                    self.LOGGER.warning("Detected volumes that are AVAILABLE in volumedriver "
+                                        "but ARE NOT in ovsdb in vPool "
                                         "'{0}': {1}".format(vp.name, ', '.join(missinginmodel)),
                                         'discrepancies_voldrv_{0}'.format(vp.name))
                 else:
