@@ -72,20 +72,17 @@ class OpenvStorageHealthCheck:
                                              "openvstorage-sdm", "openvstorage-webapps", "openvstorage-test",
                                              "alba", "volumedriver-base", "volumedriver-server", "nginx", "memcached",
                                              "rabbitmq-server", "qemu-kvm", "virtinst", "openvpn", "ntp",
-                                             "swiftstack-node"
-                                             ]
+                                             "swiftstack-node", "volumedriver-no-dedup-server", "libvirt0",
+                                             "python-libvirt", "omniorb-nameserver", "avahi-daemon", "avahi-utils"]
         # 1. key -> service name (string)
-        #
         # 2. value -> ports (list)
         self.req_side_ports = {'nginx': ['80', '443'], 'memcached': ['11211']}
 
         # 1. key -> absolute directory name (string)
-        #
         # 2. value -> rights in linux style format (string)
         self.req_map_rights = {'/tmp': '777', '/var/tmp': '777'}
 
         # 1. key -> absolute directory or log name (string)
-        #
         # 2. value -> required user and group (dict)
         self.req_map_owners = {'/var/log/syslog': {'user': 'syslog', 'group': 'adm'},
                                '/var/log/auth.log': {'user': 'syslog', 'group': 'adm'},
@@ -94,13 +91,11 @@ class OpenvStorageHealthCheck:
                                '/var/log/btmp': {'user': 'root', 'group': 'utmp'},
                                '/etc/gshadow': {'user': 'root', 'group': 'shadow'},
                                '/var/cache/man': {'user': 'man', 'group': 'root'},
-                               '/etc/shadow': {'user': 'root', 'group': 'shadow'}
-                               }
+                               '/etc/shadow': {'user': 'root', 'group': 'shadow'}}
 
         # 1. for dir required options: AS key -> prefix (string)
         #    AS value -> list, substring of prefix (string) , type -> string (dir)
         #    contains_nested -> Boolean (contains nested dirs and files)
-        #
         # 2. for file required options: type -> string (file)
         self.logging = {'/var/log/upstart': {'prefix': ['ovs', 'asd'], 'type': 'dir', 'contains_nested': False},
                         '/var/log/ovs': {'prefix': None, 'type': 'dir', 'contains_nested': True},
@@ -108,8 +103,7 @@ class OpenvStorageHealthCheck:
                         '/var/log/rabbitmq': {'prefix': None, 'type': 'dir', 'contains_nested': False},
                         '/var/log/nginx': {'prefix': None, 'type': 'dir', 'contains_nested': False},
                         '/var/log/arakoon': {'prefix': None, 'type': 'dir', 'contains_nested': True},
-                        '/var/log/memcached.log': {'type': 'file'}
-                        }
+                        '/var/log/memcached.log': {'type': 'file'}}
 
     def get_local_settings(self):
         """
@@ -222,32 +216,6 @@ class OpenvStorageHealthCheck:
         """
 
         return next(os.walk(pwd))[1]
-
-    def check_hypervisor_management_information(self):
-        """
-        Check if Open vStorage is connected to a certain Hypervisor management center (e.g. VMware vCenter or Openstack)
-        """
-
-        self.LOGGER.info("Checking if OVS is connected to any OpenStack or VMWare Management centers ...",
-                         'checkHypervisorManagementInformation', False)
-        management_centers = MgmtCenterList().get_mgmtcenters()
-
-        # get available openstack/vmware management centers
-        if len(management_centers) != 0:
-            for center in management_centers:
-
-                # get general management center information
-                self.LOGGER.success("OVS is connected to: {0}".format(center.type),
-                                    'manc_ovs_connected'.format(center.type), False)
-                self.LOGGER.success("Name: {0}".format(center.name),
-                                    'manc_name_{0}'.format(center.name), False)
-                self.LOGGER.success("IP-address: {0}:{1}".format(center.ip, center.port),
-                                    'manc_ip_{0}_{1}'.format(center.ip, center.port), False)
-                self.LOGGER.success("user: {0}".format(center.username),
-                                    'manc_user_{0}'.format(center.username), False)
-
-        else:
-            self.LOGGER.skip("No OpenStack/VMWare management center connected!", 'manc_ovs_connected')
 
     @staticmethod
     def _fetch_compute_node_details_by_ip(node_ip):
@@ -772,7 +740,8 @@ class OpenvStorageHealthCheck:
                             # working
                             self.LOGGER.success("Volumedriver of vPool '{0}' is working fine!".format(vp.name),
                                                 'volumedriver_{0}'.format(vp.name))
-                            self.utility.execute_bash_command("rm -f /mnt/{0}/ovs-healthcheck-test-*.raw".format(vp.name, name))
+                            self.utility.execute_bash_command("rm -f /mnt/{0}/ovs-healthcheck-test-*.raw"
+                                                              .format(vp.name, name))
                         else:
                             # not working, file does not exists
                             self.LOGGER.failure("Volumedriver of vPool '{0}' seems to have problems"
@@ -787,7 +756,8 @@ class OpenvStorageHealthCheck:
                                             .format(vp.name, e), 'volumedriver_{0}'.format(vp.name))
 
                 else:
-                    self.LOGGER.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name), 'volumedriver_{0}'.format(vp.name))
+                    self.LOGGER.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name),
+                                     'volumedriver_{0}'.format(vp.name))
         else:
             self.LOGGER.skip("No vPools found!", 'volumedrivers_nofound')
 
@@ -939,8 +909,9 @@ class OpenvStorageHealthCheck:
 
                         # print all results
                         if len(haltedvolumes) > 0:
-                            self.LOGGER.failure("Detected volumes that are HALTED in volumedriver in vPool '{0}': {1}"
-                                                .format(vp.name, ', '.join(haltedvolumes)), 'halted_{0}'.format(vp.name))
+                            self.LOGGER.failure("Detected volumes that are HALTED in vPool '{0}': {1}"
+                                                .format(vp.name, ', '.join(haltedvolumes)), 'halted_{0}'
+                                                .format(vp.name))
                         else:
                             self.LOGGER.success("No halted volumes detected in vPool '{0}'"
                                                 .format(vp.name), 'halted_{0}'.format(vp.name))
@@ -948,7 +919,8 @@ class OpenvStorageHealthCheck:
                         self.LOGGER.failure("vPool '{0}' seems to have problems: {1}".format(vp.name, e),
                                             'halted_{0}'.format(vp.name))
                 else:
-                    self.LOGGER.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name), 'halted_{0}'.format(vp.name))
+                    self.LOGGER.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name),
+                                     'halted_{0}'.format(vp.name))
 
         else:
             self.LOGGER.skip("No vPools found!".format(len(vpools)), 'halted_nofound')

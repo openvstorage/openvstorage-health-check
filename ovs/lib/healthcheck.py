@@ -173,9 +173,6 @@ class HealthCheckController:
         ovs.check_required_dirs()
         if not unattended and not silent_mode:
             print ""
-        ovs.check_hypervisor_management_information()
-        if not unattended and not silent_mode:
-            print ""
         ovs.check_size_of_log_files()
         if not unattended and not silent_mode:
             print ""
