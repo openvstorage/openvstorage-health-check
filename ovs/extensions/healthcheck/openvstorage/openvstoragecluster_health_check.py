@@ -74,7 +74,7 @@ class OpenvStorageHealthCheck:
                                              "rabbitmq-server", "qemu-kvm", "virtinst", "openvpn", "ntp",
                                              "swiftstack-node", "volumedriver-no-dedup-server", "libvirt0",
                                              "python-libvirt", "omniorb-nameserver", "avahi-daemon", "avahi-utils",
-                                             "libovsvolumedriver", "qemu", "libvirt-bin"]
+                                             "libovsvolumedriver", "qemu", "libvirt-bin", "blktap-openvstorage-utils"]
         # 1. key -> service name (string)
         # 2. value -> ports (list)
         self.req_side_ports = {'nginx': ['80', '443'], 'memcached': ['11211']}
