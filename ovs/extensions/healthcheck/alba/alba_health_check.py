@@ -116,7 +116,10 @@ class AlbaHealthCheck:
                 self.LOGGER.failure("Error during fetch of alba backend '{0}': {1}".format(abl.name, e), 'check_alba',
                                     False)
 
+        # give a precheck result for fetching the backend data
         if errors_found == 0:
+            self.LOGGER.success("No problems occured when fetching alba backends!", 'fetch_alba_backends')
+        else:
             self.LOGGER.failure("Error during fetch of alba backend '{0}': {1}".format(abl.name, e),
                                 'fetch_alba_backends')
 
@@ -318,16 +321,20 @@ class AlbaHealthCheck:
                                 workingdisks.append(disk.get('asd_id'))
 
                             # delete object
-                            subprocess.check_output(['alba', 'asd-delete', '--long-id', disk.get('asd_id'), '-p',
-                                                     str(disk.get('port')), '-h', ip_address, key])
+                            try:
+                                with open(os.devnull, 'w') as devnull:
+                                    subprocess.check_output(['alba', 'asd-delete', '--long-id', disk.get('asd_id'), '-p',
+                                                             str(disk.get('port')), '-h', ip_address, key], stderr=devnull)
+                            except subprocess.CalledProcessError:
+                                raise ConnectionFailedException('Connection failed to disk when trying to delete!')
                         else:
                             # disk is missing
                             raise DiskNotFoundException('Disk is missing')
 
                     except ObjectNotFoundException as e:
                         defectivedisks.append(disk.get('asd_id'))
-                        self.LOGGER.failure("ASD test with DISK_ID '{0}' failed on NODE '{1}' with exception: {2}"
-                                            .format(disk.get('asd_id'), ip_address, e),
+                        self.LOGGER.failure("ASD test with DISK_ID '{0}' failed on NODE '{1}'!"
+                                            .format(disk.get('asd_id'), ip_address),
                                             'alba_asd_{0}'.format(disk.get('asd_id')), self.show_disks_in_monitoring)
                     except (ConnectionFailedException, DiskNotFoundException) as e:
                         defectivedisks.append(disk.get('asd_id'))
