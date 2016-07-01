@@ -63,8 +63,7 @@ class AlbaHealthCheck:
         self.temp_file_fetched_loc = "/tmp/ovs-hc-fetched.xml"  # fetched (from alba) file location
         self.temp_file_size = 1048576  # bytes
 
-    @staticmethod
-    def _fetch_available_backends():
+    def _fetch_available_backends(self):
         """
         Fetches the available alba backends
 
@@ -77,39 +76,42 @@ class AlbaHealthCheck:
         for abl in AlbaBackendList.get_albabackends():
 
             # check if backend would be available for vpool
-            available = False
-            for preset in abl.presets:
+            try:
                 available = False
-                if preset.get('is_available'):
-                    available = True
-                elif len(abl.presets) == abl.presets.index(preset) + 1:
+                for preset in abl.presets:
                     available = False
+                    if preset.get('is_available'):
+                        available = True
+                    elif len(abl.presets) == abl.presets.index(preset) + 1:
+                        available = False
 
-            # collect asd's connected to a backend
-            disks = []
-            for stack in abl.local_stack.values():
-                for osds in stack.values():
-                    node_id = osds.get('node_id')
-                    for asd in osds.get('asds').values():
-                        if abl.guid == asd.get('alba_backend_guid'):
-                            asd['node_id'] = node_id
-                            asd_id = asd.get('asd_id')
-                            try:
-                                asd['port'] = EtcdConfiguration.get('/ovs/alba/asds/{0}/config|port'
-                                                                    .format(asd_id))
-                                disks.append(asd)
-                            except (EtcdConnectionFailed, EtcdException, EtcdKeyNotFound) as ex:
-                                raise EtcdConnectionFailed(ex)
-            # create result
-            result.append({
-                    'name': abl.name,
-                    'alba_id': abl.alba_id,
-                    'is_available_for_vpool': available,
-                    'guid': abl.guid,
-                    'backend_guid': abl.backend_guid,
-                    'all_disks': disks,
-                    'type': abl.scaling
-                })
+                # collect asd's connected to a backend
+                disks = []
+                for stack in abl.local_stack.values():
+                    for osds in stack.values():
+                        node_id = osds.get('node_id')
+                        for asd in osds.get('asds').values():
+                            if abl.guid == asd.get('alba_backend_guid'):
+                                asd['node_id'] = node_id
+                                asd_id = asd.get('asd_id')
+                                try:
+                                    asd['port'] = EtcdConfiguration.get('/ovs/alba/asds/{0}/config|port'
+                                                                        .format(asd_id))
+                                    disks.append(asd)
+                                except (EtcdConnectionFailed, EtcdException, EtcdKeyNotFound) as ex:
+                                    raise EtcdConnectionFailed(ex)
+                # create result
+                result.append({
+                        'name': abl.name,
+                        'alba_id': abl.alba_id,
+                        'is_available_for_vpool': available,
+                        'guid': abl.guid,
+                        'backend_guid': abl.backend_guid,
+                        'all_disks': disks,
+                        'type': abl.scaling
+                    })
+            except RuntimeError as e:
+                self.LOGGER.failure("Error during fetch of alba backend data: {0}".format(e), 'check_alba', False)
 
         return result
 
