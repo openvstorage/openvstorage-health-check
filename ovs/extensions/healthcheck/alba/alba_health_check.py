@@ -73,6 +73,7 @@ class AlbaHealthCheck:
         """
 
         result = []
+        errors_found = 0
         for abl in AlbaBackendList.get_albabackends():
 
             # check if backend would be available for vpool
@@ -111,7 +112,13 @@ class AlbaHealthCheck:
                         'type': abl.scaling
                     })
             except RuntimeError as e:
-                self.LOGGER.failure("Error during fetch of alba backend data: {0}".format(e), 'check_alba', False)
+                errors_found += 1
+                self.LOGGER.failure("Error during fetch of alba backend '{0}': {1}".format(abl.name, e), 'check_alba',
+                                    False)
+
+        if errors_found == 0:
+            self.LOGGER.failure("Error during fetch of alba backend '{0}': {1}".format(abl.name, e),
+                                'fetch_alba_backends')
 
         return result
 
@@ -284,15 +291,17 @@ class AlbaHealthCheck:
                         # check if disk is missing
                         if disk.get('port'):
                             # put object but ignore crap for a moment
-                            fnull = open(os.devnull, 'w')
-                            subprocess.call(['alba', 'asd-set', '--long-id', disk.get('asd_id'), '-p',
-                                             str(disk.get('port')), '-h', ip_address, key, value], stdout=fnull,
-                                            stderr=subprocess.STDOUT)
+                            with open(os.devnull, 'w') as devnull:
+                                subprocess.call(['alba', 'asd-set', '--long-id', disk.get('asd_id'), '-p',
+                                                 str(disk.get('port')), '-h', ip_address, key, value], stdout=devnull,
+                                                stderr=subprocess.STDOUT)
 
                             # get object
                             try:
-                                g = subprocess.check_output(['alba', 'asd-multi-get', '--long-id', disk.get('asd_id'),
-                                                             '-p', str(disk.get('port')), '-h', ip_address, key])
+                                with open(os.devnull, 'w') as devnull:
+                                    g = subprocess.check_output(['alba', 'asd-multi-get', '--long-id', disk.get('asd_id'),
+                                                                 '-p', str(disk.get('port')), '-h', ip_address, key],
+                                                                stderr=devnull)
                             except Exception:
                                 raise ConnectionFailedException('Connection failed to disk')
 
