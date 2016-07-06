@@ -150,9 +150,6 @@ class ArakoonHealthCheck:
 
         self.LOGGER.info("Checking PORT CONNECTIONS of arakoon nodes ...", 'check_required_ports_arakoon', False)
 
-        # check ports for OVS services
-        self.LOGGER.info("Checking OVS services ...", 'checkArakoonServicesPorts', False)
-
         for arakoon_cluster in EtcdConfiguration.list('/ovs/arakoon'):
             e = EtcdConfiguration.get('/ovs/arakoon/{0}/config'.format(arakoon_cluster), raw=True)
             config = ConfigParser.RawConfigParser()
@@ -160,9 +157,9 @@ class ArakoonHealthCheck:
 
             for section in config.sections():
                 if section != "global":
-                    self._is_port_listening("{0}_{1}"
+                    self._is_port_listening("{0} - {1}"
                                             .format(arakoon_cluster, section), config.get(section, 'client_port'))
-                    self._is_port_listening("{0}_{1}"
+                    self._is_port_listening("{0} - {1}"
                                             .format(arakoon_cluster, section), config.get(section, 'messaging_port'))
 
     def _verify_integrity(self, arakoon_overview):
