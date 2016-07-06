@@ -643,7 +643,7 @@ class OpenvStorageHealthCheck:
     @timeout_decorator.timeout(5)
     def _check_filedriver(vp_name, test_name):
         """
-        Async method to checks if a FILEDRIVER works on a vpool
+        Async method to checks if a FILEDRIVER `touch` works on a vpool
         Always try to check if the file exists after performing this method
 
         @param vp_name: name of the vpool
@@ -662,9 +662,28 @@ class OpenvStorageHealthCheck:
 
     @staticmethod
     @timeout_decorator.timeout(5)
+    def _check_filedriver_remove(vp_name):
+        """
+        Async method to checks if a FILEDRIVER `remove` works on a vpool
+        Always try to check if the file exists after performing this method
+
+        @param vp_name: name of the vpool
+
+        @type vp_name: str
+
+        @return: True if succeeded, False if failed
+
+        @rtype: bool
+        """
+
+        return subprocess.check_output("rm -f /mnt/{0}/ovs-healthcheck-test-*.xml".format(vp_name),
+                                       stderr=subprocess.STDOUT, shell=True)
+
+    @staticmethod
+    @timeout_decorator.timeout(5)
     def _check_volumedriver(vp_name, test_name):
         """
-        Async method to checks if a VOLUMEDRIVER works on a vpool
+        Async method to checks if a VOLUMEDRIVER `truncate` works on a vpool
         Always try to check if the file exists after performing this method
 
         @param vp_name: name of the vpool
@@ -679,6 +698,25 @@ class OpenvStorageHealthCheck:
         """
 
         return subprocess.check_output("truncate -s 10GB /mnt/{0}/{1}.raw".format(vp_name, test_name),
+                                       stderr=subprocess.STDOUT, shell=True)
+
+    @staticmethod
+    @timeout_decorator.timeout(5)
+    def _check_volumedriver_remove(vp_name):
+        """
+        Async method to checks if a VOLUMEDRIVER `remove` works on a vpool
+        Always try to check if the file exists after performing this method
+
+        @param vp_name: name of the vpool
+
+        @type vp_name: str
+
+        @return: True if succeeded, False if failed
+
+        @rtype: bool
+        """
+
+        return subprocess.check_output("rm -f /mnt/{0}/ovs-healthcheck-test-*.raw".format(vp_name),
                                        stderr=subprocess.STDOUT, shell=True)
 
     def check_filedrivers(self):
@@ -701,8 +739,7 @@ class OpenvStorageHealthCheck:
                             # working
                             self.LOGGER.success("Filedriver for vPool '{0}' is working fine!".format(vp.name),
                                                 'filedriver_{0}'.format(vp.name))
-                            self.utility.execute_bash_command("rm -f /mnt/{0}/ovs-healthcheck-test-*.xml"
-                                                              .format(vp.name, name))
+                            self._check_filedriver_remove(vp.name)
                         else:
                             # not working
                             self.LOGGER.failure("Filedriver for vPool '{0}' seems to have problems!".format(vp.name),
@@ -741,8 +778,7 @@ class OpenvStorageHealthCheck:
                             # working
                             self.LOGGER.success("Volumedriver of vPool '{0}' is working fine!".format(vp.name),
                                                 'volumedriver_{0}'.format(vp.name))
-                            self.utility.execute_bash_command("rm -f /mnt/{0}/ovs-healthcheck-test-*.raw"
-                                                              .format(vp.name, name))
+                            self._check_volumedriver_remove(vp.name)
                         else:
                             # not working, file does not exists
                             self.LOGGER.failure("Volumedriver of vPool '{0}' seems to have problems"
