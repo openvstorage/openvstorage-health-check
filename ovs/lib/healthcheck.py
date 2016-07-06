@@ -204,6 +204,9 @@ class HealthCheckController:
 
         arakoon = ArakoonHealthCheck(LOGGER)
 
+        arakoon.check_required_ports()
+        if not unattended and not silent_mode:
+            print ""
         arakoon.check_arakoons()
         if not unattended and not silent_mode:
             print ""

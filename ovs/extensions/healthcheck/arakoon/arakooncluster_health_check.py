@@ -22,17 +22,16 @@ Arakoon Health Check module
 
 import time
 import uuid
+import socket
+import ConfigParser
+from StringIO import StringIO
+from ovs.log.healthcheck_logHandler import HCLogHandler
+from ovs.extensions.healthcheck.utils.extension import Utils
 from ovs.dal.lists.storagerouterlist import StorageRouterList
+from ovs.extensions.db.etcd.configuration import EtcdConfiguration
 from ovs.extensions.storage.persistent.pyrakoonstore import PyrakoonStore
 from ovs.extensions.db.arakoon.ArakoonInstaller import ArakoonClusterConfig
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
-from ovs.extensions.healthcheck.utils.extension import Utils
-from ovs.log.healthcheck_logHandler import HCLogHandler
-
-try:
-    from ovs.extensions.db.etcd.configuration import EtcdConfiguration
-except ImportError:
-    pass
 
 
 class ArakoonHealthCheck:
@@ -95,6 +94,73 @@ class ArakoonHealthCheck:
             self.LOGGER.warning("No installed arakoon clusters detected on this system ...",
                                 'arakoon_no_clusters_found', False)
             return None
+
+    def _check_port_connection(self, port_number):
+        """
+        Checks the port connection on a IP address
+
+        @param port_number: Port number of a service that is running on the local machine. (Public or loopback)
+
+        @type port_number: int
+
+        @return: True if the port is available; False if the port is NOT available
+
+        @rtype: bool
+        """
+
+        # check if port is open
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        result = sock.connect_ex((self.machine_details.ip, int(port_number)))
+        if result == 0:
+            return True
+        else:
+            # double check because some services run on localhost
+            result = sock.connect_ex(('127.0.0.1', int(port_number)))
+            if result == 0:
+                return True
+            else:
+                return False
+
+    def _is_port_listening(self, process_name, port):
+        """
+        Checks the port connection of a process
+
+        @param process_name: name of a certain process running on this local machine
+        @param port: port where the service is running on
+
+        @type process_name: str
+        @type port: int
+        """
+
+        self.LOGGER.info("Checking port {0} of service {1} ...".format(port, process_name), '_is_port_listening', False)
+        if self._check_port_connection(port):
+            self.LOGGER.success("Connection successfully established!",
+                                'port_{0}_{1}'.format(process_name, port))
+        else:
+            self.LOGGER.failure("Connection FAILED to service '{1}' on port {0}".format(port, process_name),
+                                'port_{0}_{1}'.format(process_name, port))
+
+    def check_required_ports(self):
+        """
+        Checks all ports of Arakoon nodes (client & server)
+        """
+
+        self.LOGGER.info("Checking PORT CONNECTIONS of arakoon nodes ...", 'check_required_ports_arakoon', False)
+
+        # check ports for OVS services
+        self.LOGGER.info("Checking OVS services ...", 'checkArakoonServicesPorts', False)
+
+        for arakoon_cluster in EtcdConfiguration.list('/ovs/arakoon'):
+            e = EtcdConfiguration.get('/ovs/arakoon/{0}/config'.format(arakoon_cluster), raw=True)
+            config = ConfigParser.RawConfigParser()
+            config.readfp(StringIO(e))
+
+            for section in config.sections():
+                if section != "global":
+                    self._is_port_listening("{0}_{1}"
+                                            .format(arakoon_cluster, section), config.get(section, 'client_port'))
+                    self._is_port_listening("{0}_{1}"
+                                            .format(arakoon_cluster, section), config.get(section, 'messaging_port'))
 
     def _verify_integrity(self, arakoon_overview):
         """
@@ -165,53 +231,47 @@ class ArakoonHealthCheck:
         """
 
         self.LOGGER.info("Fetching available arakoon clusters: ", 'checkArakoons', False)
-        try:
-            arakoon_overview = self.fetch_available_clusters()
+        arakoon_overview = self.fetch_available_clusters()
 
-            # fetch overview of arakoon clusters on local node
-            if arakoon_overview:
-                self.LOGGER.success("{0} available Arakoons successfully fetched, starting verification of clusters ..."
-                                    .format(len(arakoon_overview)),
-                                    'arakoon_amount_on_cluster {0}'.format(len(arakoon_overview)), False)
+        if arakoon_overview:
+            self.LOGGER.success("{0} available Arakoons successfully fetched, starting verification of clusters ..."
+                                .format(len(arakoon_overview)),
+                                'arakoon_found')
 
-                ver_result = self._verify_integrity(arakoon_overview)
-                if len(ver_result[0]) == len(arakoon_overview):
-                    self.LOGGER.success("ALL available Arakoon(s) their integrity are/is OK! ",
-                                        'arakoon_integrity')
-                else:
-                    # less output for unattended_mode
-                    if not self.LOGGER.unattended_mode:
-                        # check amount OK arakoons
-                        if len(ver_result[0]) > 0:
-                            self.LOGGER.success(
-                                "{0} Arakoon(s) is/are OK!: {1}".format(len(ver_result[0]), ', '.join(ver_result[0])),
-                                'arakoon_some_up', False)
-                        # check amount NO-MASTER arakoons
-                        if len(ver_result[1]) > 0:
-                            self.LOGGER.failure("{0} Arakoon(s) cannot find a MASTER: {1}".format(len(ver_result[1]),
-                                                ', '.join(ver_result[1])),
-                                                'arakoon_no_master_exception'.format(len(ver_result[1])))
-
-                        # check amount DOWN arakoons
-                        if len(ver_result[2]) > 0:
-                            self.LOGGER.failure("{0} Arakoon(s) seem(s) to be DOWN!: {1}".format(len(ver_result[2]),
-                                                ', '.join(ver_result[2])),
-                                                'arakoon_down_exception'.format(len(ver_result[2])))
-
-                        # check amount UNKNOWN_ERRORS arakoons
-                        if len(ver_result[3]) > 0:
-                            self.LOGGER.failure("{0} Arakoon(s) seem(s) to have UNKNOWN ERRORS, please check the logs @"
-                                                " '/var/log/ovs/arakoon.log' or"
-                                                " '/var/log/upstart/ovs-arakoon-*.log': {1}".format(len(ver_result[3]),
-                                                                                                    ', '.join(
-                                                                                                        ver_result[3])),
-                                                'arakoon_unknown_exception')
-                    else:
-                        self.LOGGER.failure("Some Arakoon(s) have problems, please check this!",
-                                            'arakoon_integrity')
+            ver_result = self._verify_integrity(arakoon_overview)
+            if len(ver_result[0]) == len(arakoon_overview):
+                self.LOGGER.success("ALL available Arakoon(s) their integrity are/is OK! ",
+                                    'arakoon_integrity')
             else:
-                self.LOGGER.skip("No clusters found on this node, so stopping arakoon checks ...",
-                                 'arakoon_integrity')
-        except Exception as e:
-            self.LOGGER.exception("One ore more Arakoon clusters cannot be reached :(, due to: {0}".format(e),
-                                  'arakoon_integrity')
+                # less output for unattended_mode
+                if not self.LOGGER.unattended_mode:
+                    # check amount OK arakoons
+                    if len(ver_result[0]) > 0:
+                        self.LOGGER.success(
+                            "{0} Arakoon(s) is/are OK!: {1}".format(len(ver_result[0]), ', '.join(ver_result[0])),
+                            'arakoon_some_up', False)
+                    # check amount NO-MASTER arakoons
+                    if len(ver_result[1]) > 0:
+                        self.LOGGER.failure("{0} Arakoon(s) cannot find a MASTER: {1}".format(len(ver_result[1]),
+                                            ', '.join(ver_result[1])),
+                                            'arakoon_no_master_exception'.format(len(ver_result[1])))
+
+                    # check amount DOWN arakoons
+                    if len(ver_result[2]) > 0:
+                        self.LOGGER.failure("{0} Arakoon(s) seem(s) to be DOWN!: {1}".format(len(ver_result[2]),
+                                            ', '.join(ver_result[2])),
+                                            'arakoon_down_exception'.format(len(ver_result[2])))
+
+                    # check amount UNKNOWN_ERRORS arakoons
+                    if len(ver_result[3]) > 0:
+                        self.LOGGER.failure("{0} Arakoon(s) seem(s) to have UNKNOWN ERRORS, please check the logs @"
+                                            " '/var/log/ovs/arakoon.log' or"
+                                            " '/var/log/upstart/ovs-arakoon-*.log': {1}".format(len(ver_result[3]),
+                                                                                                ', '.join(
+                                                                                                    ver_result[3])),
+                                            'arakoon_unknown_exception')
+                else:
+                    self.LOGGER.failure("Some Arakoon(s) have problems, please check this!",
+                                        'arakoon_integrity')
+        else:
+            self.LOGGER.skip("No clusters found", 'arakoon_found')

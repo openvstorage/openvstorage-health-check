@@ -300,7 +300,7 @@ class OpenvStorageHealthCheck:
         Checks all ports of Open vStorage components (framework, memcached, nginx, rabbitMQ and celery)
         """
 
-        self.LOGGER.info("Checking PORT CONNECTIONS of several services ...", 'check_required_ports', False)
+        self.LOGGER.info("Checking PORT CONNECTIONS of OVS services ...", 'check_required_ports_ovs', False)
 
         # check ports for OVS services
         self.LOGGER.info("Checking OVS services ...", 'checkOvsServicesPorts', False)
