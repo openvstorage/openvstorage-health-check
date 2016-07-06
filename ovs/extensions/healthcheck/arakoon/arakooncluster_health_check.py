@@ -53,7 +53,7 @@ class ArakoonHealthCheck:
         self.utility = Utils()
         self.LOGGER = logging
 
-         self.machine_details = System.get_my_storagerouter()
+        self.machine_details = System.get_my_storagerouter()
 
     def fetch_available_clusters(self):
         """
