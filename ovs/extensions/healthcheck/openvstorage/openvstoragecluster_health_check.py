@@ -737,18 +737,18 @@ class OpenvStorageHealthCheck:
                         self._check_filedriver(vp.name, name)
                         if os.path.exists("/mnt/{0}/{1}.xml".format(vp.name, name)):
                             # working
+                            self._check_filedriver_remove(vp.name)
                             self.LOGGER.success("Filedriver for vPool '{0}' is working fine!".format(vp.name),
                                                 'filedriver_{0}'.format(vp.name))
-                            self._check_filedriver_remove(vp.name)
                         else:
                             # not working
                             self.LOGGER.failure("Filedriver for vPool '{0}' seems to have problems!".format(vp.name),
                                                 'filedriver_{0}'.format(vp.name))
-                    except TimeoutError as e:
+                    except TimeoutError:
                         # timeout occured, action took too long
                         self.LOGGER.failure("Filedriver of vPool '{0}' seems to have `timeout` problems"
                                             .format(vp.name), 'filedriver_{0}'.format(vp.name))
-                    except subprocess.CalledProcessError as e:
+                    except subprocess.CalledProcessError:
                         # can be input/output error by filedriver
                         self.LOGGER.failure("Filedriver of vPool '{0}' seems to have `input/output` problems"
                                             .format(vp.name), 'filedriver_{0}'.format(vp.name))
@@ -776,9 +776,9 @@ class OpenvStorageHealthCheck:
 
                         if os.path.exists("/mnt/{0}/{1}.raw".format(vp.name, name)):
                             # working
+                            self._check_volumedriver_remove(vp.name)
                             self.LOGGER.success("Volumedriver of vPool '{0}' is working fine!".format(vp.name),
                                                 'volumedriver_{0}'.format(vp.name))
-                            self._check_volumedriver_remove(vp.name)
                         else:
                             # not working, file does not exists
                             self.LOGGER.failure("Volumedriver of vPool '{0}' seems to have problems"
