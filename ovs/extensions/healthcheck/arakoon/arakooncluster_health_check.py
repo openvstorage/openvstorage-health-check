@@ -25,6 +25,7 @@ import uuid
 import socket
 import ConfigParser
 from StringIO import StringIO
+from ovs.extensions.generic.system import System
 from ovs.log.healthcheck_logHandler import HCLogHandler
 from ovs.extensions.healthcheck.utils.extension import Utils
 from ovs.dal.lists.storagerouterlist import StorageRouterList
@@ -51,6 +52,8 @@ class ArakoonHealthCheck:
         self.module = "arakoon"
         self.utility = Utils()
         self.LOGGER = logging
+
+         self.machine_details = System.get_my_storagerouter()
 
     def fetch_available_clusters(self):
         """
