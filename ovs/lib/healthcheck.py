@@ -185,12 +185,12 @@ class HealthCheckController:
         ovs.check_for_halted_volumes()
         if not unattended and not silent_mode:
             print ""
-        ovs.check_filedrivers()
-        if not unattended and not silent_mode:
-            print ""
-        ovs.check_volumedrivers()
-        if not unattended and not silent_mode:
-            print ""
+        #ovs.check_filedrivers()
+        #if not unattended and not silent_mode:
+        #    print ""
+        #ovs.check_volumedrivers()
+        #if not unattended and not silent_mode:
+        #    print ""
 
     @staticmethod
     @celery.task(name='ovs.healthcheck.check_arakoon')
