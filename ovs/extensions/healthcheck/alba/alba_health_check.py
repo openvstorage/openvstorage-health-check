@@ -21,15 +21,16 @@ Alba Health Check Module
 """
 
 import os
-import json
 import uuid
 import time
+import re
 import hashlib
 import subprocess
 from ovs.extensions.generic.system import System
 from ovs.dal.lists.servicelist import ServiceList
 from ovs.dal.lists.albanodelist import AlbaNodeList
 from ovs.log.healthcheck_logHandler import HCLogHandler
+from ovs.extensions.plugins.albacli import AlbaCLI
 from ovs.dal.lists.albabackendlist import AlbaBackendList
 from ovs.extensions.healthcheck.utils.extension import Utils
 from ovs.extensions.db.etcd.configuration import EtcdConfiguration
@@ -142,116 +143,109 @@ class AlbaHealthCheck:
                     self.LOGGER.info("Checking ALBA proxy '{0}': ".format(sr.name), 'check_alba', False)
                     try:
                         # determine what to what backend the proxy is connected
-                        with open(os.devnull, 'w') as devnull:
-                            abm_name = subprocess.check_output(['alba', 'proxy-client-cfg', '-h', ip, '-p', str(sr.ports[0])], stderr=devnull).split()[3]
+                        proxy_client_cfg = AlbaCLI.run('proxy-client-cfg', host=ip, port=sr.ports[0])
+                        client_config = re.match('^client_cfg:\ncluster_id = (?P<cluster_id>[0-9a-zA-Z_]+) ,.*',
+                                                 proxy_client_cfg)
+
+                        if client_config is None:
+                            raise ObjectNotFoundException('Proxy config not in correct format: {0}'
+                                                          .format(client_config))
+
+                        abm_name = client_config.groupdict()['cluster_id']
 
                         abm_config = self.utility.get_config_file_path(abm_name, self.machine_id, 0)
 
                         # determine presets / backend
-                        presets_results = subprocess.Popen(['alba', 'list-presets', '--config', abm_config,
-                                                            '--to-json'], stdout=subprocess.PIPE,
-                                                           stderr=subprocess.PIPE)
-                        presets = json.loads(presets_results.communicate()[0])
+                        presets = AlbaCLI.run('list-presets', config=abm_config, to_json=True)
 
-                        for preset in presets['result']:
+                        for preset in presets:
                             # based on preset, always put in same namespace
                             namespace_key = 'ovs-healthcheck-ns-{0}'.format(preset.get('name'))
                             object_key = 'ovs-healthcheck-obj-{0}'.format(str(uuid.uuid4()))
 
-                            # try put namespace
-                            subprocess.call(['alba', 'proxy-create-namespace', '-h', ip, '-p', str(sr.ports[0]),
-                                            str(namespace_key), str(preset.get('name'))], stdout=fnull,
-                                            stderr=subprocess.STDOUT)
-
                             # try get namespace
-                            get_nam_results = subprocess.Popen(['alba', 'show-namespace', str(namespace_key), '--config',
-                                                                str(abm_config), '--to-json'], stdout=subprocess.PIPE,
-                                                               stderr=subprocess.PIPE)
-                            get_nam = get_nam_results.communicate()[0]
+                            # try to convert it to json, because of OVS-4135
+                            try:
+                                AlbaCLI.run('show-namespace', config=abm_config, to_json=True,
+                                            extra_params=[namespace_key])
+                            except RuntimeError:
+                                # try put namespace
+                                AlbaCLI.run('proxy-create-namespace', host=ip, port=sr.ports[0],
+                                            extra_params=[namespace_key, preset['name']])
 
                             try:
-                                # try to convert it to json, because of OVS-4135
-                                json_nam = json.loads(get_nam)
+                                AlbaCLI.run('show-namespace', config=abm_config, to_json=True,
+                                            extra_params=[namespace_key])
 
-                                # check if put/get_namespace was successfully executed
-                                if json_nam['success']:
+                                # get & put is successfully executed
+                                self.LOGGER.success("Namespace successfully created or already existed "
+                                                    "via proxy '{0}' with preset '{1}'!".format(sr.name,
+                                                                                                preset.get('name')),
+                                                    '{0}_preset_{1}_create_namespace'
+                                                    .format(sr.name, preset.get('name')))
 
-                                    # get & put is successfully executed
-                                    self.LOGGER.success("Namespace successfully created or already existed "
-                                                        "via proxy '{0}' with preset '{1}'!".format(sr.name,
-                                                                                                    preset.get('name')),
-                                                        '{0}_preset_{1}_create_namespace'
-                                                        .format(sr.name, preset.get('name')))
+                                # put test object to given dir
+                                with open(self.temp_file_loc, 'wb') as fout:
+                                    fout.write(os.urandom(self.temp_file_size))
 
-                                    # put test object to given dir
-                                    with open(self.temp_file_loc, 'wb') as fout:
-                                        fout.write(os.urandom(self.temp_file_size))
+                                # try to put object
+                                AlbaCLI.run('proxy-upload-object', host=ip, port=sr.ports[0],
+                                            extra_params=[namespace_key, self.temp_file_loc, object_key])
 
-                                    # try to put object
-                                    subprocess.call(['alba', 'proxy-upload-object', '-h', ip, '-p',
-                                                     str(sr.ports[0]), str(namespace_key), str(self.temp_file_loc),
-                                                     str(object_key)], stdout=fnull, stderr=subprocess.STDOUT)
+                                # download object
+                                AlbaCLI.run('download-object', config=abm_config,
+                                            extra_params=[namespace_key, object_key, self.temp_file_fetched_loc])
 
-                                    # download object
-                                    subprocess.call(['alba', 'download-object', str(namespace_key), str(object_key),
-                                                    str(self.temp_file_fetched_loc), '--config', str(abm_config)],
-                                                    stdout=fnull, stderr=subprocess.STDOUT)
+                                # check if file exists (if not then location does not exists)
+                                if os.path.isfile(self.temp_file_fetched_loc):
+                                    hash_original = hashlib.md5(open(self.temp_file_loc, 'rb')
+                                                                .read()).hexdigest()
+                                    hash_fetched = hashlib.md5(open(self.temp_file_fetched_loc, 'rb')
+                                                               .read()).hexdigest()
 
-                                    # check if file exists (if not then location does not exists)
-                                    if os.path.isfile(self.temp_file_fetched_loc):
-                                        hash_original = hashlib.md5(open(self.temp_file_loc, 'rb')
-                                                                    .read()).hexdigest()
-                                        hash_fetched = hashlib.md5(open(self.temp_file_fetched_loc, 'rb')
-                                                                   .read()).hexdigest()
-
-                                        if hash_original == hash_fetched:
-                                            self.LOGGER.success("Creation of a object in namespace '{0}' on proxy '{1}' "
-                                                                "with preset '{2}' succeeded!".format(namespace_key,
-                                                                                                      sr.name,
-                                                                                                      preset.get('name')),
-                                                                '{0}_preset_{1}_create_object'
-                                                                .format(sr.name, preset.get('name')))
-                                        else:
-                                            self.LOGGER.failure("Creation of a object '{0}' in namespace '{1}' on proxy"
-                                                                " '{2}' with preset '{3}' failed!".format(object_key,
-                                                                                                          namespace_key,
-                                                                                                          sr.name,
-                                                                                                          preset.get('name')
-                                                                                                          ),
-                                                                '{0}_preset_{1}_create_object'
-                                                                .format(sr.name, preset.get('name')))
+                                    if hash_original == hash_fetched:
+                                        self.LOGGER.success("Creation of a object in namespace '{0}' on proxy '{1}' "
+                                                            "with preset '{2}' succeeded!".format(namespace_key,
+                                                                                                  sr.name,
+                                                                                                  preset.get('name')),
+                                                            '{0}_preset_{1}_create_object'
+                                                            .format(sr.name, preset.get('name')))
                                     else:
-                                        # creation of object failed
-                                        raise ObjectNotFoundException(ValueError)
+                                        self.LOGGER.failure("Creation of a object '{0}' in namespace '{1}' on proxy"
+                                                            " '{2}' with preset '{3}' failed!".format(object_key,
+                                                                                                      namespace_key,
+                                                                                                      sr.name,
+                                                                                                      preset.get('name')
+                                                                                                      ),
+                                                            '{0}_preset_{1}_create_object'
+                                                            .format(sr.name, preset.get('name')))
                                 else:
-                                    # creation of namespace failed
+                                    # creation of object failed
                                     raise ObjectNotFoundException(ValueError)
+                            except RuntimeError:
+                                # put was not successfully executed, so get return success = False
+                                self.LOGGER.failure("Creating/fetching namespace "
+                                                    "'{0}' with preset '{1}' on proxy '{2}'"
+                                                    " failed! ".format(namespace_key, preset.get('name'), sr.name),
+                                                    '{0}_preset_{1}_create_namespace'
+                                                    .format(sr.name, preset.get('name')))
+
+                                # for unattended install
+                                self.LOGGER.failure("Failed to put object because namespace failed to be "
+                                                    "created/fetched on proxy '{0}'! ".format(sr.name),
+                                                    '{0}_preset_{1}_create_object'
+                                                    .format(sr.name, preset.get('name')))
                             except ObjectNotFoundException:
                                 amount_of_presets_not_working.append(preset.get('name'))
-
-                                if 'not found' in get_nam:
-                                    # put was not successfully executed, so get return success = False
-                                    self.LOGGER.failure("Creating/fetching namespace "
-                                                        "'{0}' with preset '{1}' on proxy '{2}'"
-                                                        " failed! ".format(namespace_key, preset.get('name'), sr.name),
-                                                        '{0}_preset_{1}_create_namespace'
-                                                        .format(sr.name, preset.get('name')))
-
-                                    # for unattended install
-                                    self.LOGGER.failure("Failed to put object because namespace failed to be "
-                                                        "created/fetched on proxy '{0}'! ".format(sr.name),
-                                                        '{0}_preset_{1}_create_object'
-                                                        .format(sr.name, preset.get('name')))
-                                else:
-                                    # for unattended install
-                                    self.LOGGER.failure("Failed to put object on namespace '{0}' failed on proxy"
-                                                        "'{0}'! ".format(sr.name), '{0}_preset_{1}_create_object'
-                                                        .format(sr.name, preset.get('name')))
+                                # for unattended install
+                                self.LOGGER.failure("Failed to put object on namespace '{0}' failed on proxy"
+                                                    "'{0}'! ".format(sr.name), '{0}_preset_{1}_create_object'
+                                                    .format(sr.name, preset.get('name')))
 
                             # clean-up procedure for created object(s) & temp. files
-                            subprocess.call(['alba', 'delete-object', '--config', str(abm_config),
-                                            str(namespace_key), str(object_key)],
-                                            stdout=fnull, stderr=subprocess.STDOUT)
+                            AlbaCLI.run('proxy-delete-object', host=ip, port=sr.ports[0],
+                                        extra_params=[namespace_key, object_key])
+
                             subprocess.call(['rm', str(self.temp_file_loc)],
                                             stdout=fnull, stderr=subprocess.STDOUT)
                             subprocess.call(['rm', str(self.temp_file_fetched_loc)],

@@ -23,6 +23,7 @@ Open vStorage Health Check module
 import os
 import grp
 import glob
+import re
 import time
 import psutil
 import socket
@@ -818,11 +819,11 @@ class OpenvStorageHealthCheck:
 
             if "Error" not in cluster_status[1]:
 
-                # this can happen
-                if len(cluster_status) <= 3:
-                    partition_status = cluster_status[2]
-                else:
-                    partition_status = cluster_status[3]
+                partition_status = ''
+
+                for status in cluster_status:
+                    if re.match('^.*\{partitions,\[.*$', status):
+                        partition_status = status
 
                 # check parition status
                 if '@' in partition_status:
