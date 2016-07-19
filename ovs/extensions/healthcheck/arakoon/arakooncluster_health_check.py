@@ -67,36 +67,36 @@ class ArakoonHealthCheck:
         arakoon_clusters = list(EtcdConfiguration.list('/ovs/{0}'.format(self.module)))
 
         result = {}
-        if len(arakoon_clusters) != 0:
-            # add arakoon clusters
-            for cluster in arakoon_clusters:
-                # add node that is available for arakoon cluster
-                nodes_per_cluster_result = {}
-
-                ak = ArakoonClusterConfig(str(cluster))
-                ak.load_config()
-                master_node_ids = list((node.name for node in ak.nodes))
-
-                for node_id in master_node_ids:
-                    node_info = StorageRouterList.get_by_machine_id(node_id)
-
-                    # add node information
-                    nodes_per_cluster_result.update({node_id: {
-                        'hostname': node_info.name,
-                        'ip-address': node_info.ip,
-                        'guid': node_info.guid,
-                        'pmachine_guid': node_info.pmachine_guid,
-                        'node_type': node_info.node_type
-                        }
-                    })
-                result.update({cluster: nodes_per_cluster_result})
-
-            return result
-        else:
+        if len(arakoon_clusters) == 0:
             # no arakoon clusters on node
             self.LOGGER.warning("No installed arakoon clusters detected on this system ...",
                                 'arakoon_no_clusters_found', False)
             return None
+
+        # add arakoon clusters
+        for cluster in arakoon_clusters:
+            # add node that is available for arakoon cluster
+            nodes_per_cluster_result = {}
+
+            ak = ArakoonClusterConfig(str(cluster))
+            ak.load_config()
+            master_node_ids = list((node.name for node in ak.nodes))
+
+            for node_id in master_node_ids:
+                node_info = StorageRouterList.get_by_machine_id(node_id)
+
+                # add node information
+                nodes_per_cluster_result.update({node_id: {
+                    'hostname': node_info.name,
+                    'ip-address': node_info.ip,
+                    'guid': node_info.guid,
+                    'pmachine_guid': node_info.pmachine_guid,
+                    'node_type': node_info.node_type
+                    }
+                })
+            result.update({cluster: nodes_per_cluster_result})
+
+        return result
 
     def _check_port_connection(self, port_number):
         """
@@ -156,7 +156,7 @@ class ArakoonHealthCheck:
             config.readfp(StringIO(e))
 
             for section in config.sections():
-                if section != "global":
+                if section != "global" and section == self.machine_details.machine_id:
                     self._is_port_listening("{0} - {1}"
                                             .format(arakoon_cluster, section), config.get(section, 'client_port'))
                     self._is_port_listening("{0} - {1}"
@@ -182,6 +182,8 @@ class ArakoonHealthCheck:
 
         # verify integrity of arakoon clusters
         for cluster_name, cluster_info in arakoon_overview.iteritems():
+            if self.machine_details.machine_id not in cluster_info:
+                continue
 
             tries = 1
             max_tries = 2  # should be 5 but .nop is taking WAY to long
