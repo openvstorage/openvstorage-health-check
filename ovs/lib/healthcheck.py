@@ -173,9 +173,6 @@ class HealthCheckController:
         ovs.check_required_dirs()
         if not unattended and not silent_mode:
             print ""
-        ovs.check_hypervisor_management_information()
-        if not unattended and not silent_mode:
-            print ""
         ovs.check_size_of_log_files()
         if not unattended and not silent_mode:
             print ""
@@ -188,12 +185,12 @@ class HealthCheckController:
         ovs.check_for_halted_volumes()
         if not unattended and not silent_mode:
             print ""
-        ovs.check_filedrivers()
-        if not unattended and not silent_mode:
-            print ""
-        ovs.check_volumedrivers()
-        if not unattended and not silent_mode:
-            print ""
+        #ovs.check_filedrivers()
+        #if not unattended and not silent_mode:
+        #    print ""
+        #ovs.check_volumedrivers()
+        #if not unattended and not silent_mode:
+        #    print ""
 
     @staticmethod
     def check_arakoon():
@@ -207,6 +204,9 @@ class HealthCheckController:
 
         arakoon = ArakoonHealthCheck(LOGGER)
 
+        arakoon.check_required_ports()
+        if not unattended and not silent_mode:
+            print ""
         arakoon.check_arakoons()
         if not unattended and not silent_mode:
             print ""
