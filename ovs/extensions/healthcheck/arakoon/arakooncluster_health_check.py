@@ -23,6 +23,7 @@ Arakoon Health Check module
 import time
 import uuid
 import socket
+import subprocess
 import ConfigParser
 from StringIO import StringIO
 from ovs.extensions.generic.system import System
@@ -52,6 +53,9 @@ class ArakoonHealthCheck:
         self.module = "arakoon"
         self.utility = Utils()
         self.LOGGER = logging
+
+        self.last_minutes = 5
+        self.max_amount_node_restarted = 5
 
         self.machine_details = System.get_my_storagerouter()
 
@@ -161,6 +165,34 @@ class ArakoonHealthCheck:
                                             .format(arakoon_cluster, section), config.get(section, 'client_port'))
                     self._is_port_listening("{0} - {1}"
                                             .format(arakoon_cluster, section), config.get(section, 'messaging_port'))
+
+    def _check_restarts(self, arakoon_overview, last_minutes, max_amount_node_restarted):
+        """
+        Check the amount of restarts of an Arakoon node
+        :param logfile: Path to Arakoon logfile
+        :param last_minutes: Last x minutes to check
+        :param amount: The amount of restarts
+        :return: list with OK and NOK status
+        """
+        result = {"OK": [], "NOK": []}
+        for cluster_name, cluster_info in arakoon_overview.iteritems():
+            if self.machine_details.machine_id not in cluster_info:
+                continue
+
+            command = 'grep "NODE STARTED" {0} | awk -v d1="$(date --date="-{1} min" +"%F %R")" ' \
+                      '-v d2="$(date +"%F %R")" \'$0 > d1 && $0 < d2 || $0 ~ d2\''\
+                .format("/var/log/upstart/ovs-arakoon-{0}.log".format(cluster_name), last_minutes)
+
+            out, err = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE).communicate()
+
+            count_node_started = len(out.splitlines())
+
+            if count_node_started >= max_amount_node_restarted:
+                result['NOK'].append(cluster_name)
+
+            result['OK'].append(cluster_name)
+
+        return result
 
     def _verify_integrity(self, arakoon_overview):
         """
@@ -275,5 +307,19 @@ class ArakoonHealthCheck:
                 else:
                     self.LOGGER.failure("Some Arakoon(s) have problems, please check this!",
                                         'arakoon_integrity')
+
+            log_checks = self._check_restarts(arakoon_overview, self.last_minutes, self.max_amount_node_restarted)
+
+            nok = log_checks['NOK']
+            ok = log_checks['OK']
+
+            if len(nok) > 0:
+                self.LOGGER.failure("{0} Arakoon(s) restarted more than {1} times in {2} minutes: {3}"
+                                    .format(len(nok), self.max_amount_node_restarted, self.last_minutes, ','.join(nok)),
+                                    'arakoon_restarts')
+            elif len(ok) > 0:
+                self.LOGGER.success("{0} Arakoon(s) restart check(s) is/are OK!: {1}".format(len(ok), ','.join(ok)),
+                                    'arakoon_restarts')
+
         else:
             self.LOGGER.skip("No clusters found", 'arakoon_found')
