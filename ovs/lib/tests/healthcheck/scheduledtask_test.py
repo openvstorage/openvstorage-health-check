@@ -47,6 +47,7 @@ from StringIO import StringIO
 from time import mktime
 from volumedriver.storagerouter import storagerouterclient
 from ovs.lib.healthcheck import HealthCheckController
+from ovs.extensions.healthcheck.utils.exceptions import ObjectNotFoundException, ScrubberException
 
 logger = LogHandler.get('lib', name='scheduled tasks')
 storagerouterclient.Logger.setupLogging(LogHandler.load_path('storagerouterclient'))
@@ -231,7 +232,7 @@ class ScheduledTaskController(object):
                             logger.warning('Gather Scrub - Storage Router {0:<15} is not reachable'.format(storage_driver.storagerouter.ip))
 
         if len(scrub_locations) == 0:
-            raise RuntimeError('No scrub locations found')
+            raise ObjectNotFoundException(RuntimeError('No scrub locations found'))
 
         vdisk_guids = set()
         for vmachine in VMachineList.get_customer_vmachines():
@@ -275,7 +276,7 @@ class ScheduledTaskController(object):
             try:
                 processed_guids = ScheduledTaskController._execute_scrub_work(scrub_location=local_scrub_location,
                                                                               vdisk_guids=local_vdisks_to_scrub)
-            except Exception as ex:
+            except ScrubberException as ex:
                 logger.error('Gather Scrub - Storage Router {0:<15} - Scrubbing failed with error:\n - {1}'.format(local_storage_router.ip, ex))
         all_results = result_set.join(propagate=False)  # Propagate False makes sure all jobs are waited for even when 1 or more jobs fail
         for index, result in enumerate(all_results):
@@ -284,7 +285,7 @@ class ScheduledTaskController(object):
             else:
                 logger.error('Gather Scrub - Storage Router {0:<15} - Scrubbing failed with error:\n - {1}'.format(storage_router_list[index].ip, result))
         if len(processed_guids) != len(vdisk_guids) or set(processed_guids).difference(vdisk_guids):
-            raise RuntimeError('Scrubbing failed for 1 or more storagerouters')
+            raise ScrubberException(RuntimeError('Scrubbing failed for 1 or more storagerouters'))
         logger.info('Gather Scrub - Finished')
 
     @staticmethod
@@ -301,7 +302,7 @@ class ScheduledTaskController(object):
             current_vdisk.invalidate_dynamics(['info'])
             vdisk_configs = current_vdisk.info['metadata_backend_config']
             if len(vdisk_configs) == 0:
-                raise RuntimeError('Could not load MDS configuration')
+                raise ObjectNotFoundException(RuntimeError('Could not load MDS configuration'))
             return vdisk_configs
 
         logger.info('Execute Scrub - Started')
@@ -342,13 +343,13 @@ class ScheduledTaskController(object):
                         logger.info('Execute Scrub - Virtual disk {0} - {1} - Scrub successfully applied'.format(vdisk.guid, vdisk.name))
                     else:
                         logger.info('Execute Scrub - Virtual disk {0} - {1} - No scrubbing required'.format(vdisk.guid, vdisk.name))
-            except Exception as ex:
+            except (ObjectNotFoundException, Exception) as ex:
                 failures.append('Failed scrubbing work unit for volume {0} with guid {1}: {2}'.format(vdisk.name, vdisk.guid, ex))
 
         failed = len(failures)
         logger.info('Execute Scrub - Finished - Success: {0} - Failed: {1} - Skipped: {2}'.format((total - failed - skipped), failed, skipped))
         if failed > 0:
-            raise Exception('\n - '.join(failures))
+            raise ScrubberException(Exception('\n - '.join(failures)))
         return vdisk_guids
 
     @staticmethod
@@ -380,7 +381,7 @@ class ScheduledTaskController(object):
                 client = ArakoonAdminClient(node, config)
                 try:
                     client.collapse_tlogs(2)
-                except:
+                except Exception:
                     logger.exception('Error during collapsing cluster {0} node {1}'.format(cluster, node))
 
         logger.info('Arakoon collapse finished')

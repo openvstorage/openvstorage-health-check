@@ -24,6 +24,7 @@ import subprocess
 import xmltodict
 import commands
 import json
+from ovs.extensions.healthcheck.utils.exceptions import UnsupportedPlatformException
 from ovs.extensions.services.service import ServiceManager
 from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.generic.system import System
@@ -114,23 +115,12 @@ class Utils:
         # alba_asds = 3
         # ovs = 4
 
-        if not self.etcd:
-            if product == 0:
-                return "/opt/OpenvStorage/config/arakoon/{0}/{0}.cfg".format(name)
-            elif product == 1:
-                return "/opt/OpenvStorage/config/storagedriver/storagedriver/{0}.json".format(name)
-            elif product == 4:
-                return "/opt/OpenvStorage/config/ovs.json"
-        else:
-            if product == 0:
-                return "etcd://127.0.0.1:2379/ovs/arakoon/{0}/config".format(name)
-            elif product == 1:
-                if not guid and self.etcd:
-                    raise Exception("You must provide a 'vPOOL_guid' for ETCD, currently this is 'None'")
-                else:
-                    return "etcd://127.0.0.1:2379/ovs/vpools/{0}/hosts/{1}/config".format(guid, name+node_id)
-            elif product == 4:
-                return "etcd://127.0.0.1:2379/ovs/framework"
+        if product == 0:
+            return "etcd://127.0.0.1:2379/ovs/arakoon/{0}/config".format(name)
+        elif product == 1:
+            return "etcd://127.0.0.1:2379/ovs/vpools/{0}/hosts/{1}/config".format(guid, name+node_id)
+        elif product == 4:
+            return "etcd://127.0.0.1:2379/ovs/framework"
 
     @staticmethod
     def get_ovs_type():
@@ -288,6 +278,7 @@ class Utils:
         elif 'sysvinit':
             return 1
         else:
-            raise RuntimeError("Unsupported Service Manager detected, please contact support or file a bug @github")
+            raise UnsupportedPlatformException(
+                RuntimeError("Unsupported Service Manager detected, please contact support or file a bug @github"))
 
 
