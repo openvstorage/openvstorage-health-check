@@ -94,7 +94,6 @@ class ArakoonHealthCheck:
                     'hostname': node_info.name,
                     'ip-address': node_info.ip,
                     'guid': node_info.guid,
-                    'pmachine_guid': node_info.pmachine_guid,
                     'node_type': node_info.node_type
                     }
                 })
