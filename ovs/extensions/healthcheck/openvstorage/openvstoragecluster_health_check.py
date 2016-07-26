@@ -34,7 +34,6 @@ from pwd import getpwuid
 from ovs.dal.lists.vpoollist import VPoolList
 from ovs.extensions.generic.system import System
 from ovs.dal.lists.servicelist import ServiceList
-from ovs.dal.lists.pmachinelist import PMachineList
 from ovs.dal.exceptions import ObjectNotFoundException
 from ovs.log.healthcheck_logHandler import HCLogHandler
 from ovs.dal.lists.mgmtcenterlist import MgmtCenterList
@@ -218,22 +217,6 @@ class OpenvStorageHealthCheck:
         """
 
         return next(os.walk(pwd))[1]
-
-    @staticmethod
-    def _fetch_compute_node_details_by_ip(node_ip):
-        """
-        Fetches details of a compute node connected to the OpenvStorage cluster
-
-        @param node_ip: IP address of a node in the Open vStorage cluster
-
-        @type node_ip: str
-
-        @return: Compute node Object
-
-        @rtype: Object
-        """
-
-        return PMachineList().get_by_ip(str(node_ip))
 
     @staticmethod
     def _fetch_compute_nodes_per_center_by_ip(management_ip):
