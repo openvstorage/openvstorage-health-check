@@ -27,7 +27,6 @@ import re
 import time
 import psutil
 import socket
-import threading
 import timeout_decorator
 import subprocess
 from pwd import getpwuid
@@ -36,7 +35,6 @@ from ovs.extensions.generic.system import System
 from ovs.dal.lists.servicelist import ServiceList
 from ovs.dal.exceptions import ObjectNotFoundException
 from ovs.log.healthcheck_logHandler import HCLogHandler
-from ovs.dal.lists.mgmtcenterlist import MgmtCenterList
 from ovs.lib.storagerouter import StorageRouterController
 from ovs.extensions.healthcheck.utils.extension import Utils
 from timeout_decorator.timeout_decorator import TimeoutError
@@ -217,22 +215,6 @@ class OpenvStorageHealthCheck:
         """
 
         return next(os.walk(pwd))[1]
-
-    @staticmethod
-    def _fetch_compute_nodes_per_center_by_ip(management_ip):
-        """
-        Fetches the compute nodes connected to a Hypervisor Management Center
-
-        @param management_ip: IP address of the hypervisor management center
-
-        @type management_ip: str
-
-        @return: list of compute nodes IP addresses
-
-        @rtype: list
-        """
-
-        return MgmtCenterList().get_by_ip(str(management_ip)).hosts
 
     def _check_port_connection(self, port_number):
         """
