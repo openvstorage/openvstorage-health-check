@@ -9,7 +9,7 @@ The health check is classified as a monitoring, detection and healing tool for O
 ## Pulling this repository
 ```
 sudo apt-get install -y git
-git clone -b master https://github.com/openvstorage/openvstorage-health-check.git
+git clone -b eugene-updates https://github.com/openvstorage/openvstorage-health-check.git
 ```
 
 ## Installation (AUTOMATIC)
