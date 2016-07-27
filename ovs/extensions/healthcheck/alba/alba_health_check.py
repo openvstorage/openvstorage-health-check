@@ -144,7 +144,7 @@ class AlbaHealthCheck:
                     try:
                         # determine what to what backend the proxy is connected
                         proxy_client_cfg = AlbaCLI.run('proxy-client-cfg', host=ip, port=sr.ports[0])
-                        client_config = re.match('^client_cfg:\ncluster_id = (?P<cluster_id>[0-9a-zA-Z_]+) ,.*',
+                        client_config = re.match('^client_cfg:\ncluster_id = (?P<cluster_id>[0-9a-zA-Z_-]+) ,.*',
                                                  proxy_client_cfg)
 
                         if client_config is None:
