@@ -1,5 +1,3 @@
-#!/usr/bin/env bash
-
 # Copyright (C) 2016 iNuron NV
 #
 # This file is part of Open vStorage Open Source Edition (OSE),
@@ -16,11 +14,13 @@
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
 
-cp ../* /opt/OpenvStorage -R
-cp ../scripts/system/ovs /usr/bin/ovs
-chmod 755 /usr/bin/ovs
-wget https://bootstrap.pypa.io/get-pip.py; python get-pip.py
-pip install flower
-pip install psutil
-pip install xmltodict
-pip install timeout-decorator
+from subprocess import Popen
+from subprocess import STDOUT
+from subprocess import PIPE
+
+try:
+    proc = Popen("", cwd=cwd, stdout=PIPE, stderr=STDOUT)
+    out, err = proc.communicate(timeout=5)
+    returncode = proc.returncode
+except Exception:
+    proc.kill()

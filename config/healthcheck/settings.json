@@ -1,0 +1,10 @@
+{
+    "healthcheck": {
+        "library": "/opt/OpenvStorage",
+        "logging": {
+            "enable": false
+        },
+        "debug_mode": false,
+        "max_check_log_size": 500
+    }
+}

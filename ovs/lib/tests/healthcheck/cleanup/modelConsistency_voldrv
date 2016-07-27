@@ -1,5 +1,3 @@
-#!/usr/bin/env bash
-
 # Copyright (C) 2016 iNuron NV
 #
 # This file is part of Open vStorage Open Source Edition (OSE),
@@ -16,11 +14,16 @@
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
 
-cp ../* /opt/OpenvStorage -R
-cp ../scripts/system/ovs /usr/bin/ovs
-chmod 755 /usr/bin/ovs
-wget https://bootstrap.pypa.io/get-pip.py; python get-pip.py
-pip install flower
-pip install psutil
-pip install xmltodict
-pip install timeout-decorator
+from ovs.dal.lists.vpoollist import VPoolList
+import volumedriver.storagerouter.storagerouterclient as src
+
+voldrv_client = src.LocalStorageRouterClient("/opt/OpenvStorage/config/storagedriver/storagedriver/vmstor.json")
+voldrv_volume_list = voldrv_client.list_volumes()
+
+for vp in VPoolList.get_vpools():
+	vol_ids=(vdisk.volume_id for vdisk in vp.vdisks)
+	#print list(vol_ids)
+
+	for vol in voldrv_volume_list:
+		if str(vol) in vol_ids:
+			print vol

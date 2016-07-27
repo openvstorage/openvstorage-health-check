@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/python
 
 # Copyright (C) 2016 iNuron NV
 #
@@ -16,11 +16,6 @@
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
 
-cp ../* /opt/OpenvStorage -R
-cp ../scripts/system/ovs /usr/bin/ovs
-chmod 755 /usr/bin/ovs
-wget https://bootstrap.pypa.io/get-pip.py; python get-pip.py
-pip install flower
-pip install psutil
-pip install xmltodict
-pip install timeout-decorator
+"""
+This package contains all check python logic
+"""

@@ -2,38 +2,44 @@
 cd /opt/OpenvStorage
 export PYTHONPATH="${PYTHONPATH}:/opt/OpenvStorage:/opt/OpenvStorage/webapps:/opt/OpenvStorage/webapps/api"
 export DISPLAY=:0
+export OVS_LOGTYPE_OVERRIDE=file
 
 function show_help {
     echo "Open vStorage CLI launcher"
     echo "--------------------------"
     echo "Usage:"
     echo "  * Miscellaneous options:"
-    echo "    - ovs                       Launch Open vStorage shell (ipython)"
-    echo "    - ovs help                  Show this help section"
-    echo "    - ovs collect logs          Collect all Open vStorage logs to a tarball (for support purposes)"
-    echo "    - ovs unittest <filepath>   Run the unittests in <filepath>"
+    echo "    - ovs                          Launch Open vStorage shell (ipython)"
+    echo "    - ovs help                     Show this help section"
+    echo "    - ovs collect logs             Collect all Open vStorage logs to a tarball (for support purposes)"
+    echo "    - ovs unittest <filepath>      Run the unittests in <filepath>"
     echo ""
     echo "  * Setup options:"
-    echo "    - ovs setup                 Launch Open vStorage setup and autodetect required node role (master/extra)"
-    echo "    - ovs setup master          Launch Open vStorage setup and install master node"
-    echo "    - ovs setup extra           Launch Open vStorage setup and install extra node"
-    echo "    - ovs setup promote         Promote this node (extra -> master)"
-    echo "    - ovs setup demote          Demote this node (master -> extra)"
+    echo "    - ovs setup                    Launch Open vStorage setup and autodetect required node role (master/extra)"
+    echo "    - ovs setup master             Launch Open vStorage setup and install master node"
+    echo "    - ovs setup extra              Launch Open vStorage setup and install extra node"
+    echo "    - ovs setup promote            Promote this node (extra -> master)"
+    echo "    - ovs setup demote             Demote this node (master -> extra)"
     echo ""
     echo "  * Update options:"
-    echo "    - ovs update framework      Update framework components on all nodes in cluster"
-    echo "    - ovs update volumedriver   Update volumedriver components on all nodes in cluster"
+    echo "    - ovs update framework         Update framework components on all nodes in cluster"
+    echo "    - ovs update volumedriver      Update volumedriver components on all nodes in cluster"
     echo ""
     echo "  * Remove options:"
-    echo "    - ovs remove nodes <ips>    Remove nodes from cluster (comma separated list of IPs)"
+    echo "    - ovs remove nodes <ips>       Remove nodes from cluster (comma separated list of IPs)"
     echo ""
     echo "  * Monitor options:"
-    echo "    - ovs monitor services      Watch Open vStorage services"
-    echo "    - ovs monitor heartbeat     Send an internal heartbeat"
+    echo "    - ovs monitor services         Watch Open vStorage services"
+    echo "    - ovs monitor heartbeat        Send an internal heartbeat"
     echo ""
     echo "  * Services options:"
-    echo "    - ovs stop services         Try to stop all Open vStorage services"
-    echo "    - ovs start services        Try to start all Open vStorage services"
+    echo "    - ovs stop services            Try to stop all Open vStorage services"
+    echo "    - ovs start services           Try to start all Open vStorage services"
+    echo ""
+    echo "  * Healthcheck options:"
+    echo "    - ovs healthcheck              Launch Open vStorage attended healthcheck"
+    echo "    - ovs healthcheck silent       Launch Open vStorage silent healthcheck"
+    echo "    - ovs healthcheck unattended   Launch Open vStorage unattended healthcheck"
 }
 
 if [ "$1" = "help" ] ; then
@@ -127,14 +133,19 @@ elif [ "$1" = "unittest" ] ; then
     shift
     python $@
 elif [ "$1" = "healthcheck" ] ; then
-    cd /opt/OpenvStorage-healthcheck
+    cd /opt/OpenvStorage/ovs/lib
     if [ "$2" = "unattended" ] ; then
         # launch unattended healthcheck
-        python -c "from ovs_health_check.main import Main; Main(True)"
+        python -c "from healthcheck import HealthCheckController; HealthCheckController().check_unattended()"
+    elif [ "$2" = "silent" ] ; then
+	    # launch silent healthcheck
+	    python -c "from healthcheck import HealthCheckController; HealthCheckController().check_silent()"
     else
         # launch healthcheck
-        python ovs_health_check/main.py
+        python -c "from healthcheck import HealthCheckController; HealthCheckController().check_attended()"
     fi
+elif [ "$#" -ge 1 ] ; then
+    show_help
 else
     ipython
 fi

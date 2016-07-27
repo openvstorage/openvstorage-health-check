@@ -1,5 +1,3 @@
-#!/usr/bin/env bash
-
 # Copyright (C) 2016 iNuron NV
 #
 # This file is part of Open vStorage Open Source Edition (OSE),
@@ -16,11 +14,24 @@
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
 
-cp ../* /opt/OpenvStorage -R
-cp ../scripts/system/ovs /usr/bin/ovs
-chmod 755 /usr/bin/ovs
-wget https://bootstrap.pypa.io/get-pip.py; python get-pip.py
-pip install flower
-pip install psutil
-pip install xmltodict
-pip install timeout-decorator
+import threading
+import time
+
+def thread(args1, name):
+    print "starting thread"
+    time.sleep(10)
+
+try:
+    t = threading.Thread(target=thread, args=(1, 'deamon'))
+    t.daemon = True
+    t.start()
+
+    time.sleep(5)
+    if not t.isAlive():
+        print "OK"
+    else:
+        print "NOK"
+
+except Exception as e:
+    print "action took to long, bye!"
+
