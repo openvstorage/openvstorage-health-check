@@ -317,7 +317,7 @@ class ArakoonHealthCheck:
                                     .format(len(nok), self.max_amount_node_restarted, self.last_minutes, ','.join(nok)),
                                     'arakoon_restarts')
             elif len(ok) > 0:
-                self.LOGGER.success("{0} Arakoon(s) restart check(s) is/are OK!: {1}".format(len(ok), ','.join(ok)),
+                self.LOGGER.success("ALL Arakoon(s) restart check(s) is/are OK!",
                                     'arakoon_restarts')
 
         else:
