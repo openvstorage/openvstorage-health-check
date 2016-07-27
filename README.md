@@ -9,7 +9,7 @@ The health check is classified as a monitoring, detection and healing tool for O
 ## 2. Pulling this repository
 ```
 sudo apt-get install -y git
-git clone -b ovs-impl https://github.com/openvstorage/openvstorage-health-check.git
+git clone -b master https://github.com/openvstorage/openvstorage-health-check.git
 ```
 
 ## 3. Installation (BY POST-INSTALL SCRIPT)
@@ -23,7 +23,7 @@ bash post-install.sh
 ### Required packages for Health Check
 ```
 wget https://bootstrap.pypa.io/get-pip.py; python get-pip.py
-pip install flower
+#pip install flower
 pip install psutil
 pip install xmltodict
 pip install timeout-decorator
