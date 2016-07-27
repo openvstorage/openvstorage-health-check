@@ -160,9 +160,9 @@ class ArakoonHealthCheck:
 
             for section in config.sections():
                 if section != "global" and section == self.machine_details.machine_id:
-                    self._is_port_listening("{0} - {1}"
+                    self._is_port_listening("{0}-{1}"
                                             .format(arakoon_cluster, section), config.get(section, 'client_port'))
-                    self._is_port_listening("{0} - {1}"
+                    self._is_port_listening("{0}-{1}"
                                             .format(arakoon_cluster, section), config.get(section, 'messaging_port'))
 
     def _check_restarts(self, arakoon_overview, last_minutes, max_amount_node_restarted):
