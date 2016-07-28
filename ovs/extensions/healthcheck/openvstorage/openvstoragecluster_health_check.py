@@ -497,13 +497,13 @@ class OpenvStorageHealthCheck:
         """
         Gets the OWNER of a certain file
 
-        @param filename: the absolute pathname of the file
+        :param filename: the absolute pathname of the file
 
-        @type filename: str
+        :type filename: str
 
-        @return: owner name of a file
+        :return: owner name of a file
 
-        @rtype: str
+        :rtype: str
         """
 
         return getpwuid(os.stat(filename).st_uid).pw_name
@@ -513,13 +513,13 @@ class OpenvStorageHealthCheck:
         """
         Gets the GROUP of a certain file
 
-        @param filename: the absolute pathname of the file
+        :param filename: the absolute pathname of the file
 
-        @type filename: str
+        :type filename: str
 
-        @return: group of a file
+        :return: group of a file
 
-        @rtype: str
+        :rtype: str
         """
 
         return grp.getgrgid(os.stat(filename).st_gid).gr_name
@@ -529,15 +529,15 @@ class OpenvStorageHealthCheck:
         """
         Checks if there are RIGHTS mistakes in a certain file
 
-        @param filename: the absolute pathname of the file
-        @param rights: the correct rights that the file needs to have
+        :param filename: the absolute pathname of the file
+        :param rights: the correct rights that the file needs to have
 
-        @type filename: str
-        @type rights: str
+        :type filename: str
+        :type rights: str
 
-        @return: True if the rights are correct; False if they are wrong
+        :return: True if the rights are correct; False if they are wrong
 
-        @rtype: bool
+        :rtype: bool
         """
 
         # fetch file to start compare
@@ -548,13 +548,13 @@ class OpenvStorageHealthCheck:
         """
         Checks if DNS resolving works on a local machine
 
-        @param fqdn: the absolute pathname of the file
+        :param fqdn: the absolute pathname of the file
 
-        @type fqdn: str
+        :type fqdn: str
 
-        @return: True if the DNS resolving works; False it doesn't work
+        :return: True if the DNS resolving works; False it doesn't work
 
-        @rtype: bool
+        :rtype: bool
         """
 
         self.LOGGER.info("Checking DNS resolving: ", 'titleDnsResolving', False)
@@ -612,15 +612,15 @@ class OpenvStorageHealthCheck:
         Async method to checks if a FILEDRIVER `touch` works on a vpool
         Always try to check if the file exists after performing this method
 
-        @param vp_name: name of the vpool
-        @param test_name: name of the test file (e.g. `ovs-healthcheck-MACHINE_ID`)
+        :param vp_name: name of the vpool
+        :param test_name: name of the test file (e.g. `ovs-healthcheck-MACHINE_ID`)
 
-        @type vp_name: str
-        @type test_name: str
+        :type vp_name: str
+        :type test_name: str
 
-        @return: True if succeeded, False if failed
+        :return: True if succeeded, False if failed
 
-        @rtype: bool
+        :rtype: bool
         """
 
         return subprocess.check_output("touch /mnt/{0}/{1}.xml".format(vp_name, test_name),
@@ -633,13 +633,13 @@ class OpenvStorageHealthCheck:
         Async method to checks if a FILEDRIVER `remove` works on a vpool
         Always try to check if the file exists after performing this method
 
-        @param vp_name: name of the vpool
+        :param vp_name: name of the vpool
 
-        @type vp_name: str
+        :type vp_name: str
 
-        @return: True if succeeded, False if failed
+        :return: True if succeeded, False if failed
 
-        @rtype: bool
+        :rtype: bool
         """
 
         return subprocess.check_output("rm -f /mnt/{0}/ovs-healthcheck-test-*.xml".format(vp_name),
@@ -652,15 +652,15 @@ class OpenvStorageHealthCheck:
         Async method to checks if a VOLUMEDRIVER `truncate` works on a vpool
         Always try to check if the file exists after performing this method
 
-        @param vp_name: name of the vpool
-        @param test_name: name of the test file (e.g. `ovs-healthcheck-MACHINE_ID`)
+        :param vp_name: name of the vpool
+        :param test_name: name of the test file (e.g. `ovs-healthcheck-MACHINE_ID`)
 
-        @type vp_name: str
-        @type test_name: str
+        :type vp_name: str
+        :type test_name: str
 
-        @return: True if succeeded, False if failed
+        :return: True if succeeded, False if failed
 
-        @rtype: bool
+        :rtype: bool
         """
 
         return subprocess.check_output("truncate -s 10GB /mnt/{0}/{1}.raw".format(vp_name, test_name),
@@ -673,13 +673,13 @@ class OpenvStorageHealthCheck:
         Async method to checks if a VOLUMEDRIVER `remove` works on a vpool
         Always try to check if the file exists after performing this method
 
-        @param vp_name: name of the vpool
+        :param vp_name: name of the vpool
 
-        @type vp_name: str
+        :type vp_name: str
 
-        @return: True if succeeded, False if failed
+        :return: True if succeeded, False if failed
 
-        @rtype: bool
+        :rtype: bool
         """
 
         return subprocess.check_output("rm -f /mnt/{0}/ovs-healthcheck-test-*.raw".format(vp_name),

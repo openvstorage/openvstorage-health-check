@@ -45,9 +45,9 @@ class ArakoonHealthCheck:
         """
         Init method for Arakoon health check module
 
-        @param logging: ovs.log.healthcheck_logHandler
+        :param logging: ovs.log.healthcheck_logHandler
 
-        @type logging: Class
+        :type logging: Class
         """
 
         self.module = "arakoon"
@@ -63,9 +63,9 @@ class ArakoonHealthCheck:
         """
         Fetches the available arakoon clusters of a cluster
 
-        @return: if succeeded a list; if failed `None`
+        :return: if succeeded a list; if failed `None`
 
-        @rtype: list
+        :rtype: list
         """
 
         arakoon_clusters = list(EtcdConfiguration.list('/ovs/{0}'.format(self.module)))
@@ -105,13 +105,13 @@ class ArakoonHealthCheck:
         """
         Checks the port connection on a IP address
 
-        @param port_number: Port number of a service that is running on the local machine. (Public or loopback)
+        :param port_number: Port number of a service that is running on the local machine. (Public or loopback)
 
-        @type port_number: int
+        :type port_number: int
 
-        @return: True if the port is available; False if the port is NOT available
+        :return: True if the port is available; False if the port is NOT available
 
-        @rtype: bool
+        :rtype: bool
         """
 
         # check if port is open
@@ -131,11 +131,11 @@ class ArakoonHealthCheck:
         """
         Checks the port connection of a process
 
-        @param process_name: name of a certain process running on this local machine
-        @param port: port where the service is running on
+        :param process_name: name of a certain process running on this local machine
+        :param port: port where the service is running on
 
-        @type process_name: str
-        @type port: int
+        :type process_name: str
+        :type port: int
         """
 
         self.LOGGER.info("Checking port {0} of service {1} ...".format(port, process_name), '_is_port_listening', False)
@@ -168,9 +168,10 @@ class ArakoonHealthCheck:
     def _check_restarts(self, arakoon_overview, last_minutes, max_amount_node_restarted):
         """
         Check the amount of restarts of an Arakoon node
-        :param logfile: Path to Arakoon logfile
+        :param arakoon_overview: Path to Arakoon logfile
         :param last_minutes: Last x minutes to check
-        :param amount: The amount of restarts
+        :param max_amount_node_restarted: The amount of restarts
+
         :return: list with OK and NOK status
         """
         result = {"OK": [], "NOK": []}

@@ -36,7 +36,7 @@ from ovs.extensions.healthcheck.utils.extension import Utils
 from ovs.extensions.db.etcd.configuration import EtcdConfiguration
 from etcd import EtcdConnectionFailed, EtcdKeyNotFound, EtcdException
 from ovs.extensions.healthcheck.utils.exceptions import ObjectNotFoundException, ConnectionFailedException, \
-    DiskNotFoundException
+    DiskNotFoundException, ConfigNotMatchedException
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 
 
@@ -68,9 +68,9 @@ class AlbaHealthCheck:
         """
         Fetches the available alba backends
 
-        @return: information about each alba backend
+        :return: information about each alba backend
 
-        @rtype: list that consists of dicts
+        :rtype: list that consists of dicts
         """
 
         result = []
@@ -130,6 +130,7 @@ class AlbaHealthCheck:
         """
         Checks if all Alba Proxies work on a local machine, it creates a namespace and tries to put and object
         """
+
         amount_of_presets_not_working = []
         ip = self.machine_details.ip
 
@@ -144,15 +145,18 @@ class AlbaHealthCheck:
                     try:
                         # determine what to what backend the proxy is connected
                         proxy_client_cfg = AlbaCLI.run('proxy-client-cfg', host=ip, port=sr.ports[0])
+
+                        # check if proxy config is correctly setup
                         client_config = re.match('^client_cfg:\ncluster_id = (?P<cluster_id>[0-9a-zA-Z_-]+) ,.*',
                                                  proxy_client_cfg)
 
                         if client_config is None:
-                            raise ObjectNotFoundException('Proxy config not in correct format: {0}'
-                                                          .format(client_config))
+                            raise ConfigNotMatchedException('Proxy config does not have '
+                                                            'the correct format on node {0} with port {1}.'
+                                                            .format(ip, sr.ports[0]))
 
+                        # go further
                         abm_name = client_config.groupdict()['cluster_id']
-
                         abm_config = self.utility.get_config_file_path(abm_name, self.machine_id, 0)
 
                         # determine presets / backend
@@ -251,9 +255,15 @@ class AlbaHealthCheck:
                             subprocess.call(['rm', str(self.temp_file_fetched_loc)],
                                             stdout=fnull, stderr=subprocess.STDOUT)
                     except subprocess.CalledProcessError:
+                        # this should stay for the deletion of the remaining files
                         amount_of_presets_not_working.append(sr.name)
                         self.LOGGER.failure("Proxy '{0}' has some problems ..."
                                             .format(sr.name), 'proxy_{0}'.format(sr.name))
+
+                    except ConfigNotMatchedException, e:
+                        amount_of_presets_not_working.append(sr.name)
+                        self.LOGGER.failure("Proxy '{0}' has some problems: {1}"
+                                            .format(sr.name, e), 'proxy_{0}'.format(sr.name))
 
         # for unattended
         return amount_of_presets_not_working
@@ -262,13 +272,13 @@ class AlbaHealthCheck:
         """
         Checks if Alba ASD's work
 
-        @param disks: list of alba ASD's
+        :param disks: list of alba ASD's
 
-        @type disks: list
+        :type disks: list
 
-        @return: returns a tuple that consists of lists: (workingdisks, defectivedisks)
+        :return: returns a tuple that consists of lists: (workingdisks, defectivedisks)
 
-        @rtype: tuple that consists of lists
+        :rtype: tuple that consists of lists
         """
 
         workingdisks = []

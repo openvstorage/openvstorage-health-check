@@ -59,3 +59,17 @@ class DiskNotFoundException(Exception):
     Raised when a ASD disk is not found
     """
     pass
+
+
+class ConfigNotFoundException(Exception):
+    """
+    Raised when a config isn't found
+    """
+    pass
+
+
+class ConfigNotMatchedException(Exception):
+    """
+    Raised when a config isn't matched to the desired regex
+    """
+    pass

@@ -51,6 +51,7 @@ class Utils:
     """
     General utilities for Open vStorage healthcheck
     """
+
     SETTINGS_LOC = "/opt/OpenvStorage/config/healthcheck/settings.json"
 
     def __init__(self):
@@ -81,24 +82,24 @@ class Utils:
         """
         Gets the location of a certain service via local or etcd path
 
-        @param name: name of the PRODUCT (e.g. vpool01 or backend01-abm)
-        @param node_id: the ID of the local node
-        @param product: the id of the desired product
+        :param name: name of the PRODUCT (e.g. vpool01 or backend01-abm)
+        :param node_id: the ID of the local node
+        :param product: the id of the desired product
             * arakoon = 0
             * vpool = 1
             * alba_backend = 2
             * alba_asd = 3
             * ovs framework = 4
-        @param guid: guid of a certain vpool (only required if one desires the config of a vpool)
+        :param guid: guid of a certain vpool (only required if one desires the config of a vpool)
 
-        @type name: str
-        @type node_id: str
-        @type product: int
-        @type guid: str
+        :type name: str
+        :type node_id: str
+        :type product: int
+        :type guid: str
 
-        @return: location of a config file
+        :return: location of a config file
 
-        @rtype: str
+        :rtype: str
         """
 
         # INFO
@@ -137,11 +138,11 @@ class Utils:
         """
         Gets the TYPE of the Open vStorage local node
 
-        @return: TYPE of openvstorage local node
+        :return: TYPE of openvstorage local node
             * MASTER
             * EXTRA
 
-        @rtype: str
+        :rtype: str
         """
 
         return System.get_my_storagerouter().node_type
@@ -151,9 +152,9 @@ class Utils:
         """
         Gets the VERSION of the Open vStorage cluster
 
-        @return: version of openvstorage cluster
+        :return: version of openvstorage cluster
 
-        @rtype: str
+        :rtype: str
         """
 
         with open("/opt/OpenvStorage/webapps/frontend/locales/en-US/ovs.json") as ovs_json:
@@ -165,9 +166,9 @@ class Utils:
         """
         Gets the cluster ID of the Open vStorage cluster
 
-        @return: cluster id of openvstorage cluster
+        :return: cluster id of openvstorage cluster
 
-        @rtype: str
+        :rtype: str
         """
 
         if self.etcd:
@@ -182,9 +183,9 @@ class Utils:
         """
         Detects if ETCD is available on the local machine
 
-        @return: result if ETCD is available on the local machine
+        :return: result if ETCD is available on the local machine
 
-        @rtype: bool
+        :rtype: bool
         """
 
         result = self.execute_bash_command("dpkg -l | grep etcd")
@@ -198,13 +199,13 @@ class Utils:
         """
         Gets information from etcd by ABSOLUTE location (e.g. /ovs/framework)
 
-        @param location: a etcd location
+        :param location: a etcd location
 
-        @type location: str
+        :type location: str
 
-        @return: result of file in etcd
+        :return: result of file in etcd
 
-        @rtype: list
+        :rtype: list
         """
 
         return self.execute_bash_command("etcdctl get {0}".format(location))
@@ -214,13 +215,13 @@ class Utils:
         """
         Converts XML to JSON
 
-        @param xml: a xml file
+        :param xml: a xml file
 
-        @type: str
+        :type: str
 
-        @return: json file
+        :return: json file
 
-        @rtype: json
+        :rtype: json
         """
 
         # dumps converts to general json, loads converts to python value
@@ -230,13 +231,13 @@ class Utils:
         """
         Gets the status of a linux service
 
-        @param service_name: name of a linux service
+        :param service_name: name of a linux service
 
-        @type service_name: str
+        :type service_name: str
 
-        @return: status of the service
+        :return: status of the service
 
-        @rtype: bool
+        :rtype: bool
         """
 
         return ServiceManager.get_service_status(str(service_name), self.client)
@@ -246,17 +247,17 @@ class Utils:
         """
         Execute a bash command through a standard way, already processed and served on a silver platter
 
-        @param cmd: a bash command
-        @param subpro: determines if you are using subprocess or commands module
+        :param cmd: a bash command
+        :param subpro: determines if you are using subprocess or commands module
             * Bash piping or other special cases: False (use commands)
             * General bash command: True (use subprocess)
 
-        @type cmd: str
-        @type subpro: bool
+        :type cmd: str
+        :type subpro: bool
 
-        @return: bash command output
+        :return: bash command output
 
-        @rtype: list
+        :rtype: list
         """
 
         if not subpro:
@@ -269,13 +270,13 @@ class Utils:
         """
         Detects the Service Manager on the local system
 
-        @return: systemd or init/upstart
+        :return: systemd or init/upstart
             * systemd = 0
             * init/upstart = 1
 
-        @rtype: int
+        :rtype: int
 
-        @raises RuntimeError
+        :raises RuntimeError
         """
 
         # detects what service manager your system has
