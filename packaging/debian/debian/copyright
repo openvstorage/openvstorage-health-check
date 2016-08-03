@@ -1,0 +1,31 @@
+                  Open vStorage Non-Commercial License
+                       Copyright 2015, iNuron NV
+                       Version 1.0, October 2015
+
+   Redistribution and use in source and/or binary forms, with or without
+   modification, are subject to the terms and conditions of the Apache 2.0
+   license (http://www.apache.org/licenses/LICENSE-2.0), with the following
+   additional  restrictions:
+   1) No Portion of this notice shall be removed
+   2) Credit shall not be taken for the creation of this source
+   3) This code, binary and/or source is not to be traded, sold, or used in
+      any commercial context.
+   4) While using the code, the actual Open vStorage framework securely
+      sends a minimal set or error, usage and health information. This
+      information is used to keep the quality and performance of the code
+      at the highest possible levels. This secure sending of error, usage and
+      health information cannot be omitted without the written consent of
+      iNuron NV. It is your responsibility to make sure the information is
+      received by the Open vStorage Monitoring Portal.
+
+   THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS "AS IS"
+   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING BUT NOT LIMITED TO,
+   THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+   PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR
+   CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING BUT NOT
+   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+   ANY THEORY OF LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+   OF THE POSSIBILITY OF SUCH DAMAGE.
