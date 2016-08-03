@@ -1,6 +1,6 @@
 {
     "package_name": "openvstorage-health-check",
-    "product_name": "Open vStorage - HealthCheck",
+    "product_name": "Open vStorage - Health-Check",
     "source_contents": "--transform 's,^,{0}-{1}/,' config/healthcheck *.txt",
     "version": {
         "major": 2,
