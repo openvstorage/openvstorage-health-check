@@ -6,79 +6,30 @@ The health check is classified as a monitoring, detection and healing tool for O
 
 **Note:** You will have to deploy this on every Open vStorage node.
 
-## 2. Pulling this repository
+## 2. Adding the package server
 ```
-sudo apt-get install -y git
-git clone -b master https://github.com/openvstorage/openvstorage-health-check.git
-```
-
-## 3. Installation (BY POST-INSTALL SCRIPT)
-```
-cd openvstorage-health-check/bin/
-bash post-install.sh
+echo "deb http://apt.openvstorage.org unstable main" > /etc/apt/sources.list.d/ovsaptrepo.list
+apt-get update
 ```
 
-## 4. Installation (MANUAL)
-
-### Required packages for Health Check
+## 3. Installation
 ```
-wget https://bootstrap.pypa.io/get-pip.py; python get-pip.py
-#pip install flower
-pip install psutil
-pip install xmltodict
-pip install timeout-decorator
-```
-
-### Add following code to Health Check Open vStorage commands
-
-```
-vim /usr/bin/ovs
-```
-
-```
-elif [ "$1" = "healthcheck" ] ; then
-    cd /opt/OpenvStorage/ovs/lib
-    if [ "$2" = "unattended" ] ; then
-        # launch unattended healthcheck
-        python -c "from healthcheck import HealthCheckController; HealthCheckController().check_unattended()"
-    elif [ "$2" = "silent" ] ; then
-	    # launch silent healthcheck
-	    python -c "from healthcheck import HealthCheckController; HealthCheckController().check_silent()"
-    else
-        # launch healthcheck
-        python -c "from healthcheck import HealthCheckController; HealthCheckController().check_attended()"
-    fi
-```
-
-## 5. Execution by hand in ATTENDED MODUS
-
-```
-ovs healthcheck
-```
-
-## 6. Monitoring with CheckMK or other server-deamon monitoring systems
-
-**Recommended:** Run on 30 min. - hourly base (on every node), to check the health of your Open vStorage.
-
-### RUN for CheckMK or other monitoring systems
-
-```
-ovs healthcheck unattended
-```
-
-### Execute by CRON.hourly *(will only generate logs)*
-
-```
-* *   * * *  root  /usr/bin/ovs healthcheck unattended
+apt-get install openvstorage-health-check
 ```
  
 ## 7. Implementing the healthcheck in your system. 
 
-### RUN in silent mode
+### RUN in silent or unattended mode
 
 Although this is available, we only use this in code 
 ```
 ovs healthcheck silent
+```
+
+or 
+
+```
+ovs healthcheck unattended
 ```
 
 ### In-code usage
