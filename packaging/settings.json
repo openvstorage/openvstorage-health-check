@@ -1,10 +1,10 @@
 {
-    "package_name": "openvstorage",
-    "product_name": "Open vStorage",
-    "source_contents": "--transform 's,^,{0}-{1}/,' scripts/install scripts/system config ovs webapps *.txt",
+    "package_name": "openvstorage-health-check",
+    "product_name": "Open vStorage - HealthCheck",
+    "source_contents": "--transform 's,^,{0}-{1}/,' config/healthcheck *.txt",
     "version": {
         "major": 2,
-        "minor": 7,
+        "minor": 0,
         "patch": 0
     }
 }

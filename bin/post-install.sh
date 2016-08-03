@@ -22,5 +22,4 @@ chmod 755 /usr/bin/ovs
 wget https://bootstrap.pypa.io/get-pip.py; python get-pip.py
 #pip install flower
 pip install psutil
-pip install xmltodict
 pip install timeout-decorator
