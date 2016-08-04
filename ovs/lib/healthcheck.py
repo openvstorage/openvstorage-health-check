@@ -36,6 +36,9 @@ LOGGER = HCLogHandler(unattended, silent_mode)
 
 class HealthCheckController:
 
+    def __init__(self):
+        pass
+
     @staticmethod
     @celery.task(name='ovs.healthcheck.check_unattended')
     def check_unattended():
