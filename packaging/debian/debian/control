@@ -1,4 +1,4 @@
-Source: openvstorage
+Source: openvstorage-health-check
 Maintainer: Jonas Libbrecht <jonas.libbrecht@openvstorage.com>
 Standards-Version: 3.9.4
 Section: python
