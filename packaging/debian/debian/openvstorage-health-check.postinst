@@ -1,3 +1,5 @@
 #!/usr/bin/env bash
 
-chmod 755 /usr/bin/ovs
+chown ovs:ovs /opt/OpenvStorage/scripts/healthcheck.sh
+chmod 755 /opt/OpenvStorage/scripts/healthcheck.sh
+chmod +x /opt/OpenvStorage/scripts/healthcheck.sh
