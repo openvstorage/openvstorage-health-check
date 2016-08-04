@@ -1,7 +1,7 @@
 {
     "package_name": "openvstorage-health-check",
     "product_name": "Open vStorage - Health-Check",
-    "source_contents": "--transform 's,^,{0}-{1}/,' --exclude='*__init__.py' config/healthcheck ovs scripts *.txt",
+    "source_contents": "--transform 's,^,{0}-{1}/,' config/healthcheck ovs scripts *.txt",
     "version": {
         "major": 2,
         "minor": 0,
