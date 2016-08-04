@@ -225,9 +225,8 @@ class HealthCheckController:
         """
         Gets the result of the Open vStorage healthcheck
 
-        @return: results & recap
-
-        @rtype: dict with nested dicts
+        :return: results & recap
+        :rtype: dict with nested dicts
         """
 
         LOGGER.info("Recap of Health Check!", 'starting_recap_hc', False)

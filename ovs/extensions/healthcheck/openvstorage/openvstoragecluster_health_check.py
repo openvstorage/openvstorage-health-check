@@ -129,7 +129,7 @@ class OpenvStorageHealthCheck:
 
         # collect log files
         for log, settings in self.logging.iteritems():
-            if settings.get('type') == 'dirname':
+            if settings.get('type') == 'dir':
                 # check if dirname exists
                 if os.path.isdir(log):
                     # check if dirname contains files
