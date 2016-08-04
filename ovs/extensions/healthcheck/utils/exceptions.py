@@ -73,3 +73,10 @@ class ConfigNotMatchedException(Exception):
     Raised when a config isn't matched to the desired regex
     """
     pass
+
+
+class PlatformNotSupportedException(Exception):
+    """
+    Raised when the platform is not supported
+    """
+    pass

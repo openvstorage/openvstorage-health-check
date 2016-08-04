@@ -200,8 +200,8 @@ class AlbaHealthCheck:
                                 AlbaCLI.run('download-object', config=abm_config,
                                             extra_params=[namespace_key, object_key, self.temp_file_fetched_loc])
 
-                                # check if file exists (if not then location does not exists)
-                                if os.path.isfile(self.temp_file_fetched_loc):
+                                # check if files exists - issue #57
+                                if os.path.isfile(self.temp_file_fetched_loc) and os.path.isfile(self.temp_file_loc):
                                     hash_original = hashlib.md5(open(self.temp_file_loc, 'rb')
                                                                 .read()).hexdigest()
                                     hash_fetched = hashlib.md5(open(self.temp_file_fetched_loc, 'rb')

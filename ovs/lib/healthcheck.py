@@ -20,11 +20,12 @@
 Module for HealthCheckController
 """
 
-from ovs.celery_run import celery
 from ovs.extensions.healthcheck.openvstorage.openvstoragecluster_health_check import OpenvStorageHealthCheck
 from ovs.extensions.healthcheck.arakoon.arakooncluster_health_check import ArakoonHealthCheck
+from ovs.extensions.healthcheck.utils.exceptions import PlatformNotSupportedException
 from ovs.extensions.healthcheck.alba.alba_health_check import AlbaHealthCheck
 from ovs.log.healthcheck_logHandler import HCLogHandler
+from ovs.celery_run import celery
 
 module = "healthcheck"
 platform = 0
@@ -41,11 +42,8 @@ class HealthCheckController:
         """
         Executes the healthcheck in UNATTENDED mode
 
-        @return: results of the healthcheck
-
-        @rtype: dict
-
-        @raises: Exception (When platform is not supported)
+        :return: results of the healthcheck
+        :rtype: dict
         """
 
         # initialize variables as global
@@ -67,11 +65,8 @@ class HealthCheckController:
         """
         Executes the healthcheck in ATTENDED mode
 
-        @return: results of the healthcheck
-
-        @rtype: dict
-
-        @raises: Exception (When platform is not supported)
+        :return: results of the healthcheck
+        :rtype: dict
         """
 
         # initialize variables as global
@@ -93,11 +88,8 @@ class HealthCheckController:
         """
         Executes the healthcheck in SILENT mode
 
-        @return: results of the healthcheck
-
-        @rtype: dict
-
-        @raises: Exception (When platform is not supported)
+        :return: results of the healthcheck
+        :rtype: dict
         """
 
         # initialize variables as global
@@ -124,11 +116,8 @@ class HealthCheckController:
             * Distributed FS (Open vStorage + Arakoon + Distributed FS) = 3
             * S3 (Open vStorage + Arakoon + S3) = 4
 
-        @return: results of the healthcheck
-
-        @rtype: dict
-
-        @raises: Exception (When platform is not supported)
+        :return: results of the healthcheck
+        :rtype: dict
         """
 
         if platform == 0:
@@ -136,7 +125,7 @@ class HealthCheckController:
             HealthCheckController.check_arakoon()
             HealthCheckController.check_alba()
         else:
-            raise Exception("Platform '{0}' is CURRENTLY NOT supported".format(platform))
+            raise PlatformNotSupportedException("Platform '{0}' is currently NOT supported".format(platform))
 
         return HealthCheckController.get_results()
 
@@ -185,12 +174,12 @@ class HealthCheckController:
         ovs.check_for_halted_volumes()
         if not unattended and not silent_mode:
             print ""
-        #ovs.check_filedrivers()
-        #if not unattended and not silent_mode:
-        #    print ""
-        #ovs.check_volumedrivers()
-        #if not unattended and not silent_mode:
-        #    print ""
+        ovs.check_filedrivers()
+        if not unattended and not silent_mode:
+            print ""
+        ovs.check_volumedrivers()
+        if not unattended and not silent_mode:
+            print ""
 
     @staticmethod
     @celery.task(name='ovs.healthcheck.check_arakoon')
@@ -251,7 +240,6 @@ class HealthCheckController:
                                                                  'FAILED': LOGGER.HC_failure,
                                                                  'SKIPPED': LOGGER.HC_skip,
                                                                  'WARNING': LOGGER.HC_warning,
-                                                                 'EXCEPTION': LOGGER.HC_exception}
-                    }
+                                                                 'EXCEPTION': LOGGER.HC_exception}}
         else:
             return None
