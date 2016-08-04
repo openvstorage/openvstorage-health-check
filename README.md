@@ -7,13 +7,13 @@ The health check is classified as a monitoring, detection and healing tool for O
 **Note:** You will have to deploy this on every Open vStorage node.
 
 ## 2. Adding the package server
-### 2.1 Stable
+### 2.1. Stable
 ```
 echo "deb http://apt.openvstorage.org fargo main" > /etc/apt/sources.list.d/ovsaptrepo.list
 apt-get update
 ```
 
-### 2.2 Unstable
+### 2.2. Unstable
 ```
 echo "deb http://apt.openvstorage.org unstable main" > /etc/apt/sources.list.d/ovsaptrepo.list
 apt-get update
@@ -24,9 +24,9 @@ apt-get update
 apt-get install openvstorage-health-check
 ```
  
-## 7. Implementing the healthcheck in your system. 
+## 4. Implementing the healthcheck in your system. 
 
-### RUN in silent or unattended mode
+### 4.1. RUN in silent or unattended mode
 
 Although this is available, we only use this in code 
 ```
@@ -39,7 +39,7 @@ or
 ovs healthcheck unattended
 ```
 
-### In-code usage
+### 4.2. In-code usage
 
 ```
 In [1]: from ovs.lib.healthcheck import HealthCheckController
@@ -63,16 +63,16 @@ Out[2]:
   ...
 ```
  
-## 8. Important to know!
+## 5. Important to know!
 * No files in the vPools may be named after: `ovs-healthcheck-test-{storagerouter_id}.xml`
 * No volumes in the vPools may be named after: `ovs-healthcheck-test-{storagerouter_id}.raw`
 
-## 9. Branch Info or contributions
+## 6. Branch Info or contributions
 * The 'master' branch is marked as the main but unstable branch
 * The 'release' branches are the official releases of the HEALTH CHECK Project
 * We'd love to have your contributions, read [Community Information](CONTRIBUTION.md) and [Rules of conduct](RULES.md) for notes on how to get started.
 
-## 10. File a bug
+## 7. File a bug
 Open vStorage and it's automation is quality checked to the highest level.
 Unfortunately we might have overlooked some tiny topics here or there.
 The Open vStorage HEALTH CHECK Project maintains a [public issue tracker](https://github.com/openvstorage/openvstorage-health-check/issues)
@@ -81,6 +81,6 @@ This issue tracker is not a customer support forum but an error, flaw, failure, 
 
 If you want to submit a bug, please read the [Community Information](CONTRIBUTION.md) for notes on how to get started.
 
-# 11. License
+# 8. License
 The Open vStorage HealthCheck is licensed under the [GNU AFFERO GENERAL PUBLIC LICENSE Version 3](https://www.gnu.org/licenses/agpl.html).
 
