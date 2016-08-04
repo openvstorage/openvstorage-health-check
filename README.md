@@ -2,7 +2,7 @@
 
 ## 1. Description
 
-The health check is classified as a monitoring, detection and healing tool for Open vStorage for `Fargo`.
+The health check is classified as a monitoring, detection and healing tool for Open vStorage for `Unstable`.
 
 **Note:** You will have to deploy this on every Open vStorage node.
 
