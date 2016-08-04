@@ -15,4 +15,6 @@
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
 
-chmod 755 /usr/bin/ovs
+chown ovs:ovs /opt/OpenvStorage/scripts/healthcheck.sh
+chmod 755 /opt/OpenvStorage/scripts/healthcheck.sh
+chmod +x /opt/OpenvStorage/scripts/healthcheck.sh
