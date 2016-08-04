@@ -6,80 +6,40 @@ The health check is classified as a monitoring, detection and healing tool for O
 
 **Note:** You will have to deploy this on every Open vStorage node.
 
-## 2. Pulling this repository
+## 2. Adding the package server
+### 2.1. Stable
 ```
-sudo apt-get install -y git
-git clone -b master https://github.com/openvstorage/openvstorage-health-check.git
-```
-
-## 3. Installation (BY POST-INSTALL SCRIPT)
-```
-cd openvstorage-health-check/bin/
-bash post-install.sh
+echo "deb http://apt.openvstorage.org fargo main" > /etc/apt/sources.list.d/ovsaptrepo.list
+apt-get update
 ```
 
-## 4. Installation (MANUAL)
-
-### Required packages for Health Check
+### 2.2. Unstable
 ```
-wget https://bootstrap.pypa.io/get-pip.py; python get-pip.py
-pip install psutil
-pip install timeout-decorator
+echo "deb http://apt.openvstorage.org unstable main" > /etc/apt/sources.list.d/ovsaptrepo.list
+apt-get update
 ```
 
-### Add following code to Health Check Open vStorage commands
-
+## 3. Installation
 ```
-vim /usr/bin/ovs
-```
-
-```
-elif [ "$1" = "healthcheck" ] ; then
-    cd /opt/OpenvStorage/ovs/lib
-    if [ "$2" = "unattended" ] ; then
-        # launch unattended healthcheck
-        python -c "from healthcheck import HealthCheckController; HealthCheckController().check_unattended()"
-    elif [ "$2" = "silent" ] ; then
-	    # launch silent healthcheck
-	    python -c "from healthcheck import HealthCheckController; HealthCheckController().check_silent()"
-    else
-        # launch healthcheck
-        python -c "from healthcheck import HealthCheckController; HealthCheckController().check_attended()"
-    fi
-```
-
-## 5. Execution by hand in ATTENDED MODUS
-
-```
-ovs healthcheck
-```
-
-## 6. Monitoring with CheckMK or other server-deamon monitoring systems
-
-**Recommended:** Run on 30 min. - hourly base (on every node), to check the health of your Open vStorage.
-
-### RUN for CheckMK or other monitoring systems
-
-```
-ovs healthcheck unattended
-```
-
-### Execute by CRON.hourly *(will only generate logs)*
-
-```
-* *   * * *  root  /usr/bin/ovs healthcheck unattended
+apt-get install openvstorage-health-check
 ```
  
-## 7. Implementing the healthcheck in your system. 
+## 4. Implementing the healthcheck in your system. 
 
-### RUN in silent mode
+### 4.1. RUN in silent or unattended mode
 
 Although this is available, we only use this in code 
 ```
 ovs healthcheck silent
 ```
 
-### In-code usage
+or 
+
+```
+ovs healthcheck unattended
+```
+
+### 4.2. In-code usage
 
 ```
 In [1]: from ovs.lib.healthcheck import HealthCheckController
@@ -103,16 +63,16 @@ Out[2]:
   ...
 ```
  
-## 8. Important to know!
+## 5. Important to know!
 * No files in the vPools may be named after: `ovs-healthcheck-test-{storagerouter_id}.xml`
 * No volumes in the vPools may be named after: `ovs-healthcheck-test-{storagerouter_id}.raw`
 
-## 9. Branch Info or contributions
+## 6. Branch Info or contributions
 * The 'master' branch is marked as the main but unstable branch
 * The 'release' branches are the official releases of the HEALTH CHECK Project
 * We'd love to have your contributions, read [Community Information](CONTRIBUTION.md) and [Rules of conduct](RULES.md) for notes on how to get started.
 
-## 10. File a bug
+## 7. File a bug
 Open vStorage and it's automation is quality checked to the highest level.
 Unfortunately we might have overlooked some tiny topics here or there.
 The Open vStorage HEALTH CHECK Project maintains a [public issue tracker](https://github.com/openvstorage/openvstorage-health-check/issues)
@@ -121,6 +81,6 @@ This issue tracker is not a customer support forum but an error, flaw, failure, 
 
 If you want to submit a bug, please read the [Community Information](CONTRIBUTION.md) for notes on how to get started.
 
-# 11. License
+# 8. License
 The Open vStorage HealthCheck is licensed under the [GNU AFFERO GENERAL PUBLIC LICENSE Version 3](https://www.gnu.org/licenses/agpl.html).
 

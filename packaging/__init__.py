@@ -1,5 +1,3 @@
-#!/usr/bin/env bash
-
 # Copyright (C) 2016 iNuron NV
 #
 # This file is part of Open vStorage Open Source Edition (OSE),
@@ -16,9 +14,6 @@
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
 
-cp ../* /opt/OpenvStorage -R
-cp ../scripts/system/ovs /usr/bin/ovs
-chmod 755 /usr/bin/ovs
-wget https://bootstrap.pypa.io/get-pip.py; python get-pip.py
-pip install psutil
-pip install timeout-decorator
+"""
+Packaging package
+"""
