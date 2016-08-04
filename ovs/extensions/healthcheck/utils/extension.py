@@ -21,7 +21,6 @@ Utilities module for OVS health check
 """
 
 import subprocess
-import xmltodict
 import commands
 import json
 from ovs.extensions.services.service import ServiceManager
@@ -209,23 +208,6 @@ class Utils:
         """
 
         return self.execute_bash_command("etcdctl get {0}".format(location))
-
-    @staticmethod
-    def convert_xml_to_json(xml):
-        """
-        Converts XML to JSON
-
-        :param xml: a xml file
-
-        :type: str
-
-        :return: json file
-
-        :rtype: json
-        """
-
-        # dumps converts to general json, loads converts to python value
-        return json.loads(json.dumps(xmltodict.parse(str(xml))))
 
     def check_status_of_service(self, service_name):
         """
