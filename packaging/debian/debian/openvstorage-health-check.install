@@ -1,3 +1,4 @@
 ovs                                            opt/OpenvStorage
 scripts/healthcheck.sh                         opt/OpenvStorage/scripts
-config/healthcheck                             opt/OpenvStorage/config/healthcheck
+config/healthcheck/settings.json               opt/OpenvStorage/config/healthcheck
+config/healthcheck/info.json                   opt/OpenvStorage/config/healthcheck
