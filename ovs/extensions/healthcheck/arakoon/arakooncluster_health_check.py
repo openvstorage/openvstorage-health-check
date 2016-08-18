@@ -61,7 +61,7 @@ class ArakoonHealthCheck:
 
     def fetch_available_clusters(self):
         """
-        Fetches the available arakoon clusters of a cluster
+        Fetches the available local arakoon clusters of a cluster
 
         :return: if succeeded a list; if failed `None`
 
@@ -84,7 +84,10 @@ class ArakoonHealthCheck:
 
             ak = ArakoonClusterConfig(str(cluster))
             ak.load_config()
-            master_node_ids = list((node.name for node in ak.nodes))
+            master_node_ids = [node.name for node in ak.nodes]
+
+            if self.machine_details.machine_id not in master_node_ids:
+                continue
 
             for node_id in master_node_ids:
                 node_info = StorageRouterList.get_by_machine_id(node_id)
@@ -281,8 +284,9 @@ class ArakoonHealthCheck:
                 if not self.LOGGER.unattended_mode:
                     # check amount OK arakoons
                     if len(ver_result[0]) > 0:
-                        self.LOGGER.success(
-                            "{0} Arakoon(s) is/are OK!: {1}".format(len(ver_result[0]), ', '.join(ver_result[0])),
+                        self.LOGGER.warning(
+                            "{0}/{1} Arakoon(s) is/are OK!: {2}".format(len(ver_result[0]), len(arakoon_overview),
+                                                                        ', '.join(ver_result[0])),
                             'arakoon_some_up', False)
                     # check amount NO-MASTER arakoons
                     if len(ver_result[1]) > 0:
