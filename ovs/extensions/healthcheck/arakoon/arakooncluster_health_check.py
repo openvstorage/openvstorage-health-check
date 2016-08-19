@@ -407,5 +407,7 @@ class ArakoonHealthCheck:
                                     'arakoon_collapse')
             elif len(ok) > 0:
                 self.LOGGER.success("ALL Arakoon(s) are collapsed.", 'arakoon_collapse')
+            else:
+                self.LOGGER.skip("No clusters found", 'arakoon_collapse')
         else:
             self.LOGGER.skip("No clusters found", 'arakoon_found')
