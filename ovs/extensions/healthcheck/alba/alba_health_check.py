@@ -27,6 +27,7 @@ import re
 import hashlib
 import subprocess
 from ovs.extensions.generic.system import System
+from ovs.dal.hybrids.servicetype import ServiceType
 from ovs.dal.lists.servicelist import ServiceList
 from ovs.dal.lists.albanodelist import AlbaNodeList
 from ovs.log.healthcheck_logHandler import HCLogHandler
@@ -141,7 +142,7 @@ class AlbaHealthCheck:
         # try put/get/verify on all available proxies on the local node
         for sr in ServiceList.get_services():
             if sr.storagerouter_guid == self.machine_details.guid:
-                if 'albaproxy_' in sr.name:
+                if sr.type.name == ServiceType.SERVICE_TYPES.ALBA_PROXY:
                     self.LOGGER.info("Checking ALBA proxy '{0}': ".format(sr.name), 'check_alba', False)
                     try:
                         # determine what to what backend the proxy is connected
