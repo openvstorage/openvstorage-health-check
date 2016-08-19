@@ -84,6 +84,7 @@ class AlbaHealthCheck:
                     available = False
                     if preset.get('is_available'):
                         available = True
+                        break
                     elif len(abl.presets) == abl.presets.index(preset) + 1:
                         available = False
 
@@ -298,17 +299,13 @@ class AlbaHealthCheck:
                         # check if disk is missing
                         if disk.get('port'):
                             # put object but ignore crap for a moment
-                            with open(os.devnull, 'w') as devnull:
-                                subprocess.call(['alba', 'asd-set', '--long-id', disk.get('asd_id'), '-p',
-                                                 str(disk.get('port')), '-h', ip_address, key, value], stdout=devnull,
-                                                stderr=subprocess.STDOUT)
+                            AlbaCLI.run('asd-set', host=ip_address, port=str(disk.get('port')),
+                                        long_id=disk.get('asd_id'), extra_params=[key, value])
 
                             # get object
                             try:
-                                with open(os.devnull, 'w') as devnull:
-                                    g = subprocess.check_output(['alba', 'asd-multi-get', '--long-id', disk.get('asd_id'),
-                                                                 '-p', str(disk.get('port')), '-h', ip_address, key],
-                                                                stderr=devnull)
+                                g = AlbaCLI.run('asd-multi-get', host=ip_address, port=str(disk.get('port')),
+                                                long_id=disk.get('asd_id'), extra_params=[key])
                             except Exception:
                                 raise ConnectionFailedException('Connection failed to disk')
 
@@ -326,9 +323,8 @@ class AlbaHealthCheck:
 
                             # delete object
                             try:
-                                with open(os.devnull, 'w') as devnull:
-                                    subprocess.check_output(['alba', 'asd-delete', '--long-id', disk.get('asd_id'), '-p',
-                                                             str(disk.get('port')), '-h', ip_address, key], stderr=devnull)
+                                AlbaCLI.run('asd-delete', host=ip_address, port=str(disk.get('port')),
+                                            long_id=disk.get('asd_id'), extra_params=[key])
                             except subprocess.CalledProcessError:
                                 raise ConnectionFailedException('Connection failed to disk when trying to delete!')
                         else:
