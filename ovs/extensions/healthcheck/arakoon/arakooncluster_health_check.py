@@ -394,8 +394,6 @@ class ArakoonHealthCheck:
             elif len(ok) > 0:
                 self.LOGGER.success("ALL Arakoon(s) restart check(s) is/are OK!",
                                     'arakoon_restarts')
-            else:
-                self.LOGGER.skip("No clusters found", 'arakoon_restarts')
 
             collapse_check = self._check_collapse(arakoon_overview, self.collapse_older_than_days)
 
@@ -407,7 +405,5 @@ class ArakoonHealthCheck:
                                     'arakoon_collapse')
             elif len(ok) > 0:
                 self.LOGGER.success("ALL Arakoon(s) are collapsed.", 'arakoon_collapse')
-            else:
-                self.LOGGER.skip("No clusters found", 'arakoon_collapse')
         else:
             self.LOGGER.skip("No clusters found", 'arakoon_found')
