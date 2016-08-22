@@ -236,16 +236,16 @@ class ArakoonHealthCheck:
                         self.LOGGER.failure("No files found in {0}".format(tlog_dir), 'arakoon_files')
                     continue
 
-                files.sort()
-
                 if 'head.db' in files:
                     head_db_stats = os.stat('{0}/head.db'.format(tlog_dir))
                     if head_db_stats.st_mtime > old_than_timestamp:
                         result["OK"].append(arakoon)
                         continue
 
-                amount_tlx = len([file for file in files if file.endswith('.tlx')])
-                oldest_file = files[0]
+                tlx_files = [int(tlx_file.replace('.tlx', '')) for tlx_file in files if tlx_file.endswith('.tlx')]
+                amount_tlx = len(tlx_files)
+                tlx_files.sort()
+                oldest_file = "{0}.tlx".format(tlx_files[0])
                 oldest_tlx_stats = os.stat('{0}/{1}'.format(tlog_dir, oldest_file))
 
                 if amount_tlx < 3:
