@@ -228,7 +228,9 @@ class ArakoonHealthCheck:
                     files = os.listdir(tlog_dir)
                 except OSError, ex:
                     if not self.LOGGER.unattended_mode:
-                        self.LOGGER.failure("File or directory not found: {0}".format(ex.message), 'arakoon_path')
+                        self.LOGGER.failure("File or directory not found: {0}".format(ex), 'arakoon_path')
+                    result["NOK"].append(arakoon)
+                    continue
 
                 if len(files) == 0:
                     result["NOK"].append(arakoon)
@@ -242,11 +244,19 @@ class ArakoonHealthCheck:
                         result["OK"].append(arakoon)
                         continue
 
-                tlx_files = [int(tlx_file.replace('.tlx', '')) for tlx_file in files if tlx_file.endswith('.tlx')]
+                tlx_files = [(int(tlx_file.replace('.tlx', '')), tlx_file) for tlx_file in files
+                             if tlx_file.endswith('.tlx')]
                 amount_tlx = len(tlx_files)
-                tlx_files.sort()
-                oldest_file = "{0}.tlx".format(tlx_files[0])
-                oldest_tlx_stats = os.stat('{0}/{1}'.format(tlog_dir, oldest_file))
+                tlx_files.sort(key=lambda tup: tup[0])
+                oldest_file = tlx_files[0][1]
+
+                try:
+                    oldest_tlx_stats = os.stat('{0}/{1}'.format(tlog_dir, oldest_file))
+                except OSError, ex:
+                    if not self.LOGGER.unattended_mode:
+                        self.LOGGER.failure("File or directory not found: {0}".format(ex), 'arakoon_tlx_path')
+                    result["NOK"].append(arakoon)
+                    continue
 
                 if amount_tlx < 3:
                     result["OK"].append(arakoon)
