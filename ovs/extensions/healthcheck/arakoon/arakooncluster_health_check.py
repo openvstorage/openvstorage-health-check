@@ -247,6 +247,14 @@ class ArakoonHealthCheck:
                 tlx_files = [(int(tlx_file.replace('.tlx', '')), tlx_file) for tlx_file in files
                              if tlx_file.endswith('.tlx')]
                 amount_tlx = len(tlx_files)
+
+                if amount_tlx == 0:
+                    result['NOK'].append(arakoon)
+                    if not self.LOGGER.unattended_mode:
+                        self.LOGGER.failure("No tlx files found and head.db is out of sync "
+                                            "or is not present in {0}.".format(tlog_dir), 'arakoon_tlx_path')
+                    continue
+
                 tlx_files.sort(key=lambda tup: tup[0])
                 oldest_file = tlx_files[0][1]
 
