@@ -20,12 +20,14 @@
 Arakoon Health Check module
 """
 
+import os
 import time
 import uuid
 import socket
 import subprocess
 import ConfigParser
 from StringIO import StringIO
+from datetime import date, timedelta, datetime
 from ovs.extensions.generic.system import System
 from ovs.log.healthcheck_logHandler import HCLogHandler
 from ovs.extensions.healthcheck.utils.extension import Utils
@@ -56,6 +58,7 @@ class ArakoonHealthCheck:
 
         self.last_minutes = 5
         self.max_amount_node_restarted = 5
+        self.collapse_older_than_days = 2
 
         self.machine_details = System.get_my_storagerouter()
 
@@ -89,6 +92,12 @@ class ArakoonHealthCheck:
             if self.machine_details.machine_id not in master_node_ids:
                 continue
 
+            try:
+                tlog_dir = ak.export()[self.machine_details.machine_id]['tlog_dir']
+            except KeyError, ex:
+                self.LOGGER.failure("Key {0} not found.".format(ex.message))
+                continue
+
             for node_id in master_node_ids:
                 node_info = StorageRouterList.get_by_machine_id(node_id)
 
@@ -97,7 +106,8 @@ class ArakoonHealthCheck:
                     'hostname': node_info.name,
                     'ip-address': node_info.ip,
                     'guid': node_info.guid,
-                    'node_type': node_info.node_type
+                    'node_type': node_info.node_type,
+                    'tlog_dir': tlog_dir
                     }
                 })
             result.update({cluster: nodes_per_cluster_result})
@@ -171,7 +181,7 @@ class ArakoonHealthCheck:
     def _check_restarts(self, arakoon_overview, last_minutes, max_amount_node_restarted):
         """
         Check the amount of restarts of an Arakoon node
-        :param arakoon_overview: Path to Arakoon logfile
+        :param arakoon_overview: List of available Arakoons
         :param last_minutes: Last x minutes to check
         :param max_amount_node_restarted: The amount of restarts
 
@@ -194,6 +204,84 @@ class ArakoonHealthCheck:
                 result['NOK'].append(cluster_name)
 
             result['OK'].append(cluster_name)
+
+        return result
+
+    def _check_collapse(self, arakoon_overiew, older_than_days):
+        """
+
+        :param arakoon_overiew: List of available Arakoons
+        :param older_than_days: The amount of days behind
+        :return:  list with OK, NOK status
+        """
+        result = {"OK": [], "NOK": []}
+        old_date = date.today() - timedelta(older_than_days)
+        old_than_timestamp = time.mktime(old_date.timetuple())
+
+        for arakoon, arakoon_nodes in arakoon_overiew.iteritems():
+            for node, config in arakoon_nodes.iteritems():
+                if node != self.machine_details.machine_id:
+                    continue
+
+                try:
+                    tlog_dir = config['tlog_dir']
+                    files = os.listdir(tlog_dir)
+                except OSError, ex:
+                    if not self.LOGGER.unattended_mode:
+                        self.LOGGER.failure("File or directory not found: {0}".format(ex), 'arakoon_path')
+                    result["NOK"].append(arakoon)
+                    continue
+
+                if len(files) == 0:
+                    result["NOK"].append(arakoon)
+                    if not self.LOGGER.unattended_mode:
+                        self.LOGGER.failure("No files found in {0}".format(tlog_dir), 'arakoon_files')
+                    continue
+
+                if 'head.db' in files:
+                    head_db_stats = os.stat('{0}/head.db'.format(tlog_dir))
+                    if head_db_stats.st_mtime > old_than_timestamp:
+                        result["OK"].append(arakoon)
+                        continue
+
+                tlx_files = [(int(tlx_file.replace('.tlx', '')), tlx_file) for tlx_file in files
+                             if tlx_file.endswith('.tlx')]
+                amount_tlx = len(tlx_files)
+
+                if amount_tlx == 0:
+                    result['NOK'].append(arakoon)
+                    if not self.LOGGER.unattended_mode:
+                        self.LOGGER.failure("No tlx files found and head.db is out of sync "
+                                            "or is not present in {0}.".format(tlog_dir), 'arakoon_tlx_path')
+                    continue
+
+                tlx_files.sort(key=lambda tup: tup[0])
+                oldest_file = tlx_files[0][1]
+
+                try:
+                    oldest_tlx_stats = os.stat('{0}/{1}'.format(tlog_dir, oldest_file))
+                except OSError, ex:
+                    if not self.LOGGER.unattended_mode:
+                        self.LOGGER.failure("File or directory not found: {0}".format(ex), 'arakoon_tlx_path')
+                    result["NOK"].append(arakoon)
+                    continue
+
+                if amount_tlx < 3:
+                    result["OK"].append(arakoon)
+                    continue
+
+                if oldest_tlx_stats.st_mtime > old_than_timestamp:
+                    result["OK"].append(arakoon)
+                    continue
+
+                if not self.LOGGER.unattended_mode:
+                    datetime_oldest_file = datetime.fromtimestamp(oldest_tlx_stats.st_mtime).isoformat()
+                    datetime_old_date = datetime.fromtimestamp(old_than_timestamp).isoformat()
+                    self.LOGGER.failure("oldest file: {0} with timestamp: {1} is older than {2} for arakoon {3}"
+                                        .format(oldest_file, datetime_oldest_file,
+                                                datetime_old_date, arakoon), 'arakoon_oldest_file')
+
+                result['NOK'].append(arakoon)
 
         return result
 
@@ -325,5 +413,15 @@ class ArakoonHealthCheck:
                 self.LOGGER.success("ALL Arakoon(s) restart check(s) is/are OK!",
                                     'arakoon_restarts')
 
+            collapse_check = self._check_collapse(arakoon_overview, self.collapse_older_than_days)
+
+            nok = collapse_check['NOK']
+            ok = collapse_check['OK']
+
+            if len(nok) > 0:
+                self.LOGGER.failure("{0} Arakoon(s) having issues with collapsing: {1}".format(len(nok), ','.join(nok)),
+                                    'arakoon_collapse')
+            elif len(ok) > 0:
+                self.LOGGER.success("ALL Arakoon(s) are collapsed.", 'arakoon_collapse')
         else:
             self.LOGGER.skip("No clusters found", 'arakoon_found')
