@@ -248,7 +248,10 @@ class ArakoonHealthCheck:
                              if tlx_file.endswith('.tlx')]
                 amount_tlx = len(tlx_files)
 
-                if amount_tlx == 0:
+                if amount_tlx == 0 and len([tlog_file for tlog_file in files if tlog_file.endswith('.tlog')]) > 0:
+                    result['OK'].append(arakoon)
+                    continue
+                elif amount_tlx == 0 and len([tlog_file for tlog_file in files if tlog_file.endswith('.tlog')]) < 0:
                     result['NOK'].append(arakoon)
                     if not self.LOGGER.unattended_mode:
                         self.LOGGER.failure("No tlx files found and head.db is out of sync "
