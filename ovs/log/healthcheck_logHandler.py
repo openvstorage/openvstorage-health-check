@@ -37,10 +37,11 @@ class _Colors:
         return getattr(self, item)
 
     DEBUG = '\033[94m'
+    INFO = '\033[94m'
     SUCCESS = '\033[92m'
     WARNING = '\033[93m'
     FAILED = '\033[91m'
-    SKIP = '\033[95m'
+    SKIPPED = '\033[95m'
     ENDC = '\033[0m'
 
 
@@ -128,7 +129,7 @@ class HCLogHandler:
                     print "{0} {1}".format(unattended_mode_name, error_type)
                     self.healthcheck_dict[unattended_mode_name] = error_type
             else:
-                print "{0}[{1}] {2}{3}".format(_Colors[error_type], error_type, _Colors.ENDC, str(msg))
+                print "{0}[{1}] {2}{3}".format(_Colors()[error_type], error_type, _Colors.ENDC, str(msg))
         else:
             if unattended_print_mode:
                 self.healthcheck_dict[unattended_mode_name] = error_type
