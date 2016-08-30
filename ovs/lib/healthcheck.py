@@ -232,13 +232,13 @@ class HealthCheckController:
         LOGGER.info("Recap of Health Check!", 'starting_recap_hc', False)
         LOGGER.info("======================", 'starting_recap_hc_ul', False)
 
-        LOGGER.success("SUCCESSFULL={0} FAILED={1} SKIPPED={2} WARNING={3} EXCEPTION={4}"
+        LOGGER.success("SUCCESS={0} FAILED={1} SKIPPED={2} WARNING={3} EXCEPTION={4}"
                        .format(LOGGER.HC_success, LOGGER.HC_failure, LOGGER.HC_skip, LOGGER.HC_warning,
                                LOGGER.HC_exception), 'exception_occured')
 
         if silent_mode or unattended:
             # returns dict with minimal and detailed information
-            return {'result': LOGGER.healthcheck_dict, 'recap': {'SUCCESSFULL': LOGGER.HC_success,
+            return {'result': LOGGER.healthcheck_dict, 'recap': {'SUCCESS': LOGGER.HC_success,
                                                                  'FAILED': LOGGER.HC_failure,
                                                                  'SKIPPED': LOGGER.HC_skip,
                                                                  'WARNING': LOGGER.HC_warning,
