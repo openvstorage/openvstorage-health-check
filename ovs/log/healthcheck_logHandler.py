@@ -103,20 +103,20 @@ class HCLogHandler:
         :return:
         """
         if self.enable:
-            self._logger.error('FAILURE - {0}'.format(msg))
+            self._logger.error('FAILED - {0}'.format(msg))
 
         self.HC_failure += 1
 
         if not self.silent_mode:
             if self.unattended_mode:
                 if unattended_print_mode:
-                    print "{0} FAILURE".format(unattended_mode_name)
-                    self.healthcheck_dict[unattended_mode_name] = "FAILURE"
+                    print "{0} FAILED".format(unattended_mode_name)
+                    self.healthcheck_dict[unattended_mode_name] = "FAILED"
             else:
-                print _Colors.FAIL + "[FAILURE] " + _Colors.ENDC + "%s" % (str(msg))
+                print _Colors.FAIL + "[FAILED] " + _Colors.ENDC + "%s" % (str(msg))
         else:
             if unattended_print_mode:
-                self.healthcheck_dict[unattended_mode_name] = "FAILURE"
+                self.healthcheck_dict[unattended_mode_name] = "FAILED"
 
     def success(self, msg, unattended_mode_name, unattended_print_mode=True):
         """
