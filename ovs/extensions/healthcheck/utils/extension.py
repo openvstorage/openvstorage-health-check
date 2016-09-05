@@ -20,13 +20,14 @@
 Utilities module for OVS health check
 """
 
-import subprocess
-import commands
 import json
-from ovs.extensions.services.service import ServiceManager
-from ovs.extensions.generic.sshclient import SSHClient
+import commands
 from ovs.extensions.generic.system import System
+from ovs.extensions.generic.sshclient import SSHClient
+from ovs.extensions.services.service import ServiceManager
 
+MODULE = "utils"
+SETTINGS_LOC = "/opt/OpenvStorage/config/healthcheck/settings.json"
 
 class _Colors:
     """
@@ -51,31 +52,20 @@ class Utils:
     General utilities for Open vStorage healthcheck
     """
 
-    SETTINGS_LOC = "/opt/OpenvStorage/config/healthcheck/settings.json"
+    with open(SETTINGS_LOC) as settings_file:
+        settings = json.load(settings_file)
+
+    debug_mode = settings["healthcheck"]["debug_mode"]
+    enable_logging = settings["healthcheck"]["logging"]["enable"]
+    max_log_size = settings["healthcheck"]["max_check_log_size"]
+    packages = settings["healthcheck"]["package_list"]
+    extra_ports = settings["healthcheck"]["extra_ports"]
+    rights_dirs = settings["healthcheck"]["rights_dirs"]
+    client = SSHClient('127.0.0.1', username='root')
 
     def __init__(self):
         """ Init method """
-
-        # module specific
-        self.module = "utils"
-
-        # load config file
-        with open(self.SETTINGS_LOC) as settings_file:
-            self.settings = json.load(settings_file)
-
-        # fetch from config file
-        self.debug = self.settings["healthcheck"]["debug_mode"]
-        self.max_log_size = self.settings["healthcheck"]["max_check_log_size"]  # in MB
-
-        # open ovs ssh client
-        self.client = SSHClient('127.0.0.1', username='root')
-
-        # init at runtime
-        self.etcd = self.check_etcd()
-        self.serviceManager = self.get_service_manager()
-        self.node_type = self.get_ovs_type()
-        self.ovs_version = self.get_ovs_version()
-        self.cluster_id = self.get_cluster_id()
+        pass
 
     def get_config_file_path(self, name, node_id, product, guid=None):
         """
@@ -113,8 +103,9 @@ class Utils:
         # alba_backends = 2
         # alba_asds = 3
         # ovs = 4
+        etcd_status = self.check_etcd()
 
-        if not self.etcd:
+        if not etcd_status:
             if product == 0:
                 return "/opt/OpenvStorage/config/arakoon/{0}/{0}.cfg".format(name)
             elif product == 1:
@@ -125,7 +116,7 @@ class Utils:
             if product == 0:
                 return "etcd://127.0.0.1:2379/ovs/arakoon/{0}/config".format(name)
             elif product == 1:
-                if not guid and self.etcd:
+                if not guid and etcd_status:
                     raise Exception("You must provide a 'vPOOL_guid' for ETCD, currently this is 'None'")
                 else:
                     return "etcd://127.0.0.1:2379/ovs/vpools/{0}/hosts/{1}/config".format(guid, name+node_id)
@@ -170,7 +161,7 @@ class Utils:
         :rtype: str
         """
 
-        if self.etcd:
+        if self.check_etcd():
             return self.get_etcd_information_by_location("/ovs/framework/cluster_id")[0].translate(None, '\"')
         else:
             with open("/opt/OpenvStorage/config/ovs.json") as ovs_json:
@@ -178,7 +169,8 @@ class Utils:
 
             return ovs["support"]["cid"]
 
-    def check_etcd(self):
+    @staticmethod
+    def check_etcd():
         """
         Detects if ETCD is available on the local machine
 
@@ -187,14 +179,13 @@ class Utils:
         :rtype: bool
         """
 
-        result = self.execute_bash_command("dpkg -l | grep etcd")
-
-        if result[0] == '':
+        if commands.getoutput("dpkg -l | grep etcd")[0] == '':
             return False
         else:
             return True
 
-    def get_etcd_information_by_location(self, location):
+    @staticmethod
+    def get_etcd_information_by_location(location):
         """
         Gets information from etcd by ABSOLUTE location (e.g. /ovs/framework)
 
@@ -207,7 +198,7 @@ class Utils:
         :rtype: list
         """
 
-        return self.execute_bash_command("etcdctl get {0}".format(location))
+        return commands.getoutput("etcdctl get {0}".format(location))
 
     def check_status_of_service(self, service_name):
         """
@@ -223,54 +214,3 @@ class Utils:
         """
 
         return ServiceManager.get_service_status(str(service_name), self.client)
-
-    @staticmethod
-    def execute_bash_command(cmd, subpro=False):
-        """
-        Execute a bash command through a standard way, already processed and served on a silver platter
-
-        :param cmd: a bash command
-        :param subpro: determines if you are using subprocess or commands module
-            * Bash piping or other special cases: False (use commands)
-            * General bash command: True (use subprocess)
-
-        :type cmd: str
-        :type subpro: bool
-
-        :return: bash command output
-
-        :rtype: list
-        """
-
-        if not subpro:
-            return commands.getstatusoutput(str(cmd))[1].split('\n')
-        else:
-            return subprocess.check_output(str(cmd), stderr=subprocess.STDOUT, shell=True)
-
-    @staticmethod
-    def get_service_manager():
-        """
-        Detects the Service Manager on the local system
-
-        :return: systemd or init/upstart
-            * systemd = 0
-            * init/upstart = 1
-
-        :rtype: int
-
-        :raises RuntimeError
-        """
-
-        # detects what service manager your system has
-        det_sys = "pidof systemd && echo 'systemd' || pidof /sbin/init && echo 'sysvinit' || echo 'other'"
-        result = commands.getoutput(det_sys)
-
-        # process output
-        if 'systemd' in result:
-            return 0
-        elif 'sysvinit':
-            return 1
-        else:
-            raise RuntimeError("Unsupported Service Manager detected, please contact support or file a bug @github")
-
-

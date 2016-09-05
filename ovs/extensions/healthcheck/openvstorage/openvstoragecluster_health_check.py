@@ -16,10 +16,6 @@
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
 
-"""
-Open vStorage Health Check module
-"""
-
 import os
 import grp
 import glob
@@ -27,8 +23,9 @@ import re
 import time
 import psutil
 import socket
-import timeout_decorator
+import commands
 import subprocess
+import timeout_decorator
 from pwd import getpwuid
 from ovs.dal.lists.vpoollist import VPoolList
 from ovs.extensions.generic.system import System
@@ -41,6 +38,8 @@ from timeout_decorator.timeout_decorator import TimeoutError
 import volumedriver.storagerouter.storagerouterclient as src
 from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, ObjectNotFoundException, \
     MaxRedirectsExceededException
+
+MODULE = "openvstorage"
 
 
 class OpenvStorageHealthCheck:
@@ -56,33 +55,14 @@ class OpenvStorageHealthCheck:
 
         @type logging: Class
         """
-        self.module = "openvstorage"
         self.LOGGER = logging
         self.utility = Utils()
-        self.service_manager = self.utility.serviceManager
         self.machine_details = System.get_my_storagerouter()
         self.machine_id = self.machine_details.machine_id
-        self.max_logsize = 500  # in MB
-
-        # list of packages on your local system
-        self.openvstorageTotalPackageList = ["openvstorage", "openvstorage-backend", "openvstorage-backend-core",
-                                             "openvstorage-backend-webapps", "openvstorage-core", "openvstorage-hc",
-                                             "openvstorage-sdm", "openvstorage-webapps", "openvstorage-test",
-                                             "alba", "volumedriver-base", "volumedriver-server", "nginx", "memcached",
-                                             "rabbitmq-server", "qemu-kvm", "virtinst", "openvpn", "ntp",
-                                             "swiftstack-node", "volumedriver-no-dedup-server", "libvirt0",
-                                             "python-libvirt", "omniorb-nameserver", "avahi-daemon", "avahi-utils",
-                                             "libovsvolumedriver", "qemu", "libvirt-bin", "blktap-openvstorage-utils"]
-        # 1. key -> service name (string)
-        # 2. value -> ports (list)
-        self.req_side_ports = {'nginx': ['80', '443'], 'memcached': ['11211']}
-
-        # 1. key -> absolute directory name (string)
-        # 2. value -> rights in linux style format (string)
-        self.req_map_rights = {'/tmp': '777', '/var/tmp': '777'}
-
-        # 1. key -> absolute directory or log name (string)
-        # 2. value -> required user and group (dict)
+        self.max_logsize = self.utility.max_log_size
+        self.openvstorageTotalPackageList = self.utility.packages
+        self.req_side_ports = self.utility.extra_ports
+        self.req_map_rights = self.utility.rights_dirs
         self.req_map_owners = {'/var/log/syslog': {'user': 'syslog', 'group': 'adm'},
                                '/var/log/auth.log': {'user': 'syslog', 'group': 'adm'},
                                '/var/log/kern.log': {'user': 'syslog', 'group': 'adm'},
@@ -91,11 +71,6 @@ class OpenvStorageHealthCheck:
                                '/etc/gshadow': {'user': 'root', 'group': 'shadow'},
                                '/var/cache/man': {'user': 'man', 'group': 'root'},
                                '/etc/shadow': {'user': 'root', 'group': 'shadow'}}
-
-        # 1. for dir required options: AS key -> prefix (string)
-        #    AS value -> list, substring of prefix (string) , type -> string (dir)
-        #    contains_nested -> Boolean (contains nested dirs and files)
-        # 2. for file required options: type -> string (file)
         self.logging = {'/var/log/upstart': {'prefix': ['ovs', 'asd'], 'type': 'dir', 'contains_nested': False},
                         '/var/log/ovs': {'prefix': None, 'type': 'dir', 'contains_nested': True},
                         '/var/log/gunicorn': {'prefix': None, 'type': 'dir', 'contains_nested': False},
@@ -110,10 +85,10 @@ class OpenvStorageHealthCheck:
         """
 
         self.LOGGER.info("Fetching LOCAL information of node: ", 'local_info', False)
-        self.LOGGER.success("Cluster ID: {0}".format(self.utility.cluster_id), 'lc2', False)
+        self.LOGGER.success("Cluster ID: {0}".format(self.utility.get_cluster_id()), 'lc2', False)
         self.LOGGER.success("Storagerouter ID: {0}".format(self.machine_id), 'lc2', False)
         self.LOGGER.success("Environment TYPE: {0}".format(self.machine_details.node_type), 'lc3', False)
-        self.LOGGER.success("Environment VERSION: {0}".format(self.utility.ovs_version), 'lc4', False)
+        self.LOGGER.success("Environment VERSION: {0}".format(self.utility.get_cluster_id()), 'lc4', False)
 
     def check_size_of_log_files(self):
         """
@@ -285,9 +260,9 @@ class OpenvStorageHealthCheck:
         # Check Celery and RabbitMQ
         self.LOGGER.info("Checking RabbitMQ/Celery ...", 'checkRabbitmqCelery', False)
 
-        if self.utility.node_type == "MASTER":
+        if self.utility.get_ovs_type() == "MASTER":
             pcommand = "celery inspect ping -b amqp://ovs:0penv5tor4ge@{0}//".format(self.machine_details.ip)
-            pcel = self.utility.execute_bash_command(pcommand.format(process))
+            pcel = commands.getoutput(pcommand.format(process)).split("\n")
             if len(pcel) != 1 and 'pong' in pcel[1].strip():
                 self.LOGGER.success("Connection successfully established!", 'port_celery')
             else:
@@ -304,15 +279,14 @@ class OpenvStorageHealthCheck:
         self.LOGGER.info("Checking OVS packages: ", 'check_ovs_packages', False)
 
         for package in self.openvstorageTotalPackageList:
-            result = self.utility.execute_bash_command("apt-cache policy %s" % package)
+            result = commands.getoutput("apt-cache policy {0}".format(package)).split("\n")
             if len(result) != 1:
                 self.LOGGER.success(
-                    "Package '%s' is present, with version '%s'" % (package, result[2].split(':')[1].strip()),
+                    "Package '{0}' is present, with version '{1}'".format(package, result[2].split(':')[1].strip()),
                     'package_{0}'.format(package))
             else:
                 self.LOGGER.skip("Package '{0}' is NOT present ...".format(package),
                                  'package_{0}'.format(package))
-        return None
 
     def check_ovs_processes(self):
         """
@@ -321,19 +295,15 @@ class OpenvStorageHealthCheck:
 
         self.LOGGER.info("Checking LOCAL OVS services: ", 'check_ovs_processes', False)
 
-        if self.service_manager:
-            for ovs_service in os.listdir("/etc/init"):
-                if ovs_service.startswith("ovs-"):
-                    process_name = ovs_service.split(".conf", 1)[0].strip()
-                    if self.utility.check_status_of_service(process_name):
-                        self.LOGGER.success("Service '{0}' is running!".format(process_name),
-                                            'process_{0}'.format(process_name))
-                    else:
-                        self.LOGGER.failure("Service '{0}' is NOT running, please check this... ".format(process_name),
-                                            'process_{0}'.format(process_name))
-        else:
-            self.LOGGER.exception("Other service managers than 'init' are not yet supported!",
-                                  'hc_process_supported', False)
+        for ovs_service in os.listdir("/etc/init"):
+            if ovs_service.startswith("ovs-"):
+                process_name = ovs_service.split(".conf", 1)[0].strip()
+                if self.utility.check_status_of_service(process_name):
+                    self.LOGGER.success("Service '{0}' is running!".format(process_name),
+                                        'process_{0}'.format(process_name))
+                else:
+                    self.LOGGER.failure("Service '{0}' is NOT running, please check this... ".format(process_name),
+                                        'process_{0}'.format(process_name))
 
     @timeout_decorator.timeout(7)
     def _check_celery(self):
@@ -376,7 +346,7 @@ class OpenvStorageHealthCheck:
                 return False
             else:
                 # RabbitMQ is showing it's up but lets check some more stuff
-                list_status = self.utility.execute_bash_command('rabbitmqctl list_queues')[1]
+                list_status = commands.getoutput('rabbitmqctl list_queues').split("\n")[1]
                 if "Error" in list_status:
                     self.LOGGER.failure(
                         "RabbitMQ seems to be UP but it is not functioning as it should! Maybe it has been"
@@ -402,9 +372,9 @@ class OpenvStorageHealthCheck:
         # Rabbitmq check: queue verification
         #
         rcommand = "rabbitmqctl list_queues | grep ovs_ | sed -e 's/[[:space:]]\+/ /g' | cut -d ' ' -f 2"
-        output_01 = self.utility.execute_bash_command(rcommand)
+        output_01 = commands.getoutput(rcommand).split("\n")
         time.sleep(15)
-        output_02 = self.utility.execute_bash_command(rcommand)
+        output_02 = commands.getoutput(rcommand).split("\n")
 
         # check diff/results and continue
         lost_queues = []
@@ -778,9 +748,9 @@ class OpenvStorageHealthCheck:
         self.LOGGER.info("Precheck: verification of RabbitMQ cluster: ",
                          'checkRabbitMQcluster', False)
 
-        if self.utility.node_type == "MASTER":
+        if self.utility.get_ovs_type() == "MASTER":
 
-            cluster_status = self.utility.execute_bash_command("rabbitmqctl cluster_status")
+            cluster_status = commands.getoutput("rabbitmqctl cluster_status").split("\n")
 
             if "Error" not in cluster_status[1]:
 

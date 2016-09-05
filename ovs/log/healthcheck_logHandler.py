@@ -24,17 +24,13 @@ import json
 from ovs.extensions.healthcheck.utils.extension import Utils
 from ovs.log.log_handler import LogHandler
 
+MODULE = "utils"
+
 
 class _Colors:
     """
     Colors for Open vStorage healthcheck logging
     """
-    def __init__(self):
-        """ Init method """
-        pass
-
-    def __getitem__(self, item):
-        return getattr(self, item)
 
     DEBUG = '\033[94m'
     INFO = '\033[94m'
@@ -43,6 +39,13 @@ class _Colors:
     FAILED = '\033[91m'
     SKIPPED = '\033[95m'
     ENDC = '\033[0m'
+
+    def __init__(self):
+        """ Init method """
+        pass
+
+    def __getitem__(self, item):
+        return getattr(self, item)
 
 
 class HCLogHandler:
@@ -64,26 +67,16 @@ class HCLogHandler:
         """
         Init method for the HealthCheck Log handler
 
-        @param unattended_mode: determines the attended modus you are running
+        :param unattended_mode: determines the attended modus you are running
             * unattended run (for monitoring)
             * attended run (for user)
-        @param silent_mode: determines if you are running in silent mode
+        :param silent_mode: determines if you are running in silent mode
             * silent run (to use in-code)
 
-        @type unattended_mode: bool
-        @type silent_mode: bool
+        :type unattended_mode: bool
+        :type silent_mode: bool
         """
-
-        # Module specific
-        self.module = "utils"
-
-        # Load config file
-        with open(Utils.SETTINGS_LOC) as settings_file:
-            self.settings = json.load(settings_file)
-
-        # Fetch from config file
-        self.debug = self.settings["healthcheck"]["debug_mode"]
-        self.enable = self.settings["healthcheck"]["logging"]["enable"]
+        self.utility = Utils()
 
         # Utils log settings (determine modus)
         if silent_mode:
@@ -99,8 +92,8 @@ class HCLogHandler:
 
         # Setup HC counters
         self.counters = {}
-        for type in self.SUPPORTED_TYPES:
-            self.counters[type] = 0
+        for stype in self.SUPPORTED_TYPES:
+            self.counters[stype] = 0
 
         # Result of healthcheck in dict form
         self.healthcheck_dict = {}
@@ -112,13 +105,12 @@ class HCLogHandler:
         :param msg: Log message for attended run
         :param unattended_mode_name: name for monitoring output
         :param unattended_print_mode: describes if you want to print the output during a unattended run
-        :param module: describes the module you are logging from
         :return:
         """
 
         if not error_type or error_type not in self.SUPPORTED_TYPES:
             raise ValueError('Found no error_type')
-        if self.enable:
+        if self.utility.enable_logging:
             self._logger.error('{0} - {1}'.format(error_type, msg))
 
         self.counters[error_type] += 1

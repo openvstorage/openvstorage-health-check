@@ -228,7 +228,6 @@ class HealthCheckController:
         :return: results & recap
         :rtype: dict with nested dicts
         """
-
         LOGGER.info("Recap of Health Check!", 'starting_recap_hc', False)
         LOGGER.info("======================", 'starting_recap_hc_ul', False)
 
