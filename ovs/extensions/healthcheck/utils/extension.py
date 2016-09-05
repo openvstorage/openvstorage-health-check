@@ -29,6 +29,7 @@ from ovs.extensions.services.service import ServiceManager
 MODULE = "utils"
 SETTINGS_LOC = "/opt/OpenvStorage/config/healthcheck/settings.json"
 
+
 class _Colors:
     """
     Colors for Open vStorage healthcheck logging
@@ -61,6 +62,8 @@ class Utils:
     packages = settings["healthcheck"]["package_list"]
     extra_ports = settings["healthcheck"]["extra_ports"]
     rights_dirs = settings["healthcheck"]["rights_dirs"]
+    owners_files = settings["healthcheck"]["owners_files"]
+    check_logs = settings["healthcheck"]["check_logs"]
     client = SSHClient('127.0.0.1', username='root')
 
     def __init__(self):
