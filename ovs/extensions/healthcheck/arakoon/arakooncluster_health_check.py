@@ -70,7 +70,7 @@ class ArakoonHealthCheck:
         :rtype: list
         """
 
-        arakoon_clusters = list(EtcdConfiguration.list('/ovs/{0}'.format(self.module)))
+        arakoon_clusters = list(EtcdConfiguration.list('/ovs/{0}'.format(MODULE)))
 
         result = {}
         if len(arakoon_clusters) == 0:
