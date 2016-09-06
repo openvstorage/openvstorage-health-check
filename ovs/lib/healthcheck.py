@@ -355,11 +355,12 @@ class HealthCheckController(object):
             for option in obj[module_name]:
                 if option['method_name'] == method_name:
                     mod = imp.load_source(option['module_name'], option['location'])
-                    cl = getattr(mod, option['class'])
+                    cl = getattr(mod, option['class'])()
                     if len(args) > 0 and args[0] == 'help':
                         print getattr(cl, option['function']).__doc__
                         return
-                    return getattr(cl, option['function'])(*args)
+                    print getattr(cl, option['function'])(*args)
+                    return
         except KeyError:
             print "Found no methods for mod {0}".format(module_name)
             return

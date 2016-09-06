@@ -164,6 +164,7 @@ class ArakoonHealthCheck(object):
             self.LOGGER.failure("Connection FAILED to service '{1}' on port {0}".format(port, process_name),
                                 'port_{0}_{1}'.format(process_name, port))
 
+    @ExposeToCli('arakoon', 'test-all')
     def check_required_ports(self):
         """
         Checks all ports of Arakoon nodes (client & server)

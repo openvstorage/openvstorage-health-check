@@ -30,6 +30,8 @@ import socket
 import timeout_decorator
 import subprocess
 from pwd import getpwuid
+
+from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.dal.lists.vpoollist import VPoolList
 from ovs.extensions.generic.system import System
 from ovs.dal.lists.servicelist import ServiceList
@@ -261,6 +263,7 @@ class OpenvStorageHealthCheck(object):
             self.LOGGER.failure("Connection FAILED to service '{1}' on port {0}".format(port, process_name),
                                 'port_{0}_{1}'.format(process_name, port))
 
+    @ExposeToCli('test', 'tet')
     def check_required_ports(self):
         """
         Checks all ports of Open vStorage components (framework, memcached, nginx, rabbitMQ and celery)
