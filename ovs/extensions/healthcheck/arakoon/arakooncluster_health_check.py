@@ -26,6 +26,8 @@ import uuid
 import socket
 import subprocess
 import ConfigParser
+
+from ovs.extensions.healthcheck.decorators import ExposeToCli
 from StringIO import StringIO
 from datetime import date, timedelta, datetime
 from ovs.extensions.generic.system import System
@@ -38,7 +40,7 @@ from ovs.extensions.db.arakoon.ArakoonInstaller import ArakoonClusterConfig
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 
 
-class ArakoonHealthCheck:
+class ArakoonHealthCheck(object):
     """
     A healthcheck for the arakoon persistent store
     """
@@ -62,6 +64,7 @@ class ArakoonHealthCheck:
 
         self.machine_details = System.get_my_storagerouter()
 
+    @ExposeToCli('arakoon', 'fetch_available_clusters')
     def fetch_available_clusters(self):
         """
         Fetches the available local arakoon clusters of a cluster
@@ -114,6 +117,7 @@ class ArakoonHealthCheck:
 
         return result
 
+    @ExposeToCli('arakoon', '_check_port_connection')
     def _check_port_connection(self, port_number):
         """
         Checks the port connection on a IP address
@@ -140,6 +144,7 @@ class ArakoonHealthCheck:
             else:
                 return False
 
+    @ExposeToCli('test', 'fetch_available_clusters')
     def _is_port_listening(self, process_name, port):
         """
         Checks the port connection of a process

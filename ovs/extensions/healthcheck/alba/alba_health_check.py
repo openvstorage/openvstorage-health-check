@@ -41,7 +41,7 @@ from ovs.extensions.healthcheck.utils.exceptions import ObjectNotFoundException,
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 
 
-class AlbaHealthCheck:
+class AlbaHealthCheck(object):
     """
     A healthcheck for Alba storage layer
     """

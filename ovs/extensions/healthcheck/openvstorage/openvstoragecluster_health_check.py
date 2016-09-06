@@ -43,7 +43,7 @@ from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableEx
     MaxRedirectsExceededException
 
 
-class OpenvStorageHealthCheck:
+class OpenvStorageHealthCheck(object):
     """
     A healthcheck for the Open vStorage framework
     """

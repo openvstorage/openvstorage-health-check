@@ -20,6 +20,12 @@
 Module for HealthCheckController
 """
 
+import os
+import inspect
+import imp
+import ast
+
+from datetime import datetime, timedelta
 from ovs.extensions.healthcheck.openvstorage.openvstoragecluster_health_check import OpenvStorageHealthCheck
 from ovs.extensions.healthcheck.arakoon.arakooncluster_health_check import ArakoonHealthCheck
 from ovs.extensions.healthcheck.utils.exceptions import PlatformNotSupportedException
@@ -34,7 +40,7 @@ silent_mode = False
 LOGGER = HCLogHandler(unattended, silent_mode)
 
 
-class HealthCheckController:
+class HealthCheckController(object):
 
     def __init__(self):
         pass
@@ -245,3 +251,125 @@ class HealthCheckController:
                                                                  'EXCEPTION': LOGGER.counters['EXCEPTION']}}
         else:
             return None
+
+    @staticmethod
+    def _discover_methods(module_name=None, method_name=None):
+        TEMP_FILE_PATH = '/tmp/_discover_methods'
+        TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
+        VERSION_ID = 1
+
+        def search_dict(data):
+            # Return without expire
+            del data['expires']
+            # Search the dict for the search terms
+            if module_name or method_name:
+                try:
+                    for option in data[module_name]:
+                        if method_name:
+                            if option['method_name'] == method_name:
+                                return {module_name: [option]}
+                        else:
+                            return {module_name: data[module_name]}
+                except KeyError:
+                    pass
+            return data
+
+        def build_cache():
+            # Build cache
+            # Executed from lib, want to go to extensions/healthcheck
+            found_items = {'expires': (datetime.now() + timedelta(hours=2)).strftime(TIME_FORMAT)}
+            path = ''.join(
+                [os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir)), '/extensions/healthcheck'])
+            for root, dirnames, filenames in os.walk(path):
+                for filename in filenames:
+                    if filename.endswith('.py') and filename != '__init__.py':
+                        name = filename.replace('.py', '')
+                        file_path = os.path.join(root, filename)
+                        # Import file
+                        mod = imp.load_source(name, file_path)
+                        for member in inspect.getmembers(mod):
+                            if inspect.isclass(member[1]) \
+                                    and member[1].__module__ == name \
+                                    and 'object' in [base.__name__ for base in member[1].__bases__]:
+                                for submember in inspect.getmembers(member[1]):
+                                    if hasattr(submember[1], 'module_name') and hasattr(submember[1], 'method_name'):
+                                        if not submember[1].module_name in found_items:
+                                            found_items[submember[1].module_name] = []
+                                        found_items[submember[1].module_name] \
+                                            .append({'method_name': submember[1].method_name,
+                                                     'module_name': name,
+                                                     'function': submember[1].__name__,
+                                                     'class': member[1].__name__,
+                                                     'location': file_path,
+                                                     'version': VERSION_ID})
+            # Write the dict to a temp file
+            with open(TEMP_FILE_PATH, 'w') as f2:
+                f2.write(str(found_items))
+            return found_items
+        try:
+            with open(TEMP_FILE_PATH, 'r') as f:
+                exposed_methods = ast.literal_eval(f.read())
+        except IOError:
+            # If file doesn't exist
+            exposed_methods = None
+
+        result = None
+        # Search first to use old cache
+        if exposed_methods:
+            if not datetime.strptime(exposed_methods['expires'], TIME_FORMAT) > datetime.now() + timedelta(hours=2):
+                result = search_dict(exposed_methods)
+        if not result:
+            exposed_methods = build_cache()
+            result = search_dict(exposed_methods)
+        return result
+
+    @staticmethod
+    def print_methods(mod=None, method=None):
+        obj = HealthCheckController._discover_methods(mod, method)
+        if mod:
+            print "Possible options for '{0}' are: ".format(mod)
+        else:
+            print "Possible options are: "
+        for mod in obj:
+            for option in obj[mod]:
+                print "ovs healthcheck {0} {1}".format(mod, option['method_name'])
+        return obj
+
+    @staticmethod
+    def run_method(module_name=None, method_name=None, *args):
+        # Special cases
+        if module_name == 'help':
+            return HealthCheckController.print_methods()
+        elif module_name == 'unattended':
+            return HealthCheckController.check_unattended()
+        elif module_name == 'silent':
+            return HealthCheckController.check_silent()
+        elif not module_name and not method_name or module_name == 'attended':
+            return HealthCheckController.check_attended()
+        if not method_name or not module_name:
+            print "Both the module name and the method name must be specified.".format(method_name, module_name)
+            return HealthCheckController.print_methods(module_name, method_name)
+        obj = HealthCheckController._discover_methods(module_name, method_name)
+        # search the obj
+        try:
+            for option in obj[module_name]:
+                if option['method_name'] == method_name:
+                    mod = imp.load_source(option['module_name'], option['location'])
+                    cl = getattr(mod, option['class'])
+                    if len(args) > 0 and args[0] == 'help':
+                        print getattr(cl, option['function']).__doc__
+                        return
+                    return getattr(cl, option['function'])(*args)
+        except KeyError:
+            print "Found no methods for mod {0}".format(module_name)
+            return
+        print "Found no method {0} for mod {1}".format(method_name, module_name)
+        return HealthCheckController.print_methods()
+
+if __name__ == '__main__':
+    import sys
+    from ovs.lib.healthcheck import HealthCheckController
+    arguments = sys.argv
+    # Remove filename
+    del arguments[0]
+    HealthCheckController.run_method(*arguments)
