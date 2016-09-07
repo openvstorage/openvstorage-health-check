@@ -20,14 +20,11 @@
 LogHandler module for OVS health check
 """
 
-import json
 from ovs.extensions.healthcheck.utils.extension import Utils
 from ovs.log.log_handler import LogHandler
 
-MODULE = "utils"
 
-
-class _Colors:
+class _Colors(object):
     """
     Colors for Open vStorage healthcheck logging
     """
@@ -40,19 +37,16 @@ class _Colors:
     SKIPPED = '\033[95m'
     ENDC = '\033[0m'
 
-    def __init__(self):
-        """ Init method """
-        pass
-
     def __getitem__(self, item):
         return getattr(self, item)
 
 
-class HCLogHandler:
+class HCLogHandler(object):
     """
     Open vStorage Log Handler
     """
     # Statics
+    MODULE = "utils"
     MESSAGES = {
         'failure': 'FAILED',
         'success': 'SUCCESS',
@@ -76,8 +70,6 @@ class HCLogHandler:
         :type unattended_mode: bool
         :type silent_mode: bool
         """
-        self.utility = Utils()
-
         # Utils log settings (determine modus)
         if silent_mode:
             # if silent_mode is true, the unattended is also true
@@ -110,7 +102,7 @@ class HCLogHandler:
 
         if not error_type or error_type not in self.SUPPORTED_TYPES:
             raise ValueError('Found no error_type')
-        if self.utility.enable_logging:
+        if Utils.enable_logging:
             self._logger.error('{0} - {1}'.format(error_type, msg))
 
         self.counters[error_type] += 1

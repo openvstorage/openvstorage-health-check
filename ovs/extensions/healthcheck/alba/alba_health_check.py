@@ -40,13 +40,21 @@ from ovs.extensions.healthcheck.utils.exceptions import ObjectNotFoundException,
     DiskNotFoundException, ConfigNotMatchedException
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 
-MODULE = "alba"
 
-
-class AlbaHealthCheck:
+class AlbaHealthCheck(object):
     """
     A healthcheck for Alba storage layer
     """
+
+    MODULE = "alba"
+    TEMP_FILE_SIZE = 1048576
+    SHOW_DISKS_IN_MONITORING = False
+    MACHINE_DETAILS = System.get_my_storagerouter()
+    MACHINE_ID = System.get_my_machine_id()
+    # to be put in alba file
+    TEMP_FILE_LOC = "/tmp/ovs-hc.xml"
+    # fetched (from alba) file location
+    TEMP_FILE_FETCHED_LOC = "/tmp/ovs-hc-fetched.xml"
 
     def __init__(self, logging=HCLogHandler(False)):
         """
@@ -56,21 +64,13 @@ class AlbaHealthCheck:
         :type logging: ovs.log.healthcheck_logHandler
         """
 
-        self.utility = Utils()
         self.logger = logging
-        self.show_disks_in_monitoring = False
-        self.machine_details = System.get_my_storagerouter()
-        self.machine_id = System.get_my_machine_id()
-        self.temp_file_loc = "/tmp/ovs-hc.xml"  # to be put in alba file
-        self.temp_file_fetched_loc = "/tmp/ovs-hc-fetched.xml"  # fetched (from alba) file location
-        self.temp_file_size = 1048576  # bytes
 
     def _fetch_available_backends(self):
         """
         Fetches the available alba backends
 
         :return: information about each alba backend
-
         :rtype: list that consists of dicts
         """
 
@@ -134,14 +134,14 @@ class AlbaHealthCheck:
         """
 
         amount_of_presets_not_working = []
-        ip = self.machine_details.ip
+        ip = AlbaHealthCheck.MACHINE_DETAILS.ip
 
         # ignore possible subprocess output
         fnull = open(os.devnull, 'w')
 
         # try put/get/verify on all available proxies on the local node
         for sr in ServiceList.get_services():
-            if sr.storagerouter_guid == self.machine_details.guid:
+            if sr.storagerouter_guid == AlbaHealthCheck.MACHINE_DETAILS.guid:
                 if sr.type.name == ServiceType.SERVICE_TYPES.ALBA_PROXY:
                     self.logger.info("Checking ALBA proxy '{0}': ".format(sr.name), 'check_alba', False)
                     try:
@@ -159,7 +159,7 @@ class AlbaHealthCheck:
 
                         # go further
                         abm_name = client_config.groupdict()['cluster_id']
-                        abm_config = self.utility.get_config_file_path(abm_name, self.machine_id, 0)
+                        abm_config = Utils.get_config_file_path(abm_name, AlbaHealthCheck.MACHINE_ID, 0)
 
                         # determine presets / backend
                         presets = AlbaCLI.run('list-presets', config=abm_config, to_json=True)
@@ -191,22 +191,22 @@ class AlbaHealthCheck:
                                                     .format(sr.name, preset.get('name')))
 
                                 # put test object to given dir
-                                with open(self.temp_file_loc, 'wb') as fout:
-                                    fout.write(os.urandom(self.temp_file_size))
+                                with open(AlbaHealthCheck.TEMP_FILE_LOC, 'wb') as fout:
+                                    fout.write(os.urandom(AlbaHealthCheck.TEMP_FILE_SIZE))
 
                                 # try to put object
                                 AlbaCLI.run('proxy-upload-object', host=ip, port=sr.ports[0],
-                                            extra_params=[namespace_key, self.temp_file_loc, object_key])
+                                            extra_params=[namespace_key, AlbaHealthCheck.TEMP_FILE_LOC, object_key])
 
                                 # download object
                                 AlbaCLI.run('download-object', config=abm_config,
-                                            extra_params=[namespace_key, object_key, self.temp_file_fetched_loc])
+                                            extra_params=[namespace_key, object_key, AlbaHealthCheck.TEMP_FILE_FETCHED_LOC])
 
                                 # check if files exists - issue #57
-                                if os.path.isfile(self.temp_file_fetched_loc) and os.path.isfile(self.temp_file_loc):
-                                    hash_original = hashlib.md5(open(self.temp_file_loc, 'rb')
+                                if os.path.isfile(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC) and os.path.isfile(AlbaHealthCheck.TEMP_FILE_LOC):
+                                    hash_original = hashlib.md5(open(AlbaHealthCheck.TEMP_FILE_LOC, 'rb')
                                                                 .read()).hexdigest()
-                                    hash_fetched = hashlib.md5(open(self.temp_file_fetched_loc, 'rb')
+                                    hash_fetched = hashlib.md5(open(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC, 'rb')
                                                                .read()).hexdigest()
 
                                     if hash_original == hash_fetched:
@@ -252,9 +252,9 @@ class AlbaHealthCheck:
                             AlbaCLI.run('proxy-delete-object', host=ip, port=sr.ports[0],
                                         extra_params=[namespace_key, object_key])
 
-                            subprocess.call(['rm', str(self.temp_file_loc)],
+                            subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_LOC)],
                                             stdout=fnull, stderr=subprocess.STDOUT)
-                            subprocess.call(['rm', str(self.temp_file_fetched_loc)],
+                            subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC)],
                                             stdout=fnull, stderr=subprocess.STDOUT)
                     except subprocess.CalledProcessError:
                         # this should stay for the deletion of the remaining files
@@ -315,7 +315,7 @@ class AlbaHealthCheck:
                                 # test successfull!
                                 self.logger.success("ASD test with DISK_ID '{0}' succeeded!".format(disk.get('asd_id')),
                                                     'alba_asd_{0}'.format(disk.get('asd_id')),
-                                                    self.show_disks_in_monitoring)
+                                                    AlbaHealthCheck.SHOW_DISKS_IN_MONITORING)
 
                                 workingdisks.append(disk.get('asd_id'))
 
@@ -333,17 +333,17 @@ class AlbaHealthCheck:
                         defectivedisks.append(disk.get('asd_id'))
                         self.logger.failure("ASD test with DISK_ID '{0}' failed on NODE '{1}'!"
                                             .format(disk.get('asd_id'), ip_address),
-                                            'alba_asd_{0}'.format(disk.get('asd_id')), self.show_disks_in_monitoring)
+                                            'alba_asd_{0}'.format(disk.get('asd_id')), AlbaHealthCheck.SHOW_DISKS_IN_MONITORING)
                     except (ConnectionFailedException, DiskNotFoundException) as e:
                         defectivedisks.append(disk.get('asd_id'))
                         self.logger.failure("ASD test with DISK_ID '{0}' failed because: {1}"
                                             .format(disk.get('asd_id'), e),
-                                            'alba_asd_{0}'.format(disk.get('asd_id')), self.show_disks_in_monitoring)
+                                            'alba_asd_{0}'.format(disk.get('asd_id')), AlbaHealthCheck.SHOW_DISKS_IN_MONITORING)
                 else:
                     defectivedisks.append(disk.get('asd_id'))
                     self.logger.failure("ASD test with DISK_ID '{0}' failed because: {1}"
                                         .format(disk.get('asd_id'), disk.get('status_detail')),
-                                        'alba_asd_{0}'.format(disk.get('asd_id')), self.show_disks_in_monitoring)
+                                        'alba_asd_{0}'.format(disk.get('asd_id')), AlbaHealthCheck.SHOW_DISKS_IN_MONITORING)
 
         return workingdisks, defectivedisks
 

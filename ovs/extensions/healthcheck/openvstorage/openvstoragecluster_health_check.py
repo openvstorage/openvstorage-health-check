@@ -38,14 +38,15 @@ import volumedriver.storagerouter.storagerouterclient as src
 from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, ObjectNotFoundException, \
     MaxRedirectsExceededException
 
-MODULE = "openvstorage"
 
-
-class OpenvStorageHealthCheck:
+class OpenvStorageHealthCheck(object):
     """
     A healthcheck for the Open vStorage framework
     """
-
+    MODULE = "openvstorage"
+    MACHINE_DETAILS = System.get_my_storagerouter()
+    MACHINE_ID = System.get_my_machine_id()
+    
     def __init__(self, logging=HCLogHandler(False)):
         """
         Init method for Open vStorage health check module
@@ -54,9 +55,6 @@ class OpenvStorageHealthCheck:
         :type logging: ovs.log.healthcheck_logHandler
         """
         self.logger = logging
-        self.utility = Utils()
-        self.machine_details = System.get_my_storagerouter()
-        self.machine_id = self.machine_details.machine_id
 
     def get_local_settings(self):
         """
@@ -64,10 +62,10 @@ class OpenvStorageHealthCheck:
         """
 
         self.logger.info("Fetching LOCAL information of node: ", 'local_info', False)
-        self.logger.success("Cluster ID: {0}".format(self.utility.get_cluster_id()), 'lc2', False)
-        self.logger.success("Storagerouter ID: {0}".format(self.machine_id), 'lc2', False)
-        self.logger.success("Environment TYPE: {0}".format(self.machine_details.node_type), 'lc3', False)
-        self.logger.success("Environment VERSION: {0}".format(self.utility.get_cluster_id()), 'lc4', False)
+        self.logger.success("Cluster ID: {0}".format(Utils.get_cluster_id()), 'lc2', False)
+        self.logger.success("Storagerouter ID: {0}".format(OpenvStorageHealthCheck.MACHINE_ID), 'lc2', False)
+        self.logger.success("Environment TYPE: {0}".format(OpenvStorageHealthCheck.MACHINE_DETAILS.node_type), 'lc3', False)
+        self.logger.success("Environment VERSION: {0}".format(Utils.get_cluster_id()), 'lc4', False)
 
     def check_size_of_log_files(self):
         """
@@ -78,11 +76,11 @@ class OpenvStorageHealthCheck:
         good_size = []
         to_big = []
 
-        self.logger.info("Checking if logfiles their size is not bigger than {0} MB: ".format(self.utility.max_log_size),
+        self.logger.info("Checking if logfiles their size is not bigger than {0} MB: ".format(Utils.max_log_size),
                          'checkLogfilesSize', False)
 
         # collect log files
-        for log, settings in self.utility.check_logs.iteritems():
+        for log, settings in Utils.check_logs.iteritems():
             if settings.get('type') == 'dir':
                 # check if dirname exists
                 if os.path.isdir(log):
@@ -121,7 +119,7 @@ class OpenvStorageHealthCheck:
         # process log files
         for c_files in collection:
             # check if logfile is larger than max_size
-            if os.stat(c_files).st_size < 1024000 * self.utility.max_log_size:
+            if os.stat(c_files).st_size < 1024000 * Utils.max_log_size:
                 good_size.append(c_files)
                 self.logger.success("Logfile '{0}' has a GOOD size!".format(c_files), 'log_{0}'.format(c_files),
                                     False)
@@ -176,7 +174,7 @@ class OpenvStorageHealthCheck:
 
         # check if port is open
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        result = sock.connect_ex((self.machine_details.ip, int(port_number)))
+        result = sock.connect_ex((OpenvStorageHealthCheck.MACHINE_DETAILS.ip, int(port_number)))
         if result == 0:
             return True
         else:
@@ -215,22 +213,22 @@ class OpenvStorageHealthCheck:
         # check ports for OVS services
         self.logger.info("Checking OVS services ...", '', False)
         for sr in ServiceList.get_services():
-            if sr.storagerouter_guid == self.machine_details.guid:
+            if sr.storagerouter_guid == OpenvStorageHealthCheck.MACHINE_DETAILS.guid:
                 for port in sr.ports:
                     self._is_port_listening(sr.name, port)
 
         # check NGINX and memcached
         self.logger.info("Checking extra ports", '', False)
 
-        for process, ports in self.utility.extra_ports.iteritems():
+        for process, ports in Utils.extra_ports.iteritems():
             for port in ports:
                 self._is_port_listening(process, port)
 
         # Check Celery and RabbitMQ
         self.logger.info("Checking RabbitMQ/Celery ...", '', False)
 
-        if self.utility.get_ovs_type() == "MASTER":
-            pcommand = "celery inspect ping -b amqp://ovs:0penv5tor4ge@{0}//".format(self.machine_details.ip)
+        if Utils.get_ovs_type() == "MASTER":
+            pcommand = "celery inspect ping -b amqp://ovs:0penv5tor4ge@{0}//".format(OpenvStorageHealthCheck.MACHINE_DETAILS.ip)
             pcel = commands.getoutput(pcommand.format(process)).split("\n")
             if len(pcel) != 1 and 'pong' in pcel[1].strip():
                 self.logger.success("Connection successfully established!", 'port_celery')
@@ -247,7 +245,7 @@ class OpenvStorageHealthCheck:
 
         self.logger.info("Checking OVS packages: ", 'check_ovs_packages', False)
 
-        for package in self.utility.packages:
+        for package in Utils.packages:
             result = commands.getoutput("apt-cache policy {0}".format(package)).split("\n")
             if len(result) != 1:
                 self.logger.success(
@@ -267,7 +265,7 @@ class OpenvStorageHealthCheck:
         for ovs_service in os.listdir("/etc/init"):
             if ovs_service.startswith("ovs-"):
                 process_name = ovs_service.split(".conf", 1)[0].strip()
-                if self.utility.check_status_of_service(process_name):
+                if Utils.check_status_of_service(process_name):
                     self.logger.success("Service '{0}' is running!".format(process_name),
                                         'process_{0}'.format(process_name))
                 else:
@@ -282,8 +280,8 @@ class OpenvStorageHealthCheck:
 
         # try if celery works smoothly
         try:
-            guid = self.machine_details.guid
-            machine_id = self.machine_details.machine_id
+            guid = OpenvStorageHealthCheck.MACHINE_DETAILS.guid
+            machine_id = OpenvStorageHealthCheck.MACHINE_DETAILS.machine_id
             obj = StorageRouterController.get_support_info.s(guid).apply_async(
                   routing_key='sr.{0}'.format(machine_id)).get()
         except TimeoutError as ex:
@@ -337,7 +335,7 @@ class OpenvStorageHealthCheck:
 
         self.logger.info("Checking if OWNERS are set correctly on certain maps: ",
                          'checkRequiredMaps_owners', False)
-        for dirname, owner_settings in self.utility.owners_files.iteritems():
+        for dirname, owner_settings in Utils.owners_files.iteritems():
             if owner_settings.get('user') == self._get_owner_of_file(dirname) and owner_settings.get(
                     'group') == self._get_group_of_file(dirname):
                 self.logger.success("Directory '{0}' has correct owners!".format(dirname),
@@ -350,7 +348,7 @@ class OpenvStorageHealthCheck:
 
         self.logger.info("Checking if Rights are set correctly on certain maps: ",
                          'checkRequiredMaps_rights', False)
-        for dirname, rights in self.utility.rights_dirs.iteritems():
+        for dirname, rights in Utils.rights_dirs.iteritems():
             if self._check_rights_of_file(dirname, rights):
                 self.logger.success("Directory '{0}' has correct rights!".format(dirname),
                                     'dir_{0}'.format(dirname))
@@ -541,8 +539,8 @@ class OpenvStorageHealthCheck:
         # perform tests
         if len(vpools) != 0:
             for vp in vpools:
-                name = "ovs-healthcheck-test-{0}".format(self.machine_id)
-                if vp.guid in self.machine_details.vpools_guids:
+                name = "ovs-healthcheck-test-{0}".format(OpenvStorageHealthCheck.MACHINE_ID)
+                if vp.guid in OpenvStorageHealthCheck.MACHINE_DETAILS.vpools_guids:
                     try:
                         self._check_filedriver(vp.name, name)
                         if os.path.exists("/mnt/{0}/{1}.xml".format(vp.name, name)):
@@ -579,8 +577,8 @@ class OpenvStorageHealthCheck:
 
         if len(vpools) != 0:
             for vp in vpools:
-                name = "ovs-healthcheck-test-{0}".format(self.machine_id)
-                if vp.guid in self.machine_details.vpools_guids:
+                name = "ovs-healthcheck-test-{0}".format(OpenvStorageHealthCheck.MACHINE_ID)
+                if vp.guid in OpenvStorageHealthCheck.MACHINE_DETAILS.vpools_guids:
                     try:
                         self._check_volumedriver(vp.name, name)
 
@@ -622,7 +620,7 @@ class OpenvStorageHealthCheck:
         self.logger.info("Precheck: verification of RabbitMQ cluster: ",
                          'checkRabbitMQcluster', False)
 
-        if self.utility.get_ovs_type() == "MASTER":
+        if Utils.get_ovs_type() == "MASTER":
 
             cluster_status = commands.getoutput("rabbitmqctl cluster_status").split("\n")
 
@@ -655,7 +653,7 @@ class OpenvStorageHealthCheck:
         #
 
         for vp in VPoolList.get_vpools():
-            if vp.guid in self.machine_details.vpools_guids:
+            if vp.guid in OpenvStorageHealthCheck.MACHINE_DETAILS.vpools_guids:
                 self.logger.info("Checking consistency of volumedriver vs. ovsdb for vPool '{0}': ".format(vp.name),
                                  'checkDiscrepanciesVoldrvOvsdb', False)
     
@@ -666,7 +664,7 @@ class OpenvStorageHealthCheck:
                 missinginmodel = []
     
                 # fetch configfile of vpool for the volumedriver
-                config_file = self.utility.get_config_file_path(vp.name, self.machine_id, 1, vp.guid)
+                config_file = Utils.get_config_file_path(vp.name, OpenvStorageHealthCheck.MACHINE_ID, 1, vp.guid)
                 voldrv_client = src.LocalStorageRouterClient(config_file)
     
                 # collect data from volumedriver
@@ -723,14 +721,14 @@ class OpenvStorageHealthCheck:
 
             for vp in vpools:
                 
-                if vp.guid in self.machine_details.vpools_guids:
+                if vp.guid in OpenvStorageHealthCheck.MACHINE_DETAILS.vpools_guids:
 
                     haltedvolumes = []
 
                     self.logger.info("Checking vPool '{0}': ".format(vp.name),
                                      'halted_title', False)
 
-                    config_file = self.utility.get_config_file_path(vp.name, self.machine_id, 1, vp.guid)
+                    config_file = Utils.get_config_file_path(vp.name, OpenvStorageHealthCheck.MACHINE_ID, 1, vp.guid)
                     voldrv_client = src.LocalStorageRouterClient(config_file)
 
                     try:

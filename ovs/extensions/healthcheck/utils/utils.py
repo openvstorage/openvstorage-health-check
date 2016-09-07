@@ -26,32 +26,13 @@ from ovs.extensions.generic.system import System
 from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.services.service import ServiceManager
 
-MODULE = "utils"
-SETTINGS_LOC = "/opt/OpenvStorage/config/healthcheck/settings.json"
 
-
-class _Colors:
-    """
-    Colors for Open vStorage healthcheck logging
-    """
-
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    SKIP = '\033[95m'
-    ENDC = '\033[0m'
-
-    def __init__(self):
-        """ Init method """
-
-        pass
-
-
-class Utils:
+class Utils(object):
     """
     General utilities for Open vStorage healthcheck
     """
+    MODULE = "utils"
+    SETTINGS_LOC = "/opt/OpenvStorage/config/healthcheck/settings.json"
 
     with open(SETTINGS_LOC) as settings_file:
         settings = json.load(settings_file)
@@ -66,11 +47,8 @@ class Utils:
     check_logs = settings["healthcheck"]["check_logs"]
     client = SSHClient('127.0.0.1', username='root')
 
-    def __init__(self):
-        """ Init method """
-        pass
-
-    def get_config_file_path(self, name, node_id, product, guid=None):
+    @staticmethod
+    def get_config_file_path(name, node_id, product, guid=None):
         """
         Gets the location of a certain service via local or etcd path
 
@@ -83,14 +61,11 @@ class Utils:
             * alba_asd = 3
             * ovs framework = 4
         :param guid: guid of a certain vpool (only required if one desires the config of a vpool)
-
         :type name: str
         :type node_id: str
         :type product: int
         :type guid: str
-
         :return: location of a config file
-
         :rtype: str
         """
 
@@ -106,7 +81,7 @@ class Utils:
         # alba_backends = 2
         # alba_asds = 3
         # ovs = 4
-        etcd_status = self.check_etcd()
+        etcd_status = Utils.check_etcd()
 
         if not etcd_status:
             if product == 0:
@@ -130,11 +105,9 @@ class Utils:
     def get_ovs_type():
         """
         Gets the TYPE of the Open vStorage local node
-
         :return: TYPE of openvstorage local node
             * MASTER
             * EXTRA
-
         :rtype: str
         """
 
@@ -144,9 +117,7 @@ class Utils:
     def get_ovs_version():
         """
         Gets the VERSION of the Open vStorage cluster
-
         :return: version of openvstorage cluster
-
         :rtype: str
         """
 
@@ -155,17 +126,16 @@ class Utils:
 
         return ovs["releasename"]
 
-    def get_cluster_id(self):
+    @staticmethod
+    def get_cluster_id():
         """
         Gets the cluster ID of the Open vStorage cluster
-
         :return: cluster id of openvstorage cluster
-
         :rtype: str
         """
 
-        if self.check_etcd():
-            return self.get_etcd_information_by_location("/ovs/framework/cluster_id")[0].translate(None, '\"')
+        if Utils.check_etcd():
+            return Utils.get_etcd_information_by_location("/ovs/framework/cluster_id")[0].translate(None, '\"')
         else:
             with open("/opt/OpenvStorage/config/ovs.json") as ovs_json:
                 ovs = json.load(ovs_json)
@@ -176,9 +146,7 @@ class Utils:
     def check_etcd():
         """
         Detects if ETCD is available on the local machine
-
         :return: result if ETCD is available on the local machine
-
         :rtype: bool
         """
 
@@ -191,29 +159,22 @@ class Utils:
     def get_etcd_information_by_location(location):
         """
         Gets information from etcd by ABSOLUTE location (e.g. /ovs/framework)
-
         :param location: a etcd location
-
         :type location: str
-
         :return: result of file in etcd
-
         :rtype: list
         """
 
         return commands.getoutput("etcdctl get {0}".format(location))
 
-    def check_status_of_service(self, service_name):
+    @staticmethod
+    def check_status_of_service(service_name):
         """
         Gets the status of a linux service
-
         :param service_name: name of a linux service
-
         :type service_name: str
-
         :return: status of the service
-
         :rtype: bool
         """
 
-        return ServiceManager.get_service_status(str(service_name), self.client)
+        return ServiceManager.get_service_status(str(service_name), Utils.client)

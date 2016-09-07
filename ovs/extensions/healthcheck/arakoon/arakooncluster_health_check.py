@@ -30,20 +30,22 @@ from StringIO import StringIO
 from datetime import date, timedelta, datetime
 from ovs.extensions.generic.system import System
 from ovs.log.healthcheck_logHandler import HCLogHandler
-from ovs.extensions.healthcheck.utils.extension import Utils
 from ovs.dal.lists.storagerouterlist import StorageRouterList
 from ovs.extensions.db.etcd.configuration import EtcdConfiguration
 from ovs.extensions.storage.persistent.pyrakoonstore import PyrakoonStore
 from ovs.extensions.db.arakoon.ArakoonInstaller import ArakoonClusterConfig
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 
-MODULE = "arakoon"
 
-
-class ArakoonHealthCheck:
+class ArakoonHealthCheck(object):
     """
     A healthcheck for the arakoon persistent store
     """
+    MODULE = "arakoon"
+    LAST_MINUTES = 5
+    MAX_AMOUNT_NODE_RESTARTED = 5
+    COLLAPSE_OLDER_THAN_DAYS = 2
+    MACHINE_DETAILS = System.get_my_storagerouter()
 
     def __init__(self, logging=HCLogHandler(False)):
         """
@@ -53,14 +55,7 @@ class ArakoonHealthCheck:
         :type logging: ovs.log.healthcheck_logHandler
         """
 
-        self.utility = Utils()
         self.logger = logging
-
-        self.last_minutes = 5
-        self.max_amount_node_restarted = 5
-        self.collapse_older_than_days = 2
-
-        self.machine_details = System.get_my_storagerouter()
 
     def fetch_available_clusters(self):
         """
@@ -70,7 +65,7 @@ class ArakoonHealthCheck:
         :rtype: list
         """
 
-        arakoon_clusters = list(EtcdConfiguration.list('/ovs/{0}'.format(MODULE)))
+        arakoon_clusters = list(EtcdConfiguration.list('/ovs/{0}'.format(ArakoonHealthCheck.MODULE)))
 
         result = {}
         if len(arakoon_clusters) == 0:
@@ -88,11 +83,11 @@ class ArakoonHealthCheck:
             ak.load_config()
             master_node_ids = [node.name for node in ak.nodes]
 
-            if self.machine_details.machine_id not in master_node_ids:
+            if ArakoonHealthCheck.MACHINE_DETAILS.machine_id not in master_node_ids:
                 continue
 
             try:
-                tlog_dir = ak.export()[self.machine_details.machine_id]['tlog_dir']
+                tlog_dir = ak.export()[ArakoonHealthCheck.MACHINE_DETAILS.machine_id]['tlog_dir']
             except KeyError, ex:
                 self.logger.failure("Key {0} not found.".format(ex.message))
                 continue
@@ -113,7 +108,8 @@ class ArakoonHealthCheck:
 
         return result
 
-    def _check_port_connection(self, port_number):
+    @staticmethod
+    def _check_port_connection(port_number):
         """
         Checks the port connection on a IP address
 
@@ -125,7 +121,7 @@ class ArakoonHealthCheck:
 
         # check if port is open
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        result = sock.connect_ex((self.machine_details.ip, int(port_number)))
+        result = sock.connect_ex((ArakoonHealthCheck.MACHINE_DETAILS.ip, int(port_number)))
         if result == 0:
             return True
         else:
@@ -167,13 +163,14 @@ class ArakoonHealthCheck:
             config.readfp(StringIO(e))
 
             for section in config.sections():
-                if section != "global" and section == self.machine_details.machine_id:
+                if section != "global" and section == ArakoonHealthCheck.MACHINE_DETAILS.machine_id:
                     self._is_port_listening("{0}-{1}"
                                             .format(arakoon_cluster, section), config.get(section, 'client_port'))
                     self._is_port_listening("{0}-{1}"
                                             .format(arakoon_cluster, section), config.get(section, 'messaging_port'))
 
-    def _check_restarts(self, arakoon_overview, last_minutes, max_amount_node_restarted):
+    @staticmethod
+    def _check_restarts(arakoon_overview, last_minutes, max_amount_node_restarted):
         """
         Check the amount of restarts of an Arakoon node
         :param arakoon_overview: List of available Arakoons
@@ -183,7 +180,7 @@ class ArakoonHealthCheck:
         """
         result = {"OK": [], "NOK": []}
         for cluster_name, cluster_info in arakoon_overview.iteritems():
-            if self.machine_details.machine_id not in cluster_info:
+            if ArakoonHealthCheck.MACHINE_DETAILS.machine_id not in cluster_info:
                 continue
 
             command = 'grep "NODE STARTED" {0} | awk -v d1="$(date --date="-{1} min" +"%F %R")" ' \
@@ -215,7 +212,7 @@ class ArakoonHealthCheck:
 
         for arakoon, arakoon_nodes in arakoon_overiew.iteritems():
             for node, config in arakoon_nodes.iteritems():
-                if node != self.machine_details.machine_id:
+                if node != ArakoonHealthCheck.MACHINE_DETAILS.machine_id:
                     continue
 
                 try:
@@ -300,7 +297,7 @@ class ArakoonHealthCheck:
 
         # verify integrity of arakoon clusters
         for cluster_name, cluster_info in arakoon_overview.iteritems():
-            if self.machine_details.machine_id not in cluster_info:
+            if ArakoonHealthCheck.MACHINE_DETAILS.machine_id not in cluster_info:
                 continue
 
             tries = 1
@@ -395,20 +392,20 @@ class ArakoonHealthCheck:
                     self.logger.failure("Some Arakoon(s) have problems, please check this!",
                                         'arakoon_integrity')
 
-            log_checks = self._check_restarts(arakoon_overview, self.last_minutes, self.max_amount_node_restarted)
+            log_checks = self._check_restarts(arakoon_overview, ArakoonHealthCheck.LAST_MINUTES, ArakoonHealthCheck.MAX_AMOUNT_NODE_RESTARTED)
 
             nok = log_checks['NOK']
             ok = log_checks['OK']
 
             if len(nok) > 0:
                 self.logger.failure("{0} Arakoon(s) restarted more than {1} times in {2} minutes: {3}"
-                                    .format(len(nok), self.max_amount_node_restarted, self.last_minutes, ','.join(nok)),
+                                    .format(len(nok), ArakoonHealthCheck.MAX_AMOUNT_NODE_RESTARTED, ArakoonHealthCheck.LAST_MINUTES, ','.join(nok)),
                                     'arakoon_restarts')
             elif len(ok) > 0:
                 self.logger.success("ALL Arakoon(s) restart check(s) is/are OK!",
                                     'arakoon_restarts')
 
-            collapse_check = self._check_collapse(arakoon_overview, self.collapse_older_than_days)
+            collapse_check = self._check_collapse(arakoon_overview, ArakoonHealthCheck.COLLAPSE_OLDER_THAN_DAYS)
 
             nok = collapse_check['NOK']
             ok = collapse_check['OK']
