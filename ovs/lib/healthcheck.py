@@ -27,40 +27,27 @@ from ovs.extensions.healthcheck.alba.alba_health_check import AlbaHealthCheck
 from ovs.log.healthcheck_logHandler import HCLogHandler
 from ovs.celery_run import celery
 
-module = "healthcheck"
-platform = 0
-unattended = False
-silent_mode = False
-LOGGER = HCLogHandler(unattended, silent_mode)
 
-
-class HealthCheckController:
-
-    def __init__(self):
-        pass
+class HealthCheckController(object):
+    
+    MODULE = "healthcheck"
+    PLATFORM = 0
 
     @staticmethod
-    @celery.task(name='ovs.healthcheck.check_unattended')
+    @celery.task(name='ovs.healthcheck.check_self.unattended')
     def check_unattended():
         """
         Executes the healthcheck in UNATTENDED mode
-
+        Check MK
         :return: results of the healthcheck
         :rtype: dict
         """
 
-        # initialize variables as global
-        global LOGGER
-        global unattended
-        global silent_mode
-
-        # initialize modus variables
         unattended = True
         silent_mode = False
-        LOGGER = HCLogHandler(unattended, silent_mode)
 
         # execute the check
-        return HealthCheckController.execute_check()
+        return HealthCheckController.execute_check(unattended, silent_mode)
 
     @staticmethod
     @celery.task(name='ovs.healthcheck.check_attended')
@@ -72,18 +59,11 @@ class HealthCheckController:
         :rtype: dict
         """
 
-        # initialize variables as global
-        global LOGGER
-        global unattended
-        global silent_mode
-
-        # initialize modus variables
         unattended = False
         silent_mode = False
-        LOGGER = HCLogHandler(unattended, silent_mode)
 
         # execute the check
-        return HealthCheckController.execute_check()
+        return HealthCheckController.execute_check(unattended, silent_mode)
 
     @staticmethod
     @celery.task(name='ovs.healthcheck.check_silent')
@@ -95,24 +75,17 @@ class HealthCheckController:
         :rtype: dict
         """
 
-        # initialize variables as global
-        global LOGGER
-        global unattended
-        global silent_mode
-
-        # initialize modus variables
         unattended = False
         silent_mode = True
-        LOGGER = HCLogHandler(unattended, silent_mode)
 
         # execute the check
-        return HealthCheckController.execute_check()
+        return HealthCheckController.execute_check(unattended, silent_mode)
 
     @staticmethod
     @celery.task(name='ovs.healthcheck.check')
-    def execute_check():
+    def execute_check(unattended=False, silent_mode=False):
         """
-        Executes all available checks for the chosen platform
+        Executes all available checks for the chosen HealthCheckController.PLATFORM
             * Vanilla (Open vStorage + Arakoon + Alba) = 0
             * Swift (Open vStorage + Arakoon + Swift) = 1
             * Ceph (Open vStorage + Arakoon + Ceph) = 2
@@ -123,124 +96,91 @@ class HealthCheckController:
         :rtype: dict
         """
 
-        if platform == 0:
-            HealthCheckController.check_openvstorage()
-            HealthCheckController.check_arakoon()
-            HealthCheckController.check_alba()
-        else:
-            raise PlatformNotSupportedException("Platform '{0}' is currently NOT supported".format(platform))
+        logger = HCLogHandler(not silent_mode and not unattended)
 
-        return HealthCheckController.get_results()
+        if HealthCheckController.PLATFORM == 0:
+            HealthCheckController.check_openvstorage(logger)
+            HealthCheckController.check_arakoon(logger)
+            HealthCheckController.check_alba(logger)
+        else:
+            raise PlatformNotSupportedException("Platform '{0}' is currently NOT supported".format(HealthCheckController.PLATFORM))
+
+        return HealthCheckController.get_results(logger, unattended, silent_mode)
 
     @staticmethod
     @celery.task(name='ovs.healthcheck.check_openvstorage')
-    def check_openvstorage():
+    def check_openvstorage(logger):
         """
         Checks all critical components of Open vStorage
         """
 
-        LOGGER.info("Starting Open vStorage Health Check!", 'starting_ovs_hc', False)
-        LOGGER.info("====================================", 'starting_ovs_hc_ul', False)
+        logger.info("Starting Open vStorage Health Check!", 'starting_ovs_hc')
+        logger.info("====================================", 'starting_ovs_hc_ul')
 
-        ovs = OpenvStorageHealthCheck(LOGGER)
-
-        ovs.get_local_settings()
-        if not unattended and not silent_mode:
-            print ""
-        ovs.check_ovs_processes()
-        if not unattended and not silent_mode:
-            print ""
-        ovs.check_ovs_workers()
-        if not unattended and not silent_mode:
-            print ""
-        ovs.check_ovs_packages()
-        if not unattended and not silent_mode:
-            print ""
-        ovs.check_required_ports()
-        if not unattended and not silent_mode:
-            print ""
-        ovs.get_zombied_and_dead_processes()
-        if not unattended and not silent_mode:
-            print ""
-        ovs.check_required_dirs()
-        if not unattended and not silent_mode:
-            print ""
-        ovs.check_size_of_log_files()
-        if not unattended and not silent_mode:
-            print ""
-        ovs.check_if_dns_resolves()
-        if not unattended and not silent_mode:
-            print ""
-        ovs.check_model_consistency()
-        if not unattended and not silent_mode:
-            print ""
-        ovs.check_for_halted_volumes()
-        if not unattended and not silent_mode:
-            print ""
-        ovs.check_filedrivers()
-        if not unattended and not silent_mode:
-            print ""
-        ovs.check_volumedrivers()
-        if not unattended and not silent_mode:
-            print ""
+        OpenvStorageHealthCheck.get_local_settings(logger)
+        OpenvStorageHealthCheck.check_ovs_processes(logger)
+        OpenvStorageHealthCheck.check_ovs_workers(logger)
+        OpenvStorageHealthCheck.check_ovs_packages(logger)
+        OpenvStorageHealthCheck.check_required_ports(logger)
+        OpenvStorageHealthCheck.get_zombied_and_dead_processes(logger)
+        OpenvStorageHealthCheck.check_required_dirs(logger)
+        OpenvStorageHealthCheck.check_size_of_log_files(logger)
+        OpenvStorageHealthCheck.check_if_dns_resolves(logger)
+        OpenvStorageHealthCheck.check_model_consistency(logger)
+        OpenvStorageHealthCheck.check_for_halted_volumes(logger)
+        OpenvStorageHealthCheck.check_filedrivers(logger)
+        OpenvStorageHealthCheck.check_volumedrivers(logger)
 
     @staticmethod
     @celery.task(name='ovs.healthcheck.check_arakoon')
-    def check_arakoon():
+    def check_arakoon(logger):
         """
         Checks all critical components of Arakoon
         """
 
-        LOGGER.info("Starting Arakoon Health Check!", 'starting_arakoon_hc', False)
-        LOGGER.info("==============================", 'starting_arakoon_hc_ul', False)
+        logger.info("Starting Arakoon Health Check!", 'starting_arakoon_hc')
+        logger.info("==============================", 'starting_arakoon_hc_ul')
 
-        arakoon = ArakoonHealthCheck(LOGGER)
-
-        arakoon.check_required_ports()
-        if not unattended and not silent_mode:
-            print ""
-        arakoon.check_arakoons()
-        if not unattended and not silent_mode:
-            print ""
+        ArakoonHealthCheck.check_required_ports(logger)
+        ArakoonHealthCheck.check_arakoons(logger)
 
     @staticmethod
     @celery.task(name='ovs.healthcheck.check_alba')
-    def check_alba():
+    def check_alba(logger):
         """
         Checks all critical components of Alba
         """
 
-        LOGGER.info("Starting Alba Health Check!", 'starting_alba_hc', False)
-        LOGGER.info("===========================", 'starting_alba_hc_ul', False)
+        logger.info("Starting Alba Health Check!", 'starting_alba_hc')
+        logger.info("===========================", 'starting_alba_hc_ul')
 
-        alba = AlbaHealthCheck(LOGGER)
-
-        alba.check_alba()
-        if not unattended and not silent_mode:
-            print ""
+        AlbaHealthCheck.check_alba(logger)
 
     @staticmethod
     @celery.task(name='ovs.healthcheck.get_results')
-    def get_results():
+    def get_results(logger, unattended, silent_mode):
         """
         Gets the result of the Open vStorage healthcheck
 
         :return: results & recap
         :rtype: dict with nested dicts
         """
-        LOGGER.info("Recap of Health Check!", 'starting_recap_hc', False)
-        LOGGER.info("======================", 'starting_recap_hc_ul', False)
+        logger.info("Recap of Health Check!", 'starting_recap_hc')
+        logger.info("======================", 'starting_recap_hc_ul')
 
-        LOGGER.success("SUCCESS={0} FAILED={1} SKIPPED={2} WARNING={3} EXCEPTION={4}"
-                       .format(LOGGER.counters['SUCCESS'], LOGGER.counters['FAILED'], LOGGER.counters['SKIPPED'], LOGGER.counters['WARNING'],
-                               LOGGER.counters['EXCEPTION']), 'exception_occured')
+        logger.success("SUCCESS={0} FAILED={1} SKIPPED={2} WARNING={3} EXCEPTION={4}"
+                       .format(logger.counters['SUCCESS'], logger.counters['FAILED'], logger.counters['SKIPPED'], logger.counters['WARNING'],
+                               logger.counters['EXCEPTION']), 'exception_occured')
 
-        if silent_mode or unattended:
-            # returns dict with minimal and detailed information
-            return {'result': LOGGER.healthcheck_dict, 'recap': {'SUCCESS': LOGGER.counters['SUCCESS'],
-                                                                 'FAILED': LOGGER.counters['FAILED'],
-                                                                 'SKIPPED': LOGGER.counters['SKIPPED'],
-                                                                 'WARNING': LOGGER.counters['WARNING'],
-                                                                 'EXCEPTION': LOGGER.counters['EXCEPTION']}}
+        if silent_mode:
+            result = logger.get_results(False)
+        elif unattended:
+            result = logger.get_results(True)
+        # returns dict with minimal and detailed information
         else:
             return None
+        return {'result': result, 'recap': {'SUCCESS': logger.counters['SUCCESS'],
+                                            'FAILED': logger.counters['FAILED'],
+                                            'SKIPPED': logger.counters['SKIPPED'],
+                                            'WARNING': logger.counters['WARNING'],
+                                            'EXCEPTION': logger.counters['EXCEPTION']}}

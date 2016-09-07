@@ -29,7 +29,6 @@ import ConfigParser
 from StringIO import StringIO
 from datetime import date, timedelta, datetime
 from ovs.extensions.generic.system import System
-from ovs.log.healthcheck_logHandler import HCLogHandler
 from ovs.dal.lists.storagerouterlist import StorageRouterList
 from ovs.extensions.db.etcd.configuration import EtcdConfiguration
 from ovs.extensions.storage.persistent.pyrakoonstore import PyrakoonStore
@@ -47,17 +46,8 @@ class ArakoonHealthCheck(object):
     COLLAPSE_OLDER_THAN_DAYS = 2
     MACHINE_DETAILS = System.get_my_storagerouter()
 
-    def __init__(self, logging=HCLogHandler(False)):
-        """
-        Init method for Arakoon health check module
-
-        :param logging: healthcheck logger class
-        :type logging: ovs.log.healthcheck_logHandler
-        """
-
-        self.logger = logging
-
-    def fetch_available_clusters(self):
+    @staticmethod
+    def fetch_available_clusters(logger):
         """
         Fetches the available local arakoon clusters of a cluster
 
@@ -70,7 +60,7 @@ class ArakoonHealthCheck(object):
         result = {}
         if len(arakoon_clusters) == 0:
             # no arakoon clusters on node
-            self.logger.warning("No installed arakoon clusters detected on this system ...",
+            logger.warning("No installed arakoon clusters detected on this system ...",
                                 'arakoon_no_clusters_found', False)
             return None
 
@@ -89,7 +79,7 @@ class ArakoonHealthCheck(object):
             try:
                 tlog_dir = ak.export()[ArakoonHealthCheck.MACHINE_DETAILS.machine_id]['tlog_dir']
             except KeyError, ex:
-                self.logger.failure("Key {0} not found.".format(ex.message))
+                logger.failure("Key {0} not found.".format(ex.message))
                 continue
 
             for node_id in master_node_ids:
@@ -132,7 +122,8 @@ class ArakoonHealthCheck(object):
             else:
                 return False
 
-    def _is_port_listening(self, process_name, port):
+    @staticmethod
+    def _is_port_listening(logger, process_name, port):
         """
         Checks the port connection of a process
 
@@ -142,20 +133,20 @@ class ArakoonHealthCheck(object):
         :type port: int
         """
 
-        self.logger.info("Checking port {0} of service {1} ...".format(port, process_name), '_is_port_listening', False)
-        if self._check_port_connection(port):
-            self.logger.success("Connection successfully established!",
-                                'port_{0}_{1}'.format(process_name, port))
+        logger.info("Checking port {0} of service {1} ...".format(port, process_name), '_is_port_listening')
+        if ArakoonHealthCheck._check_port_connection(port):
+            logger.success("Connection successfully established!", 'port_{0}_{1}'.format(process_name, port))
         else:
-            self.logger.failure("Connection FAILED to service '{1}' on port {0}".format(port, process_name),
+            logger.failure("Connection FAILED to service '{1}' on port {0}".format(port, process_name),
                                 'port_{0}_{1}'.format(process_name, port))
 
-    def check_required_ports(self):
+    @staticmethod
+    def check_required_ports(logger):
         """
         Checks all ports of Arakoon nodes (client & server)
         """
 
-        self.logger.info("Checking PORT CONNECTIONS of arakoon nodes ...", 'check_required_ports_arakoon', False)
+        logger.info("Checking PORT CONNECTIONS of arakoon nodes ...", 'check_required_ports_arakoon')
 
         for arakoon_cluster in EtcdConfiguration.list('/ovs/arakoon'):
             e = EtcdConfiguration.get('/ovs/arakoon/{0}/config'.format(arakoon_cluster), raw=True)
@@ -164,10 +155,8 @@ class ArakoonHealthCheck(object):
 
             for section in config.sections():
                 if section != "global" and section == ArakoonHealthCheck.MACHINE_DETAILS.machine_id:
-                    self._is_port_listening("{0}-{1}"
-                                            .format(arakoon_cluster, section), config.get(section, 'client_port'))
-                    self._is_port_listening("{0}-{1}"
-                                            .format(arakoon_cluster, section), config.get(section, 'messaging_port'))
+                    ArakoonHealthCheck._is_port_listening(logger, "{0}-{1}".format(arakoon_cluster, section), config.get(section, 'client_port'))
+                    ArakoonHealthCheck._is_port_listening(logger, "{0}-{1}".format(arakoon_cluster, section), config.get(section, 'messaging_port'))
 
     @staticmethod
     def _check_restarts(arakoon_overview, last_minutes, max_amount_node_restarted):
@@ -198,7 +187,8 @@ class ArakoonHealthCheck(object):
 
         return result
 
-    def _check_collapse(self, arakoon_overiew, older_than_days):
+    @staticmethod
+    def _check_collapse(logger, arakoon_overiew, older_than_days):
         """
 
         :param arakoon_overiew: List of available Arakoons
@@ -219,15 +209,15 @@ class ArakoonHealthCheck(object):
                     tlog_dir = config['tlog_dir']
                     files = os.listdir(tlog_dir)
                 except OSError, ex:
-                    if not self.logger.unattended_mode:
-                        self.logger.failure("File or directory not found: {0}".format(ex), 'arakoon_path')
+                    if not logger.print_progress:
+                        logger.failure("File or directory not found: {0}".format(ex), 'arakoon_path')
                     result["NOK"].append(arakoon)
                     continue
 
                 if len(files) == 0:
                     result["NOK"].append(arakoon)
-                    if not self.logger.unattended_mode:
-                        self.logger.failure("No files found in {0}".format(tlog_dir), 'arakoon_files')
+                    if not logger.print_progress:
+                        logger.failure("No files found in {0}".format(tlog_dir), 'arakoon_files')
                     continue
 
                 if 'head.db' in files:
@@ -245,8 +235,8 @@ class ArakoonHealthCheck(object):
                     continue
                 elif amount_tlx == 0 and len([tlog_file for tlog_file in files if tlog_file.endswith('.tlog')]) < 0:
                     result['NOK'].append(arakoon)
-                    if not self.logger.unattended_mode:
-                        self.logger.failure("No tlx files found and head.db is out of sync "
+                    if not logger.print_progress:
+                        logger.failure("No tlx files found and head.db is out of sync "
                                             "or is not present in {0}.".format(tlog_dir), 'arakoon_tlx_path')
                     continue
 
@@ -256,8 +246,8 @@ class ArakoonHealthCheck(object):
                 try:
                     oldest_tlx_stats = os.stat('{0}/{1}'.format(tlog_dir, oldest_file))
                 except OSError, ex:
-                    if not self.logger.unattended_mode:
-                        self.logger.failure("File or directory not found: {0}".format(ex), 'arakoon_tlx_path')
+                    if not logger.print_progress:
+                        logger.failure("File or directory not found: {0}".format(ex), 'arakoon_tlx_path')
                     result["NOK"].append(arakoon)
                     continue
 
@@ -269,10 +259,10 @@ class ArakoonHealthCheck(object):
                     result["OK"].append(arakoon)
                     continue
 
-                if not self.logger.unattended_mode:
+                if not logger.print_progress:
                     datetime_oldest_file = datetime.fromtimestamp(oldest_tlx_stats.st_mtime).isoformat()
                     datetime_old_date = datetime.fromtimestamp(old_than_timestamp).isoformat()
-                    self.logger.failure("oldest file: {0} with timestamp: {1} is older than {2} for arakoon {3}"
+                    logger.failure("oldest file: {0} with timestamp: {1} is older than {2} for arakoon {3}"
                                         .format(oldest_file, datetime_oldest_file,
                                                 datetime_old_date, arakoon), 'arakoon_oldest_file')
 
@@ -280,7 +270,8 @@ class ArakoonHealthCheck(object):
 
         return result
 
-    def _verify_integrity(self, arakoon_overview):
+    @staticmethod
+    def _verify_integrity(logger, arakoon_overview):
         """
         Verifies the integrity of a list of arakoons
 
@@ -304,8 +295,8 @@ class ArakoonHealthCheck(object):
             max_tries = 2  # should be 5 but .nop is taking WAY to long
 
             while tries <= max_tries:
-                self.logger.info("Try {0} on cluster '{1}'".format(tries, cluster_name),
-                                 'arakoonTryCheck', False)
+                logger.info("Try {0} on cluster '{1}'".format(tries, cluster_name),
+                                 'arakoonTryCheck')
 
                 key = 'ovs-healthcheck-{0}'.format(str(uuid.uuid4()))
                 value = str(time.time())
@@ -342,78 +333,79 @@ class ArakoonHealthCheck(object):
 
         return arakoonperfworking_list, arakoonnomaster_list, arakoondown_list, arakoonunknown_list
 
-    def check_arakoons(self):
+    @staticmethod
+    def check_arakoons(logger):
         """
         Verifies/validates the integrity of all available arakoons
         """
 
-        self.logger.info("Fetching available arakoon clusters: ", 'checkArakoons', False)
-        arakoon_overview = self.fetch_available_clusters()
+        logger.info("Fetching available arakoon clusters: ", 'checkArakoons')
+        arakoon_overview = ArakoonHealthCheck.fetch_available_clusters(logger)
 
         if arakoon_overview:
-            self.logger.success("{0} available Arakoons successfully fetched, starting verification of clusters ..."
+            logger.success("{0} available Arakoons successfully fetched, starting verification of clusters ..."
                                 .format(len(arakoon_overview)),
                                 'arakoon_found')
 
-            ver_result = self._verify_integrity(arakoon_overview)
+            ver_result = ArakoonHealthCheck._verify_integrity(logger, arakoon_overview)
             if len(ver_result[0]) == len(arakoon_overview):
-                self.logger.success("ALL available Arakoon(s) their integrity are/is OK! ",
+                logger.success("ALL available Arakoon(s) their integrity are/is OK! ",
                                     'arakoon_integrity')
             else:
                 # less output for unattended_mode
-                if not self.logger.unattended_mode:
+                if not logger.print_progress:
                     # check amount OK arakoons
                     if len(ver_result[0]) > 0:
-                        self.logger.warning(
+                        logger.warning(
                             "{0}/{1} Arakoon(s) is/are OK!: {2}".format(len(ver_result[0]), len(arakoon_overview),
                                                                         ', '.join(ver_result[0])),
                             'arakoon_some_up', False)
                     # check amount NO-MASTER arakoons
                     if len(ver_result[1]) > 0:
-                        self.logger.failure("{0} Arakoon(s) cannot find a MASTER: {1}".format(len(ver_result[1]),
+                        logger.failure("{0} Arakoon(s) cannot find a MASTER: {1}".format(len(ver_result[1]),
                                             ', '.join(ver_result[1])),
                                             'arakoon_no_master_exception'.format(len(ver_result[1])))
 
                     # check amount DOWN arakoons
                     if len(ver_result[2]) > 0:
-                        self.logger.failure("{0} Arakoon(s) seem(s) to be DOWN!: {1}".format(len(ver_result[2]),
+                        logger.failure("{0} Arakoon(s) seem(s) to be DOWN!: {1}".format(len(ver_result[2]),
                                             ', '.join(ver_result[2])),
                                             'arakoon_down_exception'.format(len(ver_result[2])))
 
                     # check amount UNKNOWN_ERRORS arakoons
                     if len(ver_result[3]) > 0:
-                        self.logger.failure("{0} Arakoon(s) seem(s) to have UNKNOWN ERRORS, please check the logs @"
+                        logger.failure("{0} Arakoon(s) seem(s) to have UNKNOWN ERRORS, please check the logs @"
                                             " '/var/log/ovs/arakoon.log' or"
                                             " '/var/log/upstart/ovs-arakoon-*.log': {1}".format(len(ver_result[3]),
                                                                                                 ', '.join(
                                                                                                     ver_result[3])),
                                             'arakoon_unknown_exception')
                 else:
-                    self.logger.failure("Some Arakoon(s) have problems, please check this!",
+                    logger.failure("Some Arakoon(s) have problems, please check this!",
                                         'arakoon_integrity')
 
-            log_checks = self._check_restarts(arakoon_overview, ArakoonHealthCheck.LAST_MINUTES, ArakoonHealthCheck.MAX_AMOUNT_NODE_RESTARTED)
+            log_checks = ArakoonHealthCheck._check_restarts(arakoon_overview, ArakoonHealthCheck.LAST_MINUTES, ArakoonHealthCheck.MAX_AMOUNT_NODE_RESTARTED)
 
             nok = log_checks['NOK']
             ok = log_checks['OK']
 
             if len(nok) > 0:
-                self.logger.failure("{0} Arakoon(s) restarted more than {1} times in {2} minutes: {3}"
+                logger.failure("{0} Arakoon(s) restarted more than {1} times in {2} minutes: {3}"
                                     .format(len(nok), ArakoonHealthCheck.MAX_AMOUNT_NODE_RESTARTED, ArakoonHealthCheck.LAST_MINUTES, ','.join(nok)),
                                     'arakoon_restarts')
             elif len(ok) > 0:
-                self.logger.success("ALL Arakoon(s) restart check(s) is/are OK!",
+                logger.success("ALL Arakoon(s) restart check(s) is/are OK!",
                                     'arakoon_restarts')
 
-            collapse_check = self._check_collapse(arakoon_overview, ArakoonHealthCheck.COLLAPSE_OLDER_THAN_DAYS)
+            collapse_check = ArakoonHealthCheck._check_collapse(logger, arakoon_overview, ArakoonHealthCheck.COLLAPSE_OLDER_THAN_DAYS)
 
             nok = collapse_check['NOK']
             ok = collapse_check['OK']
 
             if len(nok) > 0:
-                self.logger.failure("{0} Arakoon(s) having issues with collapsing: {1}".format(len(nok), ','.join(nok)),
+                logger.failure("{0} Arakoon(s) having issues with collapsing: {1}".format(len(nok), ','.join(nok)),
                                     'arakoon_collapse')
             elif len(ok) > 0:
-                self.logger.success("ALL Arakoon(s) are collapsed.", 'arakoon_collapse')
+                logger.success("ALL Arakoon(s) are collapsed.", 'arakoon_collapse')
         else:
-            self.logger.skip("No clusters found", 'arakoon_found')
+            logger.skip("No clusters found", 'arakoon_found')
