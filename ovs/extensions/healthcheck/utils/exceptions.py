@@ -15,7 +15,7 @@
 # but WITHOUT ANY WARRANTY of any kind.
 
 """
-Module containing the exceptions used in the Healthcheck
+Exceptions module
 """
 
 

@@ -20,7 +20,7 @@
 LogHandler module for OVS health check
 """
 
-from ovs.extensions.healthcheck.utils.extension import Utils
+from ovs.extensions.healthcheck.utils.helper import Helper
 from ovs.log.log_handler import LogHandler
 
 
@@ -46,9 +46,9 @@ class HCLogHandler(object):
     Open vStorage Log Handler
     """
     # Statics
-    MODULE = "utils"
+    MODULE = "helper"
     MESSAGES = {
-        'failure': 'FAILED',
+        'error': 'FAILED',
         'success': 'SUCCESS',
         'debug': 'DEBUG',
         'info': 'INFO',
@@ -84,11 +84,11 @@ class HCLogHandler(object):
         error_type = self.MESSAGES[error_message]
         if not error_type or error_type not in self.SUPPORTED_TYPES:
             raise ValueError('Found no error_type')
-        if Utils.enable_logging:
+        if Helper.enable_logging:
             # skip/success uses info:
             if error_message == 'skip' or error_message == 'success':
                 error_message = 'info'
-            getattr(self._logger, error_message)('{0} - {1}'.format(error_type, msg))
+            getattr(self._logger, error_message)('{0}'.format(msg))
 
         self.result_dict[test_name] = error_type
         self.counters[error_type] += 1
@@ -107,15 +107,15 @@ class HCLogHandler(object):
                     print "{0} {1}".format(key, value)
         return self.result_dict
 
-    def failure(self, msg, test_name):
+    def failure(self, msg, test_name=None):
         """
         :param msg: Log message for attended run
         :param test_name: name for monitoring output
         :return:
         """
-        self._log(msg, test_name, 'failure')
+        self._log(msg, test_name, 'error')
 
-    def success(self, msg, test_name):
+    def success(self, msg, test_name=None):
         """
         :param msg: Log message for attended run
         :param test_name: name for monitoring output
@@ -123,7 +123,7 @@ class HCLogHandler(object):
         """
         self._log(msg, test_name, 'success')
 
-    def warning(self, msg, test_name):
+    def warning(self, msg, test_name=None):
         """
         :param msg: Log message for attended run
         :param test_name: name for monitoring output
@@ -131,7 +131,7 @@ class HCLogHandler(object):
         """
         self._log(msg, test_name, 'warning')
 
-    def info(self, msg, test_name):
+    def info(self, msg, test_name=None):
         """
         :param msg: Log message for attended run
         :param test_name: name for monitoring output
@@ -139,7 +139,7 @@ class HCLogHandler(object):
         """
         self._log(msg, test_name, 'info')
 
-    def exception(self, msg, test_name):
+    def exception(self, msg, test_name=None):
         """
         :param msg: Log message for attended run
         :param test_name: name for monitoring output
@@ -147,7 +147,7 @@ class HCLogHandler(object):
         """
         self._log(msg, test_name, 'exception')
 
-    def skip(self, msg, test_name):
+    def skip(self, msg, test_name=None):
         """
         :param msg: Log message for attended run
         :param test_name: name for monitoring output
@@ -155,7 +155,7 @@ class HCLogHandler(object):
         """
         self._log(msg, test_name, 'skip')
 
-    def debug(self, msg, test_name):
+    def debug(self, msg, test_name=None):
         """
         :param msg: Log message for attended run
         :param test_name: name for monitoring output

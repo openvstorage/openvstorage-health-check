@@ -30,7 +30,7 @@ from StringIO import StringIO
 from datetime import date, timedelta, datetime
 from ovs.extensions.generic.system import System
 from ovs.dal.lists.storagerouterlist import StorageRouterList
-from ovs.extensions.db.etcd.configuration import EtcdConfiguration
+from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.storage.persistent.pyrakoonstore import PyrakoonStore
 from ovs.extensions.db.arakoon.ArakoonInstaller import ArakoonClusterConfig
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
@@ -55,13 +55,13 @@ class ArakoonHealthCheck(object):
         :rtype: list
         """
 
-        arakoon_clusters = list(EtcdConfiguration.list('/ovs/{0}'.format(ArakoonHealthCheck.MODULE)))
+        arakoon_clusters = list(Configuration.list('/ovs/arakoon'))
 
         result = {}
         if len(arakoon_clusters) == 0:
             # no arakoon clusters on node
             logger.warning("No installed arakoon clusters detected on this system ...",
-                                'arakoon_no_clusters_found', False)
+                           'arakoon_no_clusters_found', False)
             return None
 
         # add arakoon clusters
@@ -69,7 +69,7 @@ class ArakoonHealthCheck(object):
             # add node that is available for arakoon cluster
             nodes_per_cluster_result = {}
 
-            ak = ArakoonClusterConfig(str(cluster))
+            ak = ArakoonClusterConfig(str(cluster), filesystem=False)
             ak.load_config()
             master_node_ids = [node.name for node in ak.nodes]
 
@@ -148,8 +148,8 @@ class ArakoonHealthCheck(object):
 
         logger.info("Checking PORT CONNECTIONS of arakoon nodes ...", 'check_required_ports_arakoon')
 
-        for arakoon_cluster in EtcdConfiguration.list('/ovs/arakoon'):
-            e = EtcdConfiguration.get('/ovs/arakoon/{0}/config'.format(arakoon_cluster), raw=True)
+        for arakoon_cluster in Configuration.list('/ovs/arakoon'):
+            e = Configuration.get('/ovs/arakoon/{0}/config'.format(arakoon_cluster), raw=True)
             config = ConfigParser.RawConfigParser()
             config.readfp(StringIO(e))
 
