@@ -2,7 +2,7 @@
     "main": {
         "name": "Open vStorage Health Check",
         "description": "Health check for several components of Open vStorage and more ...",
-        "version": 2.0,
+        "version": 3.0,
         "license": "The Open vStorage Health Check is released under the same license as Open vStorage",
         "url": "www.openvstorage.org",
         "source": "https://github.com/openvstorage/openvstorage",
