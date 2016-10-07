@@ -106,7 +106,10 @@ class HCLogHandler(object):
                 error_message = 'info'
             getattr(self._logger, error_message)('{0}'.format(msg))
 
-        self.result_dict[test_name] = error_type
+        # Exclude info values in the dict
+        excluded_messages = ['INFO']
+        if error_type not in excluded_messages:
+            self.result_dict[test_name] = error_type
         self.counters[error_type] += 1
 
         if self.print_progress:
@@ -121,9 +124,11 @@ class HCLogHandler(object):
         :return: results
         :rtype: dict
         """
+        # Checked with Jeroen Maelbrancke for this
+        excluded_messages = ['INFO', 'DEBUG', 'SKIPPED']
         if print_progress:
             for key, value in sorted(self.result_dict.items(), key=lambda x: x[1]):
-                if value in ['SUCCESS', 'FAILED']:
+                if value not in excluded_messages:
                     print "{0} {1}".format(key, value)
         return self.result_dict
 
