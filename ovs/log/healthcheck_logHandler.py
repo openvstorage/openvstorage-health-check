@@ -60,6 +60,9 @@ class HCLogHandler(object):
     def __init__(self, print_progress=True):
         """
         Init method for the HealthCheck Log handler
+
+        :param print_progress: print the progress yes or no
+        :type print_progress: bool
         """
         self.print_progress = print_progress
         # Setup supported types
@@ -77,8 +80,21 @@ class HCLogHandler(object):
 
     def _log(self, msg, test_name, error_message=None):
         """
+        Log a message with a certain short test_name and type error message
+
         :param msg: Log message for attended run
+        :type msg: str
         :param test_name: name for monitoring output
+        :type msg: str
+        :param error_message:
+            * 'error'
+            * 'success'
+            * 'debug'
+            * 'info'
+            * 'skip'
+            * 'exception'
+            * 'warning'
+        :type error_message: str
         :return:
         """
         error_type = self.MESSAGES[error_message]
@@ -99,7 +115,11 @@ class HCLogHandler(object):
     def get_results(self, print_progress=False):
         """
         Prints the result for check_mk
-        :return:
+
+        :param print_progress: print the progress yes or no
+        :type print_progress: bool
+        :return: results
+        :rtype: dict
         """
         if print_progress:
             for key, value in sorted(self.result_dict.items(), key=lambda x: x[1]):
@@ -109,60 +129,84 @@ class HCLogHandler(object):
 
     def failure(self, msg, test_name=None):
         """
+        Report a failure log
+
         :param msg: Log message for attended run
+        :type msg: str
         :param test_name: name for monitoring output
+        :type test_name: str
         :return:
         """
         self._log(msg, test_name, 'error')
 
     def success(self, msg, test_name=None):
         """
+        Report a success log
+
         :param msg: Log message for attended run
+        :type msg: str
         :param test_name: name for monitoring output
+        :type test_name: str
         :return:
         """
         self._log(msg, test_name, 'success')
 
     def warning(self, msg, test_name=None):
         """
+        Report a warning log
+
         :param msg: Log message for attended run
+        :type msg: str
         :param test_name: name for monitoring output
+        :type test_name: str
         :return:
         """
         self._log(msg, test_name, 'warning')
 
     def info(self, msg, test_name=None):
         """
+        Report a info log
+
         :param msg: Log message for attended run
+        :type msg: str
         :param test_name: name for monitoring output
+        :type test_name: str
         :return:
         """
         self._log(msg, test_name, 'info')
 
     def exception(self, msg, test_name=None):
         """
+        Report a exception log
+
         :param msg: Log message for attended run
+        :type msg: str
         :param test_name: name for monitoring output
+        :type test_name: str
         :return:
         """
         self._log(msg, test_name, 'exception')
 
     def skip(self, msg, test_name=None):
         """
+        Report a skipped log
+
         :param msg: Log message for attended run
+        :type msg: str
         :param test_name: name for monitoring output
+        :type test_name: str
         :return:
         """
         self._log(msg, test_name, 'skip')
 
     def debug(self, msg, test_name=None):
         """
+        Report a debug log
+
         :param msg: Log message for attended run
+        :type msg: str
         :param test_name: name for monitoring output
+        :type test_name: str
         :return:
         """
         self._log(msg, test_name, 'debug')
-
-    @staticmethod
-    def test_finished():
-        print ""

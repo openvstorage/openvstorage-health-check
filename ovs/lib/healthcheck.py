@@ -20,12 +20,12 @@
 Module for HealthCheckController
 """
 
-from ovs.extensions.healthcheck.openvstorage.openvstoragecluster_health_check import OpenvStorageHealthCheck
-from ovs.extensions.healthcheck.arakoon.arakooncluster_health_check import ArakoonHealthCheck
-from ovs.extensions.healthcheck.utils.exceptions import PlatformNotSupportedException
-from ovs.extensions.healthcheck.alba.alba_health_check import AlbaHealthCheck
-from ovs.log.healthcheck_logHandler import HCLogHandler
 from ovs.celery_run import celery
+from ovs.log.healthcheck_logHandler import HCLogHandler
+from ovs.extensions.healthcheck.alba.alba_health_check import AlbaHealthCheck
+from ovs.extensions.healthcheck.utils.exceptions import PlatformNotSupportedException
+from ovs.extensions.healthcheck.arakoon.arakooncluster_health_check import ArakoonHealthCheck
+from ovs.extensions.healthcheck.openvstorage.openvstoragecluster_health_check import OpenvStorageHealthCheck
 
 
 class HealthCheckController(object):
@@ -37,8 +37,8 @@ class HealthCheckController(object):
     @celery.task(name='ovs.healthcheck.check_self.unattended')
     def check_unattended():
         """
-        Executes the healthcheck in UNATTENDED mode
-        Check MK
+        Executes the healthcheck in UNATTENDED mode for e.g. Check_MK
+
         :return: results of the healthcheck
         :rtype: dict
         """
@@ -85,13 +85,12 @@ class HealthCheckController(object):
     @celery.task(name='ovs.healthcheck.check')
     def execute_check(unattended=False, silent_mode=False):
         """
-        Executes all available checks for the chosen HealthCheckController.PLATFORM
-            * Vanilla (Open vStorage + Arakoon + Alba) = 0
-            * Swift (Open vStorage + Arakoon + Swift) = 1
-            * Ceph (Open vStorage + Arakoon + Ceph) = 2
-            * Distributed FS (Open vStorage + Arakoon + Distributed FS) = 3
-            * S3 (Open vStorage + Arakoon + S3) = 4
+        Executes all available checks
 
+        :param unattended: unattendend mode?
+        :type unattended: bool
+        :param silent_mode: silent mode?
+        :type silent_mode: bool
         :return: results of the healthcheck
         :rtype: dict
         """
@@ -103,7 +102,8 @@ class HealthCheckController(object):
             HealthCheckController.check_arakoon(logger)
             HealthCheckController.check_alba(logger)
         else:
-            raise PlatformNotSupportedException("Platform '{0}' is currently NOT supported".format(HealthCheckController.PLATFORM))
+            raise PlatformNotSupportedException("Platform '{0}' is currently NOT supported"
+                                                .format(HealthCheckController.PLATFORM))
 
         return HealthCheckController.get_results(logger, unattended, silent_mode)
 
@@ -112,6 +112,10 @@ class HealthCheckController(object):
     def check_openvstorage(logger):
         """
         Checks all critical components of Open vStorage
+
+        :param logger: logging object
+        :type logger: ovs.log.healthcheck_logHandler
+        :returns
         """
 
         logger.info("Starting Open vStorage Health Check!", 'starting_ovs_hc')
@@ -136,6 +140,10 @@ class HealthCheckController(object):
     def check_arakoon(logger):
         """
         Checks all critical components of Arakoon
+
+        :param logger: logging object
+        :type logger: ovs.log.healthcheck_logHandler
+        :returns
         """
 
         logger.info("Starting Arakoon Health Check!", 'starting_arakoon_hc')
@@ -149,6 +157,10 @@ class HealthCheckController(object):
     def check_alba(logger):
         """
         Checks all critical components of Alba
+
+        :param logger: logging object
+        :type logger: ovs.log.healthcheck_logHandler
+        :returns
         """
 
         logger.info("Starting Alba Health Check!", 'starting_alba_hc')
@@ -162,14 +174,21 @@ class HealthCheckController(object):
         """
         Gets the result of the Open vStorage healthcheck
 
+        :param unattended: unattendend mode?
+        :type unattended: bool
+        :param silent_mode: silent mode?
+        :type silent_mode: bool
+        :param logger: logging object
+        :type logger: ovs.log.healthcheck_logHandler
         :return: results & recap
-        :rtype: dict with nested dicts
+        :rtype: dict
         """
         logger.info("Recap of Health Check!", 'starting_recap_hc')
         logger.info("======================", 'starting_recap_hc_ul')
 
         logger.success("SUCCESS={0} FAILED={1} SKIPPED={2} WARNING={3} EXCEPTION={4}"
-                       .format(logger.counters['SUCCESS'], logger.counters['FAILED'], logger.counters['SKIPPED'], logger.counters['WARNING'],
+                       .format(logger.counters['SUCCESS'], logger.counters['FAILED'],
+                               logger.counters['SKIPPED'], logger.counters['WARNING'],
                                logger.counters['EXCEPTION']), 'exception_occured')
 
         if silent_mode:

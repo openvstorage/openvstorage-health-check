@@ -32,7 +32,6 @@ from ovs.extensions.plugins.albacli import AlbaCLI
 from ovs.dal.lists.albanodelist import AlbaNodeList
 from ovs.dal.hybrids.servicetype import ServiceType
 from ovs.dal.lists.albabackendlist import AlbaBackendList
-from ovs.extensions.healthcheck.utils.helper import Helper
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.healthcheck.utils.configuration import ConfigurationManager, ConfigurationProduct
 from ovs.extensions.healthcheck.utils.exceptions import ObjectNotFoundException, ConnectionFailedException, \
@@ -60,6 +59,8 @@ class AlbaHealthCheck(object):
         """
         Fetches the available alba backends
 
+        :param logger: logging object
+        :type logger: ovs.log.healthcheck_logHandler
         :return: information about each alba backend
         :rtype: list that consists of dicts
         """
@@ -105,15 +106,13 @@ class AlbaHealthCheck(object):
                     })
             except RuntimeError as e:
                 errors_found += 1
-                logger.failure("Error during fetch of alba backend '{0}': {1}".format(abl.name, e), 'check_alba',
-                                    False)
+                logger.failure("Error during fetch of alba backend '{0}': {1}".format(abl.name, e), 'check_alba', False)
 
         # give a precheck result for fetching the backend data
         if errors_found == 0:
             logger.success("No problems occured when fetching alba backends!", 'fetch_alba_backends')
         else:
-            logger.failure("Error during fetch of alba backend '{0}': {1}".format(abl.name, e),
-                                'fetch_alba_backends')
+            logger.failure("Error during fetch of alba backend '{0}': {1}".format(abl.name, e), 'fetch_alba_backends')
 
         return result
     
@@ -121,6 +120,9 @@ class AlbaHealthCheck(object):
     def _check_if_proxies_work(logger):
         """
         Checks if all Alba Proxies work on a local machine, it creates a namespace and tries to put and object
+
+        :param logger: logging object
+        :type logger: ovs.log.healthcheck_logHandler
         """
 
         amount_of_presets_not_working = []
@@ -191,10 +193,12 @@ class AlbaHealthCheck(object):
 
                                 # download object
                                 AlbaCLI.run('download-object', config=abm_config,
-                                            extra_params=[namespace_key, object_key, AlbaHealthCheck.TEMP_FILE_FETCHED_LOC])
+                                            extra_params=[namespace_key, object_key,
+                                                          AlbaHealthCheck.TEMP_FILE_FETCHED_LOC])
 
                                 # check if files exists - issue #57
-                                if os.path.isfile(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC) and os.path.isfile(AlbaHealthCheck.TEMP_FILE_LOC):
+                                if os.path.isfile(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC) \
+                                        and os.path.isfile(AlbaHealthCheck.TEMP_FILE_LOC):
                                     hash_original = hashlib.md5(open(AlbaHealthCheck.TEMP_FILE_LOC, 'rb')
                                                                 .read()).hexdigest()
                                     hash_fetched = hashlib.md5(open(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC, 'rb')
@@ -250,12 +254,12 @@ class AlbaHealthCheck(object):
                         # this should stay for the deletion of the remaining files
                         amount_of_presets_not_working.append(sr.name)
                         logger.failure("Proxy '{0}' has some problems ..."
-                                            .format(sr.name), 'proxy_{0}'.format(sr.name))
+                                       .format(sr.name), 'proxy_{0}'.format(sr.name))
 
                     except ConfigNotMatchedException, e:
                         amount_of_presets_not_working.append(sr.name)
                         logger.failure("Proxy '{0}' has some problems: {1}"
-                                            .format(sr.name, e), 'proxy_{0}'.format(sr.name))
+                                       .format(sr.name, e), 'proxy_{0}'.format(sr.name))
 
         # for unattended
         return amount_of_presets_not_working
@@ -265,6 +269,8 @@ class AlbaHealthCheck(object):
         """
         Checks if Alba ASD's work
 
+        :param logger: logging object
+        :type logger: ovs.log.healthcheck_logHandler
         :param disks: list of alba ASD's
         :type disks: list
         :return: returns a tuple that consists of lists: (workingdisks, defectivedisks)
@@ -305,7 +311,7 @@ class AlbaHealthCheck(object):
                             else:
                                 # test successfull!
                                 logger.success("ASD test with DISK_ID '{0}' succeeded!".format(disk.get('asd_id')),
-                                                    'alba_asd_{0}'.format(disk.get('asd_id')))
+                                               'alba_asd_{0}'.format(disk.get('asd_id')))
 
                                 workingdisks.append(disk.get('asd_id'))
 
@@ -319,7 +325,7 @@ class AlbaHealthCheck(object):
                             # disk is missing
                             raise DiskNotFoundException('Disk is missing')
 
-                    except ObjectNotFoundException as e:
+                    except ObjectNotFoundException:
                         defectivedisks.append(disk.get('asd_id'))
                         logger.failure("ASD test with DISK_ID '{0}' failed on NODE '{1}'!"
                                        .format(disk.get('asd_id'), ip_address),
@@ -341,6 +347,9 @@ class AlbaHealthCheck(object):
     def check_alba(logger):
         """
         Checks Alba as a whole
+
+        :param logger: logging object
+        :type logger: ovs.log.healthcheck_logHandler
         """
 
         logger.info("Checking available ALBA backends ...")
@@ -360,7 +369,8 @@ class AlbaHealthCheck(object):
 
                         # check disks of backend, ignore global backends
                         if backend.get('type') == 'LOCAL':
-                            result_disks = AlbaHealthCheck._check_backend_asds(logger, backend.get('all_disks'), backend.get('name'))
+                            result_disks = AlbaHealthCheck._check_backend_asds(logger, backend.get('all_disks'),
+                                                                               backend.get('name'))
                             workingdisks = result_disks[0]
                             defectivedisks = result_disks[1]
 
@@ -368,16 +378,18 @@ class AlbaHealthCheck(object):
                             if backend.get('is_available_for_vpool'):
                                 if len(defectivedisks) == 0:
                                     logger.success("Alba backend '{0}' should be AVAILABLE FOR vPOOL USE,"
-                                                        " ALL disks are working fine!".format(backend.get('name')),
-                                                        'alba_backend_{0}'.format(backend.get('name')))
+                                                   " ALL disks are working fine!".format(backend.get('name')),
+                                                   'alba_backend_{0}'.format(backend.get('name')))
                                 else:
-                                    logger.warning("Alba backend '{0}' should be AVAILABLE FOR vPOOL USE with {1} disks,"
-                                                        " BUT there are {2} defective disks: {3}".format(backend.get('name'),
-                                                                                                         len(workingdisks),
-                                                                                                         len(defectivedisks),
-                                                                                                         ', '.join(
-                                                                                                             defectivedisks)),
-                                                        'alba_backend_{0}'.format(backend.get('name'), len(defectivedisks)))
+                                    logger.warning("Alba backend '{0}' should be "
+                                                   "AVAILABLE FOR vPOOL USE with {1} disks,"
+                                                   " BUT there are {2} defective disks: {3}".format(backend.get('name'),
+                                                                                                    len(workingdisks),
+                                                                                                    len(defectivedisks),
+                                                                                                    ', '
+                                                                                                    .join(defectivedisks
+                                                                                                          )),
+                                                   'alba_backend_{0}'.format(backend.get('name'), len(defectivedisks)))
                             else:
                                 if len(workingdisks) == 0 and len(defectivedisks) == 0:
                                     logger.skip("Alba backend '{0}' is NOT available for vPool use, there are no"
@@ -391,7 +403,7 @@ class AlbaHealthCheck(object):
                                                    'alba_backend_{0}'.format(backend.get('name')))
                         else:
                             logger.skip("ALBA backend '{0}' is a 'global' backend ...".format(backend.get('name')),
-                                             'alba_backend_{0}'.format(backend.get('name')))
+                                        'alba_backend_{0}'.format(backend.get('name')))
                 else:
                     logger.skip("Skipping ASD check because this is a EXTRA node ...", 'check_alba_asds')
             else:
