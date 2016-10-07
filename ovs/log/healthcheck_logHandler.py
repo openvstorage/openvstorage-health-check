@@ -20,225 +20,198 @@
 LogHandler module for OVS health check
 """
 
-import json
-from ovs.extensions.healthcheck.utils.extension import Utils
+from ovs.extensions.healthcheck.utils.helper import Helper
 from ovs.log.log_handler import LogHandler
 
 
-class _Colors:
+class _Colors(object):
     """
     Colors for Open vStorage healthcheck logging
     """
-    def __init__(self):
-        """ Init method """
-        pass
 
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
+    DEBUG = '\033[94m'
+    INFO = '\033[94m'
+    SUCCESS = '\033[92m'
     WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    SKIP = '\033[95m'
+    FAILED = '\033[91m'
+    SKIPPED = '\033[95m'
     ENDC = '\033[0m'
 
+    def __getitem__(self, item):
+        return getattr(self, item)
 
-class HCLogHandler:
+
+class HCLogHandler(object):
     """
     Open vStorage Log Handler
     """
+    # Statics
+    MODULE = "helper"
+    MESSAGES = {
+        'error': 'FAILED',
+        'success': 'SUCCESS',
+        'debug': 'DEBUG',
+        'info': 'INFO',
+        'skip': 'SKIPPED',
+        'exception': 'EXCEPTION',
+        'warning': 'WARNING'
+    }
 
-    def __init__(self, unattended_mode, silent_mode=False):
+    def __init__(self, print_progress=True):
         """
         Init method for the HealthCheck Log handler
 
-        @param unattended_mode: determines the attended modus you are running
-            * unattended run (for monitoring)
-            * attended run (for user)
-        @param silent_mode: determines if you are running in silent mode
-            * silent run (to use in-code)
-
-        @type unattended_mode: bool
-        @type silent_mode: bool
+        :param print_progress: print the progress yes or no
+        :type print_progress: bool
         """
+        self.print_progress = print_progress
+        # Setup supported types
+        self.SUPPORTED_TYPES = list(self.MESSAGES.values())
 
-        # module specific
-        self.module = "utils"
+        # Setup HC counters
+        self.counters = {}
+        for stype in self.SUPPORTED_TYPES:
+            self.counters[stype] = 0
 
-        # load config file
-        with open(Utils.SETTINGS_LOC) as settings_file:
-            self.settings = json.load(settings_file)
-
-        # fetch from config file
-        self.debug = self.settings["healthcheck"]["debug_mode"]
-        self.enable = self.settings["healthcheck"]["logging"]["enable"]
-
-        # utils log settings (determine modus)
-        if silent_mode:
-            # if silent_mode is true, the unattended is also true
-            self.unattended_mode = True
-            self.silent_mode = True
-        else:
-            self.unattended_mode = unattended_mode
-            self.silent_mode = False
-
-        # HC counters
-        self.HC_failure = 0
-        self.HC_success = 0
-        self.HC_warning = 0
-        self.HC_info = 0
-        self.HC_exception = 0
-        self.HC_skip = 0
-        self.HC_debug = 0
-
-        # result of healthcheck in dict form
-        self.healthcheck_dict = {}
+        # Result of healthcheck in dict form
+        self.result_dict = {}
 
         self._logger = LogHandler.get("healthcheck")
 
-    def failure(self, msg, unattended_mode_name, unattended_print_mode=True):
+    def _log(self, msg, test_name, error_message=None):
         """
+        Log a message with a certain short test_name and type error message
+
         :param msg: Log message for attended run
-        :param unattended_mode_name: name for monitoring output
-        :param unattended_print_mode: describes if you want to print the output during a unattended run
-        :param module: describes the module you are logging from
+        :type msg: str
+        :param test_name: name for monitoring output
+        :type msg: str
+        :param error_message:
+            * 'error'
+            * 'success'
+            * 'debug'
+            * 'info'
+            * 'skip'
+            * 'exception'
+            * 'warning'
+        :type error_message: str
         :return:
         """
-        if self.enable:
-            self._logger.error('FAILED - {0}'.format(msg))
+        error_type = self.MESSAGES[error_message]
+        if not error_type or error_type not in self.SUPPORTED_TYPES:
+            raise ValueError('Found no error_type')
+        if Helper.enable_logging:
+            # skip/success uses info:
+            if error_message == 'skip' or error_message == 'success':
+                error_message = 'info'
+            getattr(self._logger, error_message)('{0}'.format(msg))
 
-        self.HC_failure += 1
+        # Exclude info values in the dict
+        excluded_messages = ['INFO']
+        if error_type not in excluded_messages:
+            self.result_dict[test_name] = error_type
+        self.counters[error_type] += 1
 
-        if not self.silent_mode:
-            if self.unattended_mode:
-                if unattended_print_mode:
-                    print "{0} FAILED".format(unattended_mode_name)
-                    self.healthcheck_dict[unattended_mode_name] = "FAILED"
-            else:
-                print _Colors.FAIL + "[FAILED] " + _Colors.ENDC + "%s" % (str(msg))
-        else:
-            if unattended_print_mode:
-                self.healthcheck_dict[unattended_mode_name] = "FAILED"
+        if self.print_progress:
+            print "{0}[{1}] {2}{3}".format(_Colors()[error_type], error_type, _Colors.ENDC, str(msg))
 
-    def success(self, msg, unattended_mode_name, unattended_print_mode=True):
+    def get_results(self, print_progress=False):
         """
+        Prints the result for check_mk
+
+        :param print_progress: print the progress yes or no
+        :type print_progress: bool
+        :return: results
+        :rtype: dict
+        """
+        # Checked with Jeroen Maelbrancke for this
+        excluded_messages = ['INFO', 'DEBUG', 'SKIPPED']
+        if print_progress:
+            for key, value in sorted(self.result_dict.items(), key=lambda x: x[1]):
+                if value not in excluded_messages:
+                    print "{0} {1}".format(key, value)
+        return self.result_dict
+
+    def failure(self, msg, test_name=None):
+        """
+        Report a failure log
+
         :param msg: Log message for attended run
-        :param unattended_mode_name: name for monitoring output
-        :param unattended_print_mode: describes if you want to print the output during a unattended run
-        :param module: describes the module you are logging from
+        :type msg: str
+        :param test_name: name for monitoring output
+        :type test_name: str
         :return:
         """
-        if self.enable:
-            self._logger.info('SUCCESS - {0}'.format(msg))
-        self.HC_success += 1
+        self._log(msg, test_name, 'error')
 
-        if not self.silent_mode:
-            if self.unattended_mode:
-                if unattended_print_mode:
-                    print "{0} SUCCESS".format(unattended_mode_name)
-                    self.healthcheck_dict[unattended_mode_name] = "SUCCESS"
-            else:
-                print _Colors.OKGREEN + "[SUCCESS] " + _Colors.ENDC + "%s" % (str(msg))
-        else:
-            if unattended_print_mode:
-                self.healthcheck_dict[unattended_mode_name] = "SUCCESS"
-
-    def warning(self, msg, unattended_mode_name, unattended_print_mode=True):
+    def success(self, msg, test_name=None):
         """
+        Report a success log
+
         :param msg: Log message for attended run
-        :param unattended_mode_name: name for monitoring output
-        :param unattended_print_mode: describes if you want to print the output during a unattended run
-        :param module: describes the module you are logging from
+        :type msg: str
+        :param test_name: name for monitoring output
+        :type test_name: str
         :return:
         """
-        if self.enable:
-            self._logger.warning('{0}'.format(msg))
-        self.HC_warning += 1
+        self._log(msg, test_name, 'success')
 
-        if not self.silent_mode:
-            if self.unattended_mode:
-                if unattended_print_mode:
-                    print "{0} WARNING".format(unattended_mode_name)
-                    self.healthcheck_dict[unattended_mode_name] = "WARNING"
-            else:
-                print _Colors.WARNING + "[WARNING] " + _Colors.ENDC + "%s" % (str(msg))
-        else:
-            if unattended_print_mode:
-                self.healthcheck_dict[unattended_mode_name] = "WARNING"
-
-    def info(self, msg, unattended_mode_name, unattended_print_mode=True):
+    def warning(self, msg, test_name=None):
         """
+        Report a warning log
+
         :param msg: Log message for attended run
-        :param unattended_mode_name: name for monitoring output
-        :param unattended_print_mode: describes if you want to print the output during a unattended run
-        :param module: describes the module you are logging from
+        :type msg: str
+        :param test_name: name for monitoring output
+        :type test_name: str
         :return:
         """
-        if self.enable:
-            self._logger.info('{0}'.format(msg))
-        self.HC_info += 1
+        self._log(msg, test_name, 'warning')
 
-        # info_mode is NOT logged silently
-        if not self.silent_mode:
-            if self.unattended_mode:
-                if unattended_print_mode:
-                    print "{0} INFO".format(unattended_mode_name)
-                    self.healthcheck_dict[unattended_mode_name] = "INFO"
-            else:
-                print _Colors.OKBLUE + "[INFO] " + _Colors.ENDC + "%s" % (str(msg))
-
-    def exception(self, msg, unattended_mode_name, unattended_print_mode=True):
+    def info(self, msg, test_name=None):
         """
+        Report a info log
+
         :param msg: Log message for attended run
-        :param unattended_mode_name: name for monitoring output
-        :param unattended_print_mode: describes if you want to print the output during a unattended run
-        :param module: describes the module you are logging from
+        :type msg: str
+        :param test_name: name for monitoring output
+        :type test_name: str
         :return:
         """
-        if self.enable:
-            self._logger.exception('EXCEPTION - {0}'.format(msg))
-        self.HC_exception += 1
+        self._log(msg, test_name, 'info')
 
-        if not self.silent_mode:
-            if self.unattended_mode:
-                if unattended_print_mode:
-                    print "{0} EXCEPTION".format(unattended_mode_name)
-                    self.healthcheck_dict[unattended_mode_name] = "EXCEPTION"
-            else:
-                print _Colors.FAIL + "[EXCEPTION] " + _Colors.ENDC + "%s" % (str(msg))
-        else:
-            if unattended_print_mode:
-                self.healthcheck_dict[unattended_mode_name] = "EXCEPTION"
-
-    def skip(self, msg, unattended_mode_name, unattended_print_mode=True):
+    def exception(self, msg, test_name=None):
         """
+        Report a exception log
+
         :param msg: Log message for attended run
-        :param unattended_mode_name: name for monitoring output
-        :param unattended_print_mode: describes if you want to print the output during a unattended run
-        :param module: describes the module you are logging from
+        :type msg: str
+        :param test_name: name for monitoring output
+        :type test_name: str
         :return:
         """
-        if self.enable:
-            self._logger.info('SKIPPED - {0}'.format(msg))
-        self.HC_skip += 1
+        self._log(msg, test_name, 'exception')
 
-        if not self.silent_mode:
-            if self.unattended_mode:
-                if unattended_print_mode:
-                    print "{0} SKIPPED".format(unattended_mode_name)
-                    self.healthcheck_dict[unattended_mode_name] = "SKIPPED"
-            else:
-                print _Colors.SKIP + "[SKIPPED] " + _Colors.ENDC + "%s" % (str(msg))
-
-    def debug(self, msg, unattended_mode_name, unattended_print_mode=True):
+    def skip(self, msg, test_name=None):
         """
+        Report a skipped log
+
         :param msg: Log message for attended run
-        :param unattended_mode_name: name for monitoring output
-        :param unattended_print_mode: describes if you want to print the output during a unattended run
-        :param module: describes the module you are logging from
+        :type msg: str
+        :param test_name: name for monitoring output
+        :type test_name: str
         :return:
         """
-        if self.debug:
-            if self.enable:
-                self._logger.debug('{0}'.format(msg))
-            self.HC_debug += 1
-            print _Colors.OKBLUE + "[DEBUG] " + _Colors.ENDC + "%s" % (str(msg))
-            self.healthcheck_dict[unattended_mode_name] = "DEBUG"
+        self._log(msg, test_name, 'skip')
+
+    def debug(self, msg, test_name=None):
+        """
+        Report a debug log
+
+        :param msg: Log message for attended run
+        :type msg: str
+        :param test_name: name for monitoring output
+        :type test_name: str
+        :return:
+        """
+        self._log(msg, test_name, 'debug')
