@@ -5,6 +5,32 @@
             "enable": true
         },
         "debug_mode": false,
-        "max_check_log_size": 500
+        "max_check_log_size": 500,
+        "check_logs": {"/var/log/upstart": {"prefix": ["ovs", "asd"], "type": "dir", "contains_nested": false},
+                        "/var/log/ovs": {"prefix": null, "type": "dir", "contains_nested": true},
+                        "/var/log/gunicorn": {"prefix": null, "type": "dir", "contains_nested": false},
+                        "/var/log/rabbitmq": {"prefix": null, "type": "dir", "contains_nested": false},
+                        "/var/log/nginx": {"prefix": null, "type": "dir", "contains_nested": false},
+                        "/var/log/arakoon": {"prefix": null, "type": "dir", "contains_nested": true},
+                        "/var/log/memcached.log": {"type": "file"}},
+        "package_list": ["openvstorage", "openvstorage-backend", "openvstorage-backend-core",
+                         "openvstorage-backend-webapps", "openvstorage-core", "openvstorage-hc",
+                         "openvstorage-sdm", "openvstorage-webapps", "openvstorage-test",
+                         "alba", "volumedriver-base", "volumedriver-server", "nginx", "memcached",
+                         "rabbitmq-server", "qemu-kvm", "virtinst", "openvpn", "ntp",
+                         "volumedriver-no-dedup-server", "libvirt0", "python-libvirt",
+                         "omniorb-nameserver", "avahi-daemon", "avahi-utils",
+                         "libovsvolumedriver", "qemu", "libvirt-bin", "blktap-openvstorage-utils",
+                         "openvstorage-health-check"],
+        "extra_ports": {"nginx": ["80", "443"], "memcached": ["11211"]},
+        "rights_dirs": {"/tmp": "777", "/var/tmp": "777"},
+        "owners_files": {"/var/log/syslog": {"user": "syslog", "group": "adm"},
+                         "/var/log/auth.log": {"user": "syslog", "group": "adm"},
+                         "/var/log/kern.log": {"user": "syslog", "group": "adm"},
+                         "/var/log/wtmp": {"user": "root", "group": "utmp"},
+                         "/var/log/btmp": {"user": "root", "group": "utmp"},
+                         "/etc/gshadow": {"user": "root", "group": "shadow"},
+                         "/var/cache/man": {"user": "man", "group": "root"},
+                         "/etc/shadow": {"user": "root", "group": "shadow"}}
     }
 }
