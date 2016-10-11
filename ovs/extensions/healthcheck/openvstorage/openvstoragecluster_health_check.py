@@ -15,11 +15,10 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
-
+import re
 import os
 import grp
 import glob
-import re
 import psutil
 import socket
 import commands
@@ -768,7 +767,7 @@ class OpenvStorageHealthCheck(object):
                     for volume in voldrv_volume_list:
                         # check if volume is halted, returns: 0 or 1
                         try:
-                            if int(voldrv_client.info_volume(volume).halted):
+                            if int(OpenvStorageHealthCheck._info_volume(voldrv_client, volume).halted):
                                 haltedvolumes.append(volume)
                         except ObjectNotFoundException:
                             # ignore ovsdb invalid entrees
@@ -778,6 +777,9 @@ class OpenvStorageHealthCheck(object):
                             # this means the volume is not halted but detached or unreachable for the volumedriver
                             haltedvolumes.append(volume)
                         except RuntimeError:
+                            haltedvolumes.append(volume)
+                        except TimeoutError:
+                            # timeout occured
                             haltedvolumes.append(volume)
 
                     # print all results
@@ -793,3 +795,17 @@ class OpenvStorageHealthCheck(object):
 
         else:
             logger.skip("No vPools found!".format(len(vpools)), 'halted_nofound')
+
+    @staticmethod
+    @timeout_decorator.timeout(5)
+    def _info_volume(voldrv_client, volume_name):
+        """
+        Fetch the information from a volume through the volumedriver client
+
+        :param voldrv_client: client of a volumedriver
+        :type voldrv_client: volumedriver.storagerouter.storagerouterclient.LocalStorageRouterClient
+        :param volume_name: name of a volume in the volumedriver
+        :type volume_name: str
+        :return: volumedriver volume object
+        """
+        return voldrv_client.info_volume(volume_name)
