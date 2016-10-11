@@ -19,7 +19,6 @@ import re
 import os
 import grp
 import glob
-import time
 import psutil
 import socket
 import commands
