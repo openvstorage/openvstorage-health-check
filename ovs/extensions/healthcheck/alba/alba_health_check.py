@@ -32,6 +32,7 @@ from ovs.extensions.plugins.albacli import AlbaCLI
 from ovs.dal.lists.albanodelist import AlbaNodeList
 from ovs.dal.hybrids.servicetype import ServiceType
 from ovs.dal.lists.albabackendlist import AlbaBackendList
+from ovs.dal.lists.storagedriverlist import StorageDriverList
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.healthcheck.utils.configuration import ConfigurationManager, ConfigurationProduct
 from ovs.extensions.healthcheck.utils.exceptions import ObjectNotFoundException, ConnectionFailedException, \
@@ -126,7 +127,6 @@ class AlbaHealthCheck(object):
         """
 
         amount_of_presets_not_working = []
-        ip = AlbaHealthCheck.MACHINE_DETAILS.ip
 
         # ignore possible subprocess output
         fnull = open(os.devnull, 'w')
@@ -136,6 +136,9 @@ class AlbaHealthCheck(object):
             if sr.storagerouter_guid == AlbaHealthCheck.MACHINE_DETAILS.guid:
                 if sr.type.name == ServiceType.SERVICE_TYPES.ALBA_PROXY:
                     logger.info("Checking ALBA proxy '{0}': ".format(sr.name), 'check_alba')
+                    ip = StorageDriverList.get_by_storagedriver_id("{0}{1}"
+                                                                   .format(sr.name.split('_')[1],
+                                                                           AlbaHealthCheck.MACHINE_ID)).storage_ip
                     try:
                         # determine what to what backend the proxy is connected
                         proxy_client_cfg = AlbaCLI.run('proxy-client-cfg', host=ip, port=sr.ports[0])
