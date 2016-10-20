@@ -357,23 +357,31 @@ class OpenvStorageHealthCheck(object):
 
         logger.info("Checking if OWNERS are set correctly on certain maps: ", 'checkRequiredMaps_owners')
         for dirname, owner_settings in Helper.owners_files.iteritems():
-            if owner_settings.get('user') == OpenvStorageHealthCheck._get_owner_of_file(dirname) and owner_settings.get(
-                    'group') == OpenvStorageHealthCheck._get_group_of_file(dirname):
-                logger.success("Directory '{0}' has correct owners!".format(dirname), 'dir_{0}'.format(dirname))
+            # check if directory/file exists
+            if os.path.exists(dirname):
+                if owner_settings.get('user') == OpenvStorageHealthCheck._get_owner_of_file(dirname) and owner_settings.get(
+                        'group') == OpenvStorageHealthCheck._get_group_of_file(dirname):
+                    logger.success("Directory '{0}' has correct owners!".format(dirname), 'dir_{0}'.format(dirname))
+                else:
+                    logger.failure(
+                        "Directory '{0}' has INCORRECT owners! It must be OWNED by USER={1} and GROUP={2}"
+                        .format(dirname, owner_settings.get('user'), owner_settings.get('group')),
+                        'dir_{0}'.format(dirname))
             else:
-                logger.failure(
-                    "Directory '{0}' has INCORRECT owners! It must be OWNED by USER={1} and GROUP={2}"
-                    .format(dirname, owner_settings.get('user'), owner_settings.get('group')),
-                    'dir_{0}'.format(dirname))
+                logger.skip("Directory '{0}' does not exists!".format(dirname), 'dir_{0}'.format(dirname))
 
         logger.info("Checking if Rights are set correctly on certain maps: ", 'checkRequiredMaps_rights')
         for dirname, rights in Helper.rights_dirs.iteritems():
-            if OpenvStorageHealthCheck._check_rights_of_file(dirname, rights):
-                logger.success("Directory '{0}' has correct rights!".format(dirname),
-                               'dir_{0}'.format(dirname))
+            # check if directory/file exists
+            if os.path.exists(dirname):
+                if OpenvStorageHealthCheck._check_rights_of_file(dirname, rights):
+                    logger.success("Directory '{0}' has correct rights!".format(dirname),
+                                   'dir_{0}'.format(dirname))
+                else:
+                    logger.failure("Directory '{0}' has INCORRECT rights! It must be CHMOD={1} "
+                                   .format(dirname, rights), 'dir_{0}'.format(dirname))
             else:
-                logger.failure("Directory '{0}' has INCORRECT rights! It must be CHMOD={1} "
-                               .format(dirname, rights), 'dir_{0}'.format(dirname))
+                logger.skip("Directory '{0}' does not exists!".format(dirname), 'dir_{0}'.format(dirname))
 
         return True
 
