@@ -43,7 +43,8 @@ class ArakoonHealthCheck(object):
     MODULE = "arakoon"
     LAST_MINUTES = 5
     MAX_AMOUNT_NODE_RESTARTED = 5
-    COLLAPSE_OLDER_THAN_DAYS = 2
+    # oldest tlx files may not older than x days. If they are - failed collapse
+    MAX_COLLAPSE_AGE = 2
     MACHINE_DETAILS = System.get_my_storagerouter()
 
     @staticmethod
@@ -52,7 +53,7 @@ class ArakoonHealthCheck(object):
         Fetches the available local arakoon clusters of a cluster
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         :return: if succeeded a list; if failed `None`
         :rtype: list
         """
@@ -62,8 +63,7 @@ class ArakoonHealthCheck(object):
         result = {}
         if len(arakoon_clusters) == 0:
             # no arakoon clusters on node
-            logger.warning("No installed arakoon clusters detected on this system ...",
-                           'arakoon_no_clusters_found', False)
+            logger.warning("No installed arakoon clusters detected on this system ...", 'arakoon_no_clusters_found')
             return None
 
         # add arakoon clusters
@@ -130,7 +130,7 @@ class ArakoonHealthCheck(object):
         Checks the port connection of a process
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         :param process_name: name of a certain process running on this local machine
         :type process_name: str
         :param port: port where the service is running on
@@ -150,7 +150,7 @@ class ArakoonHealthCheck(object):
         Checks all ports of Arakoon nodes (client & server)
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
 
         logger.info("Checking PORT CONNECTIONS of arakoon nodes ...", 'check_required_ports_arakoon')
@@ -173,8 +173,11 @@ class ArakoonHealthCheck(object):
         Check the amount of restarts of an Arakoon node
 
         :param arakoon_overview: List of available Arakoons
+        :type arakoon_overview: dict
         :param last_minutes: Last x minutes to check
+        :type last_minutes: int
         :param max_amount_node_restarted: The amount of restarts
+        :type max_amount_node_restarted: int
         :return: list with OK and NOK status
         """
         result = {"OK": [], "NOK": []}
@@ -198,20 +201,20 @@ class ArakoonHealthCheck(object):
         return result
 
     @staticmethod
-    def _check_collapse(logger, arakoon_overiew, older_than_days):
+    def _check_collapse(logger, arakoon_overiew, max_collapse_age):
         """
         Check collapsing of arakoon
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         :param arakoon_overiew: List of available Arakoons
-        :param older_than_days: The amount of days behind
+        :param max_collapse_age: tlx files may not be longer than x days
         :return: list with OK, NOK status
         :rtype: list
         """
         result = {"OK": [], "NOK": []}
-        old_date = date.today() - timedelta(older_than_days)
-        old_than_timestamp = time.mktime(old_date.timetuple())
+        # tlx file must have young timestamp than this one.
+        max_age_timestamp = time.mktime((date.today() - timedelta(days=max_collapse_age)).timetuple())
 
         for arakoon, arakoon_nodes in arakoon_overiew.iteritems():
             for node, config in arakoon_nodes.iteritems():
@@ -235,7 +238,7 @@ class ArakoonHealthCheck(object):
 
                 if 'head.db' in files:
                     head_db_stats = os.stat('{0}/head.db'.format(tlog_dir))
-                    if head_db_stats.st_mtime > old_than_timestamp:
+                    if head_db_stats.st_mtime > max_age_timestamp:
                         result["OK"].append(arakoon)
                         continue
 
@@ -243,14 +246,15 @@ class ArakoonHealthCheck(object):
                              if tlx_file.endswith('.tlx')]
                 amount_tlx = len(tlx_files)
 
-                if amount_tlx == 0 and len([tlog_file for tlog_file in files if tlog_file.endswith('.tlog')]) > 0:
+                # Discussed with Arakoon team. Min tlx files must be 3 before checking time
+                if amount_tlx < 3 and len([tlog_file for tlog_file in files if tlog_file.endswith('.tlog')]) > 0:
+                    logger.info("Found less than 3 tlogs for '{0}', collapsing is not worth doing.".format(arakoon))
                     result['OK'].append(arakoon)
                     continue
                 elif amount_tlx == 0 and len([tlog_file for tlog_file in files if tlog_file.endswith('.tlog')]) < 0:
                     result['NOK'].append(arakoon)
                     if not logger.print_progress:
-                        logger.failure("No tlx files found and head.db is out of sync "
-                                       "or is not present in {0}.".format(tlog_dir), 'arakoon_tlx_path')
+                        logger.failure("No tlx files found and head.db is out of sync or is not present in {0}.".format(tlog_dir), 'arakoon_tlx_path')
                     continue
 
                 tlx_files.sort(key=lambda tup: tup[0])
@@ -264,17 +268,14 @@ class ArakoonHealthCheck(object):
                     result["NOK"].append(arakoon)
                     continue
 
-                if amount_tlx < 3:
+                if oldest_tlx_stats.st_mtime > max_age_timestamp:
+                    logger.info("Found less than 3 tlogs for '{0}', collapsing is not worth doing.".format(arakoon))
                     result["OK"].append(arakoon)
                     continue
 
-                if oldest_tlx_stats.st_mtime > old_than_timestamp:
-                    result["OK"].append(arakoon)
-                    continue
-
-                if not logger.print_progress:
+                if logger.print_progress:
                     datetime_oldest_file = datetime.fromtimestamp(oldest_tlx_stats.st_mtime).isoformat()
-                    datetime_old_date = datetime.fromtimestamp(old_than_timestamp).isoformat()
+                    datetime_old_date = datetime.fromtimestamp(max_age_timestamp).isoformat()
                     logger.failure("oldest file: {0} with timestamp: {1} is older than {2} for arakoon {3}"
                                    .format(oldest_file, datetime_oldest_file,
                                            datetime_old_date, arakoon), 'arakoon_oldest_file')
@@ -289,7 +290,7 @@ class ArakoonHealthCheck(object):
         Verifies the integrity of a list of arakoons
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         :param arakoon_overview: list of arakoon names
         :type arakoon_overview: list that consists of strings
         :return: (arakoonperfworking_list, arakoonnomaster_list, arakoondown_list, arakoonunknown_list)
@@ -353,7 +354,7 @@ class ArakoonHealthCheck(object):
         Verifies/validates the integrity of all available arakoons
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
 
         logger.info("Fetching available arakoon clusters: ", 'checkArakoons')
@@ -372,9 +373,7 @@ class ArakoonHealthCheck(object):
                     # check amount OK arakoons
                     if len(ver_result[0]) > 0:
                         logger.warning(
-                            "{0}/{1} Arakoon(s) is/are OK!: {2}".format(len(ver_result[0]), len(arakoon_overview),
-                                                                        ', '.join(ver_result[0])),
-                            'arakoon_some_up', False)
+                            "{0}/{1} Arakoon(s) is/are OK!: {2}".format(len(ver_result[0]), len(arakoon_overview),', '.join(ver_result[0])),'arakoon_some_up')
                     # check amount NO-MASTER arakoons
                     if len(ver_result[1]) > 0:
                         logger.failure("{0} Arakoon(s) cannot find a MASTER: {1}".format(len(ver_result[1]),
@@ -412,8 +411,7 @@ class ArakoonHealthCheck(object):
                 logger.success("ALL Arakoon(s) restart check(s) is/are OK!",
                                'arakoon_restarts')
 
-            collapse_check = ArakoonHealthCheck._check_collapse(logger, arakoon_overview,
-                                                                ArakoonHealthCheck.COLLAPSE_OLDER_THAN_DAYS)
+            collapse_check = ArakoonHealthCheck._check_collapse(logger, arakoon_overview, ArakoonHealthCheck.MAX_COLLAPSE_AGE)
 
             nok = collapse_check['NOK']
             ok = collapse_check['OK']
