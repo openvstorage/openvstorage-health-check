@@ -17,10 +17,11 @@
 """
 Module for HealthCheckController
 """
+
+import ast
+import imp
 import os
 import inspect
-import imp
-import ast
 
 from datetime import datetime, timedelta
 
