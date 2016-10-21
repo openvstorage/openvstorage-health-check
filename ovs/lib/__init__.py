@@ -1,4 +1,3 @@
-#!/bin/bash
 # Copyright (C) 2016 iNuron NV
 #
 # This file is part of Open vStorage Open Source Edition (OSE),
@@ -14,6 +13,3 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
-
-cd /opt/OpenvStorage
-python /opt/OpenvStorage/ovs/lib/healthcheck.py "$@"
