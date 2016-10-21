@@ -1,10 +1,10 @@
 {
     "package_name": "openvstorage-health-check",
     "product_name": "Open vStorage - Health-Check",
-    "source_contents": "--transform 's,^,{0}-{1}/,' config/healthcheck ovs scripts *.txt",
+    "source_contents": "--transform 's,^,{0}-{1}/,' --exclude='ovs/__init__.py' --exclude='ovs/extensions/__init__.py' config/healthcheck ovs scripts *.txt",
     "version": {
-        "major": 2,
-        "minor": 0,
-        "patch": 0
+        "major": 3,
+        "minor": 1,
+        "patch": 2
     }
 }
