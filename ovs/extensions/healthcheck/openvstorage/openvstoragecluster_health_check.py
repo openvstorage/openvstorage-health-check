@@ -28,10 +28,12 @@ from pwd import getpwuid
 from ovs.dal.lists.vpoollist import VPoolList
 from ovs.extensions.generic.system import System
 from ovs.dal.lists.servicelist import ServiceList
+from ovs.dal.hybrids.servicetype import ServiceType
 from ovs.lib.storagerouter import StorageRouterController
 from ovs.extensions.healthcheck.utils.helper import Helper
 from timeout_decorator.timeout_decorator import TimeoutError
 import volumedriver.storagerouter.storagerouterclient as src
+from ovs.dal.lists.storagedriverlist import StorageDriverList
 from ovs.extensions.healthcheck.utils.configuration import ConfigurationManager, ConfigurationProduct
 from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, ObjectNotFoundException, \
     MaxRedirectsExceededException
@@ -161,19 +163,21 @@ class OpenvStorageHealthCheck(object):
         return next(os.walk(pwd))[1]
 
     @staticmethod 
-    def _check_port_connection(port_number):
+    def _check_port_connection(port_number, ip=MACHINE_DETAILS.ip):
         """
         Checks the port connection on a IP address
 
         :param port_number: Port number of a service that is running on the local machine. (Public or loopback)
         :type port_number: int
+        :param ip: ip address to try
+        :type ip: str
         :return: True if the port is available; False if the port is NOT available
         :rtype: bool
         """
 
         # check if port is open
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        result = sock.connect_ex((OpenvStorageHealthCheck.MACHINE_DETAILS.ip, int(port_number)))
+        result = sock.connect_ex((ip, int(port_number)))
         if result == 0:
             return True
         else:
@@ -185,7 +189,7 @@ class OpenvStorageHealthCheck(object):
                 return False
 
     @staticmethod 
-    def _is_port_listening(logger, process_name, port):
+    def _is_port_listening(logger, process_name, port, ip=MACHINE_DETAILS.ip):
         """
         Checks the port connection of a process
 
@@ -195,10 +199,11 @@ class OpenvStorageHealthCheck(object):
         :type process_name: str
         :param port: port where the service is running on
         :type port: int
+        :param ip: ip address to try
+        :type ip: str
         """
-
         logger.info("Checking port {0} of service {1} ...".format(port, process_name), '_is_port_listening')
-        if OpenvStorageHealthCheck._check_port_connection(port):
+        if OpenvStorageHealthCheck._check_port_connection(port, ip):
             logger.success("Connection successfully established!",
                            'port_{0}_{1}'.format(process_name, port))
         else:
@@ -221,7 +226,13 @@ class OpenvStorageHealthCheck(object):
         for sr in ServiceList.get_services():
             if sr.storagerouter_guid == OpenvStorageHealthCheck.MACHINE_DETAILS.guid:
                 for port in sr.ports:
-                    OpenvStorageHealthCheck._is_port_listening(logger, sr.name, port)
+                    if sr.name.split('_')[0] == 'albaproxy':
+                        ip = StorageDriverList.get_by_storagedriver_id("{0}{1}".format(sr.name.split('_')[1],
+                                                                                       OpenvStorageHealthCheck.
+                                                                                       MACHINE_ID)).storage_ip
+                        OpenvStorageHealthCheck._is_port_listening(logger, sr.name, port, ip)
+                    else:
+                        OpenvStorageHealthCheck._is_port_listening(logger, sr.name, port)
 
         # check NGINX and memcached
         logger.info("Checking EXTRA ports", '')
@@ -346,23 +357,31 @@ class OpenvStorageHealthCheck(object):
 
         logger.info("Checking if OWNERS are set correctly on certain maps: ", 'checkRequiredMaps_owners')
         for dirname, owner_settings in Helper.owners_files.iteritems():
-            if owner_settings.get('user') == OpenvStorageHealthCheck._get_owner_of_file(dirname) and owner_settings.get(
-                    'group') == OpenvStorageHealthCheck._get_group_of_file(dirname):
-                logger.success("Directory '{0}' has correct owners!".format(dirname), 'dir_{0}'.format(dirname))
+            # check if directory/file exists
+            if os.path.exists(dirname):
+                if owner_settings.get('user') == OpenvStorageHealthCheck._get_owner_of_file(dirname) and owner_settings.get(
+                        'group') == OpenvStorageHealthCheck._get_group_of_file(dirname):
+                    logger.success("Directory '{0}' has correct owners!".format(dirname), 'dir_{0}'.format(dirname))
+                else:
+                    logger.failure(
+                        "Directory '{0}' has INCORRECT owners! It must be OWNED by USER={1} and GROUP={2}"
+                        .format(dirname, owner_settings.get('user'), owner_settings.get('group')),
+                        'dir_{0}'.format(dirname))
             else:
-                logger.failure(
-                    "Directory '{0}' has INCORRECT owners! It must be OWNED by USER={1} and GROUP={2}"
-                    .format(dirname, owner_settings.get('user'), owner_settings.get('group')),
-                    'dir_{0}'.format(dirname))
+                logger.skip("Directory '{0}' does not exists!".format(dirname), 'dir_{0}'.format(dirname))
 
         logger.info("Checking if Rights are set correctly on certain maps: ", 'checkRequiredMaps_rights')
         for dirname, rights in Helper.rights_dirs.iteritems():
-            if OpenvStorageHealthCheck._check_rights_of_file(dirname, rights):
-                logger.success("Directory '{0}' has correct rights!".format(dirname),
-                               'dir_{0}'.format(dirname))
+            # check if directory/file exists
+            if os.path.exists(dirname):
+                if OpenvStorageHealthCheck._check_rights_of_file(dirname, rights):
+                    logger.success("Directory '{0}' has correct rights!".format(dirname),
+                                   'dir_{0}'.format(dirname))
+                else:
+                    logger.failure("Directory '{0}' has INCORRECT rights! It must be CHMOD={1} "
+                                   .format(dirname, rights), 'dir_{0}'.format(dirname))
             else:
-                logger.failure("Directory '{0}' has INCORRECT rights! It must be CHMOD={1} "
-                               .format(dirname, rights), 'dir_{0}'.format(dirname))
+                logger.skip("Directory '{0}' does not exists!".format(dirname), 'dir_{0}'.format(dirname))
 
         return True
 

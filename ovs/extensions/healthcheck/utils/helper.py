@@ -45,7 +45,6 @@ class Helper(object):
     rights_dirs = settings["healthcheck"]["rights_dirs"]
     owners_files = settings["healthcheck"]["owners_files"]
     check_logs = settings["healthcheck"]["check_logs"]
-    client = SSHClient('127.0.0.1', username='root')
 
     @staticmethod
     def get_ovs_type():
@@ -94,5 +93,6 @@ class Helper(object):
         :return: status of the service
         :rtype: bool
         """
-
-        return ServiceManager.get_service_status(str(service_name), Helper.client)
+        local_machine = System.get_my_storagerouter()
+        client = SSHClient(local_machine.ip, username='root')
+        return ServiceManager.get_service_status(str(service_name), client)
