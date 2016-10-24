@@ -273,7 +273,7 @@ class AlbaHealthCheck(object):
         Checks if Alba ASD's work
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         :param disks: list of alba ASD's
         :type disks: list
         :return: returns a tuple that consists of lists: (workingdisks, defectivedisks)
@@ -352,7 +352,7 @@ class AlbaHealthCheck(object):
         Checks Alba as a whole
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
 
         logger.info("Checking available ALBA backends ...")
