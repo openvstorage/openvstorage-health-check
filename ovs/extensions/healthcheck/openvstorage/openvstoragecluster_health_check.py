@@ -714,22 +714,22 @@ class OpenvStorageHealthCheck(object):
                                    'discrepancies_ovsdb_{0}'.format(vp.name))
                     continue
 
-                volume_ids = [vdisk.volume_id for vdisk in vp.vdisks]
+                vdisk_volume_ids = [vdisk.volume_id for vdisk in vp.vdisks]
 
                 # crossreference model vs. volumedriver
                 for vdisk in vp.vdisks:
                     if vdisk.volume_id not in voldrv_volume_list:
-                        missing_in_volumedriver.append(vdisk)
+                        missing_in_volumedriver.append(vdisk.guid)
 
                 # crossreference volumedriver vs. model
                 for voldrv_id in voldrv_volume_list:
-                    if voldrv_id not in volume_ids:
+                    if voldrv_id not in vdisk_volume_ids:
                         missing_in_model.append(voldrv_id)
 
                 # display discrepancies for vPool
                 if len(missing_in_volumedriver) != 0:
                     logger.warning("Detected volumes that are MISSING in volumedriver but ARE in ovsdb in vPool (a known cause is a faulty preset) "
-                                   "'{0}': {1} ".format(vp.name, ', '.join([vdisk.guid for vdisk in missing_in_volumedriver])),
+                                   "vpool name: {0} - vdisk guid(s):{1} ".format(vp.name, ' '.join(missing_in_volumedriver)),
                                     'discrepancies_ovsdb_{0}'.format(vp.name))
 
                 else:
@@ -739,7 +739,7 @@ class OpenvStorageHealthCheck(object):
                 if len(missing_in_model) != 0:
                     logger.warning("Detected volumes that are AVAILABLE in volumedriver "
                                    "but ARE NOT in ovsdb in vPool "
-                                   "'{0}': {1}".format(vp.name, ', '.join(missing_in_model)),
+                                   "vpool name: {0} - vdisk volume id(s):{1}".format(vp.name, ' '.join(missing_in_model)),
                                    'discrepancies_voldrv_{0}'.format(vp.name))
                 else:
                     logger.success("NO discrepancies found for voldrv in vPool '{0}'".format(vp.name),
