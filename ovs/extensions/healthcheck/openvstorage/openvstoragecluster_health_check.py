@@ -53,7 +53,7 @@ class OpenvStorageHealthCheck(object):
         Fetch settings of the local Open vStorage node
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
         ovs_version = Helper.get_ovs_version()
 
@@ -71,7 +71,7 @@ class OpenvStorageHealthCheck(object):
         Checks the size of the initialized log files
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
 
         collection = []
@@ -194,7 +194,7 @@ class OpenvStorageHealthCheck(object):
         Checks the port connection of a process
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         :param process_name: name of a certain process running on this local machine
         :type process_name: str
         :param port: port where the service is running on
@@ -216,7 +216,7 @@ class OpenvStorageHealthCheck(object):
         Checks all ports of Open vStorage components (framework, memcached, nginx, rabbitMQ and celery)
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
 
         logger.info("Checking PORT CONNECTIONS of OVS & EXTRA services ...", '')
@@ -260,7 +260,7 @@ class OpenvStorageHealthCheck(object):
         Checks the availability of packages for Open vStorage
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
 
         logger.info("Checking OVS packages: ", 'check_ovs_packages')
@@ -281,7 +281,7 @@ class OpenvStorageHealthCheck(object):
         Checks the availability of processes for Open vStorage
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
 
         logger.info("Checking LOCAL OVS services: ", 'check_ovs_processes')
@@ -331,7 +331,7 @@ class OpenvStorageHealthCheck(object):
         Extended check of the Open vStorage workers; When the simple check fails, it will execute a full/deep check.
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
 
         logger.info("Checking if OVS-WORKERS are running smoothly: ", 'process_celery')
@@ -352,7 +352,7 @@ class OpenvStorageHealthCheck(object):
         Checks the directories their rights and owners for mistakes
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
 
         logger.info("Checking if OWNERS are set correctly on certain maps: ", 'checkRequiredMaps_owners')
@@ -434,7 +434,7 @@ class OpenvStorageHealthCheck(object):
         Checks if DNS resolving works on a local machine
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         :param fqdn: the absolute pathname of the file
         :type fqdn: str
         :return: True if the DNS resolving works; False it doesn't work
@@ -458,7 +458,7 @@ class OpenvStorageHealthCheck(object):
         Finds zombied or dead processes on a local machine
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
 
         zombie_processes = []
@@ -567,7 +567,7 @@ class OpenvStorageHealthCheck(object):
         Checks if the FILEDRIVERS work on a local machine (compatible with multiple vPools)
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
 
         logger.info("Checking filedrivers: ", 'filedriver')
@@ -610,7 +610,7 @@ class OpenvStorageHealthCheck(object):
         Checks if the VOLUMEDRIVERS work on a local machine (compatible with multiple vPools)
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
 
         logger.info("Checking volumedrivers: ", 'check_volumedrivers')
@@ -654,7 +654,7 @@ class OpenvStorageHealthCheck(object):
         Checks if the model consistency of OVSDB vs. VOLUMEDRIVER and does a preliminary check on RABBITMQ
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
 
         logger.info("Checking model consistency: ", 'check_model_consistency')
@@ -694,10 +694,10 @@ class OpenvStorageHealthCheck(object):
                 logger.info("Checking consistency of volumedriver vs. ovsdb for vPool '{0}': ".format(vp.name))
 
                 # list of vdisks that are in model but are not in volumedriver
-                missinginvolumedriver = []
+                missing_in_volumedriver = []
 
                 # list of volumes that are in volumedriver but are not in model
-                missinginmodel = []
+                missing_in_model = []
 
                 # fetch configfile of vpool for the volumedriver
                 config_file = ConfigurationManager.get_config_file_path(product=ConfigurationProduct.VPOOL,
@@ -714,31 +714,32 @@ class OpenvStorageHealthCheck(object):
                                    'discrepancies_ovsdb_{0}'.format(vp.name))
                     continue
 
-                vol_ids = [vdisk.volume_id for vdisk in vp.vdisks]
+                vdisk_volume_ids = [vdisk.volume_id for vdisk in vp.vdisks]
 
                 # crossreference model vs. volumedriver
-                for vdisk in vol_ids:
-                    if vdisk not in voldrv_volume_list:
-                        missinginvolumedriver.append(vdisk)
+                for vdisk in vp.vdisks:
+                    if vdisk.volume_id not in voldrv_volume_list:
+                        missing_in_volumedriver.append(vdisk.guid)
 
                 # crossreference volumedriver vs. model
                 for voldrv_id in voldrv_volume_list:
-                    if voldrv_id not in vol_ids:
-                        missinginmodel.append(voldrv_id)
+                    if voldrv_id not in vdisk_volume_ids:
+                        missing_in_model.append(voldrv_id)
 
                 # display discrepancies for vPool
-                if len(missinginvolumedriver) != 0:
-                    logger.warning("Detected volumes that are MISSING in volumedriver but ARE in ovsdb in vPool "
-                                   "'{0}': {1}".format(vp.name, ', '.join(missinginvolumedriver)),
-                                   'discrepancies_ovsdb_{0}'.format(vp.name))
+                if len(missing_in_volumedriver) != 0:
+                    logger.warning("Detected volumes that are MISSING in volumedriver but ARE in ovsdb in vPool (a known cause is a faulty preset) "
+                                   "vpool name: {0} - vdisk guid(s):{1} ".format(vp.name, ' '.join(missing_in_volumedriver)),
+                                    'discrepancies_ovsdb_{0}'.format(vp.name))
+
                 else:
                     logger.success("NO discrepancies found for ovsdb in vPool '{0}'".format(vp.name),
                                    'discrepancies_ovsdb_{0}'.format(vp.name))
 
-                if len(missinginmodel) != 0:
+                if len(missing_in_model) != 0:
                     logger.warning("Detected volumes that are AVAILABLE in volumedriver "
                                    "but ARE NOT in ovsdb in vPool "
-                                   "'{0}': {1}".format(vp.name, ', '.join(missinginmodel)),
+                                   "vpool name: {0} - vdisk volume id(s):{1}".format(vp.name, ' '.join(missing_in_model)),
                                    'discrepancies_voldrv_{0}'.format(vp.name))
                 else:
                     logger.success("NO discrepancies found for voldrv in vPool '{0}'".format(vp.name),
@@ -753,7 +754,7 @@ class OpenvStorageHealthCheck(object):
         Checks for halted volumes on a single or multiple vPools
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
 
         logger.info("Checking for halted volumes: ", 'checkHaltedVolumes')
