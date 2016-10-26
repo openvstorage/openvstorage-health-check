@@ -32,6 +32,7 @@ from ovs.extensions.plugins.albacli import AlbaCLI
 from ovs.dal.lists.albanodelist import AlbaNodeList
 from ovs.dal.hybrids.servicetype import ServiceType
 from ovs.dal.lists.albabackendlist import AlbaBackendList
+from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.dal.lists.storagedriverlist import StorageDriverList
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.healthcheck.utils.configuration import ConfigurationManager, ConfigurationProduct
@@ -39,8 +40,7 @@ from ovs.extensions.healthcheck.utils.exceptions import ObjectNotFoundException,
     DiskNotFoundException, ConfigNotMatchedException
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 
-# Test expose
-from ovs.extensions.healthcheck.decorators import ExposeToCli
+
 
 
 class AlbaHealthCheck(object):

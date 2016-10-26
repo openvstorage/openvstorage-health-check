@@ -32,13 +32,11 @@ from ovs.lib.storagerouter import StorageRouterController
 from ovs.extensions.healthcheck.utils.helper import Helper
 from timeout_decorator.timeout_decorator import TimeoutError
 import volumedriver.storagerouter.storagerouterclient as src
+from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.dal.lists.storagedriverlist import StorageDriverList
 from ovs.extensions.healthcheck.utils.configuration import ConfigurationManager, ConfigurationProduct
 from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, ObjectNotFoundException, \
     MaxRedirectsExceededException
-
-# Test exposetocli
-from ovs.extensions.healthcheck.decorators import ExposeToCli
 
 
 class OpenvStorageHealthCheck(object):

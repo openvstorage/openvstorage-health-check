@@ -30,13 +30,12 @@ from StringIO import StringIO
 from datetime import date, timedelta, datetime
 from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.utils.helper import Helper
+from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.dal.lists.storagerouterlist import StorageRouterList
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.storage.persistent.pyrakoonstore import PyrakoonStore
 from ovs.extensions.db.arakoon.ArakoonInstaller import ArakoonClusterConfig
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
-# Test exposetocli
-from ovs.extensions.healthcheck.decorators import ExposeToCli
 
 
 class ArakoonHealthCheck(object):
