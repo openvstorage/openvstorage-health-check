@@ -21,6 +21,8 @@ Helper module
 """
 
 import json
+import socket
+
 from ovs.extensions.generic.system import System
 from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.services.service import ServiceManager
@@ -96,3 +98,29 @@ class Helper(object):
         local_machine = System.get_my_storagerouter()
         client = SSHClient(local_machine.ip, username='root')
         return ServiceManager.get_service_status(str(service_name), client)
+
+    @staticmethod
+    def check_port_connection(port_number, ip):
+        """
+        Checks the port connection on a IP address
+
+        :param port_number: Port number of a service that is running on the local machine. (Public or loopback)
+        :type port_number: int
+        :param ip: ip address to try
+        :type ip: str
+        :return: True if the port is available; False if the port is NOT available
+        :rtype: bool
+        """
+
+        # check if port is open
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        result = sock.connect_ex((ip, int(port_number)))
+        if result == 0:
+            return True
+        else:
+            # double check because some services run on localhost
+            result = sock.connect_ex(('127.0.0.1', int(port_number)))
+            if result == 0:
+                return True
+            else:
+                return False
