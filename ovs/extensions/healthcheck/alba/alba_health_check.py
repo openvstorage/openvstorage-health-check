@@ -32,12 +32,15 @@ from ovs.extensions.plugins.albacli import AlbaCLI
 from ovs.dal.lists.albanodelist import AlbaNodeList
 from ovs.dal.hybrids.servicetype import ServiceType
 from ovs.dal.lists.albabackendlist import AlbaBackendList
+from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.dal.lists.storagedriverlist import StorageDriverList
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.healthcheck.utils.configuration import ConfigurationManager, ConfigurationProduct
 from ovs.extensions.healthcheck.utils.exceptions import ObjectNotFoundException, ConnectionFailedException, \
     DiskNotFoundException, ConfigNotMatchedException
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
+
+
 
 
 class AlbaHealthCheck(object):
@@ -118,7 +121,8 @@ class AlbaHealthCheck(object):
         return result
     
     @staticmethod
-    def _check_if_proxies_work(logger):
+    @ExposeToCli('alba', 'proxy-test')
+    def check_if_proxies_work(logger):
         """
         Checks if all Alba Proxies work on a local machine, it creates a namespace and tries to put and object
 
@@ -136,133 +140,111 @@ class AlbaHealthCheck(object):
             if sr.storagerouter_guid == AlbaHealthCheck.MACHINE_DETAILS.guid:
                 if sr.type.name == ServiceType.SERVICE_TYPES.ALBA_PROXY:
                     logger.info("Checking ALBA proxy '{0}': ".format(sr.name), 'check_alba')
-                    ip = StorageDriverList.get_by_storagedriver_id("{0}{1}"
-                                                                   .format(sr.name.split('_')[1],
-                                                                           AlbaHealthCheck.MACHINE_ID)).storage_ip
+                    ip = StorageDriverList.get_by_storagedriver_id("{0}{1}".format(sr.name.split('_')[1], AlbaHealthCheck.MACHINE_ID)).storage_ip
+
+                    # Encapsulating try to determine test output
                     try:
-                        # determine what to what backend the proxy is connected
+                        # Determine what to what backend the proxy is connected
                         proxy_client_cfg = AlbaCLI.run('proxy-client-cfg', host=ip, port=sr.ports[0])
 
-                        # check if proxy config is correctly setup
+                        # Check if proxy config is correctly setup
                         client_config = re.match('^client_cfg:\n{ cluster_id = "(?P<cluster_id>[0-9a-zA-Z_-]+)";.*',
                                                  proxy_client_cfg)
 
                         if client_config is None:
-                            raise ConfigNotMatchedException('Proxy config does not have '
-                                                            'the correct format on node {0} with port {1}.'
-                                                            .format(ip, sr.ports[0]))
+                            raise ConfigNotMatchedException('Proxy config does not have ''the correct format on node {0}'
+                                                            ' with port {1}.'.format(ip, sr.ports[0]))
 
-                        # go further
+                        # Fetch arakoon information
                         abm_name = client_config.groupdict()['cluster_id']
                         abm_config = ConfigurationManager.get_config_file_path(arakoon_name=abm_name,
                                                                                product=ConfigurationProduct.ARAKOON)
 
-                        # determine presets / backend
+                        # Determine presets / backend
                         presets = AlbaCLI.run('list-presets', config=abm_config, to_json=True)
 
                         for preset in presets:
-                            # based on preset, always put in same namespace
-                            namespace_key = 'ovs-healthcheck-ns-{0}'.format(preset.get('name'))
-                            object_key = 'ovs-healthcheck-obj-{0}'.format(str(uuid.uuid4()))
-
-                            # try get namespace
-                            # try to convert it to json, because of OVS-4135
+                            # If preset is not in use, test will fail so add a skip
+                            if preset['in_use'] is False:
+                                logger.skip("Preset '{0}' is not in use and will not be checked".format(preset['name']),
+                                            "proxy_{0}".format(sr.name))
+                                continue
+                            # Encapsulation try for cleanup
                             try:
-                                AlbaCLI.run('show-namespace', config=abm_config, to_json=True,
-                                            extra_params=[namespace_key])
-                            except RuntimeError:
-                                # try put namespace
+                                # Generate new namespace name using the preset
+                                namespace_key = 'ovs-healthcheck-ns-{0}'.format(preset.get('name'))
+                                object_key = 'ovs-healthcheck-obj-{0}'.format(str(uuid.uuid4()))
+
+                                # Create namespace
                                 AlbaCLI.run('proxy-create-namespace', host=ip, port=sr.ports[0],
                                             extra_params=[namespace_key, preset['name']])
+                                # Fetch namespace
+                                AlbaCLI.run('show-namespace', config=abm_config, to_json=True, extra_params=[namespace_key])
+                                logger.success("Namespace successfully created on proxy '{0}' with preset '{1}'!".format(sr.name,preset.get('name')),
+                                               '{0}_preset_{1}_create_namespace'.format(sr.name, preset.get('name')))
 
-                            try:
-                                AlbaCLI.run('show-namespace', config=abm_config, to_json=True,
-                                            extra_params=[namespace_key])
-
-                                # get & put is successfully executed
-                                logger.success("Namespace successfully created or already existed "
-                                               "on proxy '{0}' with preset '{1}'!".format(sr.name,
-                                                                                          preset.get('name')),
-                                               '{0}_preset_{1}_create_namespace'
-                                               .format(sr.name, preset.get('name')))
-
-                                # put test object to given dir
+                                # Put test object to given dir
                                 with open(AlbaHealthCheck.TEMP_FILE_LOC, 'wb') as fout:
                                     fout.write(os.urandom(AlbaHealthCheck.TEMP_FILE_SIZE))
 
                                 # try to put object
                                 AlbaCLI.run('proxy-upload-object', host=ip, port=sr.ports[0],
                                             extra_params=[namespace_key, AlbaHealthCheck.TEMP_FILE_LOC, object_key])
-
                                 # download object
                                 AlbaCLI.run('download-object', config=abm_config,
-                                            extra_params=[namespace_key, object_key,
-                                                          AlbaHealthCheck.TEMP_FILE_FETCHED_LOC])
-
+                                            extra_params=[namespace_key, object_key,AlbaHealthCheck.TEMP_FILE_FETCHED_LOC])
                                 # check if files exists - issue #57
                                 if os.path.isfile(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC) \
                                         and os.path.isfile(AlbaHealthCheck.TEMP_FILE_LOC):
-                                    hash_original = hashlib.md5(open(AlbaHealthCheck.TEMP_FILE_LOC, 'rb')
-                                                                .read()).hexdigest()
-                                    hash_fetched = hashlib.md5(open(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC, 'rb')
-                                                               .read()).hexdigest()
+                                    hash_original = hashlib.md5(open(AlbaHealthCheck.TEMP_FILE_LOC, 'rb').read()).hexdigest()
+                                    hash_fetched = hashlib.md5(open(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC, 'rb').read()).hexdigest()
 
                                     if hash_original == hash_fetched:
                                         logger.success("Creation of a object in namespace '{0}' on proxy '{1}' "
-                                                       "with preset '{2}' succeeded!".format(namespace_key,
-                                                                                             sr.name,
-                                                                                             preset.get('name')),
-                                                       '{0}_preset_{1}_create_object'
-                                                       .format(sr.name, preset.get('name')))
+                                                       "with preset '{2}' succeeded!".format(namespace_key,sr.name,preset.get('name')),
+                                                       '{0}_preset_{1}_create_object'.format(sr.name, preset.get('name')))
                                     else:
                                         logger.failure("Creation of a object '{0}' in namespace '{1}' on proxy"
-                                                       " '{2}' with preset '{3}' failed!".format(object_key,
-                                                                                                 namespace_key,
-                                                                                                 sr.name,
-                                                                                                 preset.get('name')),
-                                                       '{0}_preset_{1}_create_object'
-                                                       .format(sr.name, preset.get('name')))
+                                                       " '{2}' with preset '{3}' failed!".format(object_key,namespace_key,sr.name,preset.get('name')),
+                                                       '{0}_preset_{1}_create_object'.format(sr.name, preset.get('name')))
                                 else:
                                     # creation of object failed
-                                    raise ObjectNotFoundException(ValueError)
-                            except RuntimeError:
+                                    raise ObjectNotFoundException(ValueError('Creation of object has failed'))
+
+                            except RuntimeError as e:
                                 # put was not successfully executed, so get return success = False
-                                logger.failure("Creating/fetching namespace "
-                                               "'{0}' with preset '{1}' on proxy '{2}' "
-                                               "failed! ".format(namespace_key, preset.get('name'), sr.name),
-                                               '{0}_preset_{1}_create_namespace'
-                                               .format(sr.name, preset.get('name')))
+                                logger.failure("Creating/fetching namespace ""'{0}' with preset '{1}' on proxy '{2}' "
+                                               "failed! With error {3}".format(namespace_key, preset.get('name'), sr.name, e),
+                                               '{0}_preset_{1}_create_namespace'.format(sr.name, preset.get('name')))
 
-                                # for unattended install
-                                logger.failure("Failed to put object because namespace failed to be "
-                                               "created/fetched on proxy '{1}'! ".format(namespace_key, sr.name),
-                                               '{0}_preset_{1}_create_object'
-                                               .format(sr.name, preset.get('name')))
-                            except ObjectNotFoundException:
+                            except ObjectNotFoundException as e:
                                 amount_of_presets_not_working.append(preset.get('name'))
-                                # for unattended install
                                 logger.failure("Failed to put object on namespace '{0}' failed on proxy '{1}' "
-                                               "with preset '{2}' ".format(namespace_key, sr.name, preset.get('name')),
+                                               "with preset '{2}' With error {3}".format(namespace_key, sr.name, preset.get('name'), e),
                                                '{0}_preset_{1}_create_object'.format(sr.name, preset.get('name')))
+                            finally:
+                                # Delete the created namespace and preset
+                                try:
+                                    # Remove object first
+                                    logger.info("Deleting created object '{0}' on '{1}'.".format(object_key, namespace_key))
+                                    AlbaCLI.run('proxy-delete-object', host=ip, port=sr.ports[0], extra_params=[namespace_key, object_key])
+                                    subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_LOC)], stdout=fnull, stderr=subprocess.STDOUT)
+                                    subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC)], stdout=fnull, stderr=subprocess.STDOUT)
+                                    # @todo uncomment when the issue has been that blocks uploads after namespaces are created
+                                    # # Remove namespace afterwards
+                                    # logger.info("Deleting namespace '{0}'.".format(namespace_key))
+                                    # AlbaCLI.run('proxy-delete-namespace', host=ip, port=sr.ports[0], extra_params=[namespace_key])
+                                except subprocess.CalledProcessError as e:
+                                    raise
 
-                            # clean-up procedure for created object(s) & temp. files
-                            AlbaCLI.run('proxy-delete-object', host=ip, port=sr.ports[0],
-                                        extra_params=[namespace_key, object_key])
-
-                            subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_LOC)],
-                                            stdout=fnull, stderr=subprocess.STDOUT)
-                            subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC)],
-                                            stdout=fnull, stderr=subprocess.STDOUT)
-                    except subprocess.CalledProcessError:
+                    except subprocess.CalledProcessError as e:
                         # this should stay for the deletion of the remaining files
                         amount_of_presets_not_working.append(sr.name)
-                        logger.failure("Proxy '{0}' has some problems ..."
-                                       .format(sr.name), 'proxy_{0}'.format(sr.name))
+                        logger.failure("Proxy '{0}' has some problems. Got '{1}' as error".format(sr.name, e), 'proxy_{0}'.format(sr.name))
 
-                    except ConfigNotMatchedException, e:
+                    except ConfigNotMatchedException as e:
                         amount_of_presets_not_working.append(sr.name)
-                        logger.failure("Proxy '{0}' has some problems: {1}"
-                                       .format(sr.name, e), 'proxy_{0}'.format(sr.name))
+                        logger.failure("Proxy '{0}' has some problems. Got '{1}' as error".format(sr.name, e),'proxy_{0}'.format(sr.name))
 
         # for unattended
         return amount_of_presets_not_working
@@ -347,6 +329,7 @@ class AlbaHealthCheck(object):
         return workingdisks, defectivedisks
 
     @staticmethod
+    @ExposeToCli('alba', 'backend-test')
     def check_alba(logger):
         """
         Checks Alba as a whole
@@ -363,7 +346,7 @@ class AlbaHealthCheck(object):
                                'alba_backends_found'.format(len(alba_backends)))
 
                 logger.info("Checking the ALBA proxies ...", 'check_alba_proxies')
-                AlbaHealthCheck._check_if_proxies_work(logger)
+                AlbaHealthCheck.check_if_proxies_work(logger)
 
                 logger.info("Checking the ALBA ASDs ...", 'check_alba_asds')
                 if System.get_my_storagerouter().node_type != 'EXTRA':
@@ -417,3 +400,8 @@ class AlbaHealthCheck(object):
         except (ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult) as e:
             logger.failure("Seems like a arakoon has some problems: {0}".format(e),
                            'arakoon_connected')
+
+    @staticmethod
+    @ExposeToCli('alba', 'test')
+    def run(logger):
+        AlbaHealthCheck.check_alba(logger)
