@@ -88,7 +88,7 @@ class HealthCheckController(object):
 
     @staticmethod
     @celery.task(name='ovs.healthcheck.check')
-    def execute_check(logger=None, unattended=False, silent_mode=False):
+    def execute_check(unattended=False, silent_mode=False, logger=None):
         """
         Executes all available checks
 
