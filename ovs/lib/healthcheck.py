@@ -97,6 +97,8 @@ class HealthCheckController(object):
         :param silent_mode: silent mode?
         :type silent_mode: bool
         :return: results of the healthcheck
+        :param logger: logging object or none
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler or bool
         :rtype: dict
         """
         if logger is None:
@@ -333,19 +335,16 @@ class HealthCheckController(object):
         :type method_name: str
         :return:
         """
-        def check_special_cases():
-            # Special cases
-            if module_name == 'help':
-                return HealthCheckController.print_methods()
-            elif module_name == 'unattended':
-                return HealthCheckController.check_unattended()
-            elif module_name == 'silent':
-                return HealthCheckController.check_silent()
-            elif not module_name and not method_name or module_name == 'attended':
-                return HealthCheckController.check_attended()
 
-        check_special_cases()
-
+        # Special cases
+        if module_name == 'help':
+            return HealthCheckController.print_methods()
+        elif module_name == 'unattended':
+            return HealthCheckController.check_unattended()
+        elif module_name == 'silent':
+            return HealthCheckController.check_silent()
+        elif not module_name and not method_name or module_name == 'attended':
+            return HealthCheckController.check_attended()
         # Determine method to execute
         if not method_name or not module_name:
             print "Both the module name and the method name must be specified.".format(method_name, module_name)
