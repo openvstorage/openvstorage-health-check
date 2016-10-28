@@ -35,6 +35,7 @@ class BackendHelper(object):
     def get_backend_by_name(backend_name):
         """
         Fetch backend object by name
+
         :param backend_name: name of a backend
         :type backend_name: str
         :return: Backend object
@@ -47,6 +48,7 @@ class BackendHelper(object):
     def get_backend_status_by_name(backend_name):
         """
         Fetch the backendstatus of a named backend
+
         :param backend_name: name of a backend
         :type backend_name: str
         :return: backend status
@@ -104,6 +106,7 @@ class BackendHelper(object):
     def get_asd_safety(albabackend_guid, asd_id, api):
         """
         Request the calculation of the disk safety
+
         :param albabackend_guid: guid of the alba backend
         :type albabackend_guid: str
         :param asd_id: id of the asd
@@ -120,6 +123,7 @@ class BackendHelper(object):
     def _map_alba_nodes(api):
         """
         Will map the alba_node_id with its guid counterpart and return the map dict
+
         :param api: specify a valid api connection to the setup
         :type api: ci.helpers.api.OVSClient
         """

@@ -38,6 +38,7 @@ class StoragerouterHelper(object):
     def get_storagerouter_by_ip(storagerouter_ip):
         """
         Fetch storagerouter object by ip
+
         :param storagerouter_ip: ip of a storagerouter
         :type storagerouter_ip: str
         :return: storagerouter object
@@ -49,6 +50,7 @@ class StoragerouterHelper(object):
     def get_disks_by_ip(storagerouter_ip):
         """
         Fetch disks hosted on specified ip
+
         :param storagerouter_ip:
         :type storagerouter_ip: str
         :return: disks found for the storagerouter ip
@@ -132,6 +134,7 @@ class StoragerouterHelper(object):
     def get_by_machine_id(machine_id):
         """
         Fetch a dal machine by id
+
         :param machine_id: id of the machine
         :return:
         """

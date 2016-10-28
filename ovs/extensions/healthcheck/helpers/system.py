@@ -31,7 +31,7 @@ class SystemHelper(object):
     @staticmethod
     def get_non_running_ovs_services(storagerouter_ip):
         """
-        get all non-running ovs services
+        Get all non-running ovs services
 
         :param storagerouter_ip: ip address of a existing storagerouter
         :type storagerouter_ip: str
@@ -52,7 +52,7 @@ class SystemHelper(object):
     @staticmethod
     def get_missing_packages(ip, required_packages):
         """
-        get all missing packages based on required packages
+        Get all missing packages based on required packages
 
         :param ip: ip address of a server
         :type ip: str
