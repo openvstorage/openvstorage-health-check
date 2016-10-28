@@ -21,6 +21,9 @@ from ovs.extensions.healthcheck.helpers.exceptions import UnsupportedInitManager
 
 
 class InitManagerSupported(object):
+    """
+    Container method for certain variables
+    """
 
     INIT = "init"
     SYSTEMD = "systemd"
