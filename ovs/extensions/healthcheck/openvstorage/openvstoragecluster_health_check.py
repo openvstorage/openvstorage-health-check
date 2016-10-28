@@ -25,16 +25,16 @@ import commands
 import subprocess
 import timeout_decorator
 from pwd import getpwuid
-from ovs.dal.lists.vpoollist import VPoolList
 from ovs.extensions.generic.system import System
-from ovs.dal.lists.servicelist import ServiceList
 from ovs.lib.storagerouter import StorageRouterController
 from ovs.extensions.healthcheck.utils.helper import Helper
 from timeout_decorator.timeout_decorator import TimeoutError
 import volumedriver.storagerouter.storagerouterclient as src
 from ovs.extensions.healthcheck.decorators import ExposeToCli
-from ovs.dal.lists.storagedriverlist import StorageDriverList
-from ovs.extensions.healthcheck.utils.configuration import ConfigurationManager, ConfigurationProduct
+from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
+from ovs.extensions.healthcheck.helpers.service import ServiceHelper
+from ovs.extensions.healthcheck.helpers.storagedriver import StoragedriverHelper
+from ovs.extensions.healthcheck.helpers.configuration import ConfigurationManager, ConfigurationProduct
 from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, ObjectNotFoundException, \
     MaxRedirectsExceededException
 
@@ -200,13 +200,12 @@ class OpenvStorageHealthCheck(object):
 
         # check ports for OVS services
         logger.info("Checking OVS ports", '')
-        for sr in ServiceList.get_services():
+        for sr in ServiceHelper.get_services():
             if sr.storagerouter_guid == OpenvStorageHealthCheck.MACHINE_DETAILS.guid:
                 for port in sr.ports:
                     if sr.name.split('_')[0] == 'albaproxy':
-                        ip = StorageDriverList.get_by_storagedriver_id("{0}{1}".format(sr.name.split('_')[1],
-                                                                                       OpenvStorageHealthCheck.
-                                                                                       MACHINE_ID)).storage_ip
+                        storagedriver_id = "{0}{1}".format(sr.name.split('_')[1], OpenvStorageHealthCheck.MACHINE_ID)
+                        ip = StoragedriverHelper.get_by_storagedriver_id(storagedriver_id).storage_ip
                         OpenvStorageHealthCheck._is_port_listening(logger, sr.name, port, ip)
                     else:
                         OpenvStorageHealthCheck._is_port_listening(logger, sr.name, port)
@@ -556,7 +555,7 @@ class OpenvStorageHealthCheck(object):
 
         logger.info("Checking filedrivers: ", 'filedriver')
 
-        vpools = VPoolList.get_vpools()
+        vpools = VPoolHelper.get_vpools()
 
         # perform tests
         if len(vpools) != 0:
@@ -600,7 +599,7 @@ class OpenvStorageHealthCheck(object):
 
         logger.info("Checking volumedrivers: ", 'check_volumedrivers')
 
-        vpools = VPoolList.get_vpools()
+        vpools = VPoolHelper.get_vpools()
 
         if len(vpools) != 0:
             for vp in vpools:
@@ -675,7 +674,7 @@ class OpenvStorageHealthCheck(object):
         # Checking consistency of volumedriver vs. ovsdb and backwards
         #
 
-        for vp in VPoolList.get_vpools():
+        for vp in VPoolHelper.get_vpools():
             if vp.guid in OpenvStorageHealthCheck.MACHINE_DETAILS.vpools_guids:
                 logger.info("Checking consistency of volumedriver vs. ovsdb for vPool '{0}': ".format(vp.name))
 
@@ -746,7 +745,7 @@ class OpenvStorageHealthCheck(object):
 
         logger.info("Checking for halted volumes: ", 'checkHaltedVolumes')
 
-        vpools = VPoolList.get_vpools()
+        vpools = VPoolHelper.get_vpools()
 
         if len(vpools) != 0:
 

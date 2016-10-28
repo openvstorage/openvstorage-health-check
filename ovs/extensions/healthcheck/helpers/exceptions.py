@@ -19,6 +19,75 @@ Exceptions module
 """
 
 
+class SectionNotFoundError(Exception):
+    """
+    Raised when an object was queries that doesn't exist
+    """
+    pass
+
+
+class DirectoryNotFoundError(Exception):
+    """
+    Raised when an object was queries that doesn't exist
+    """
+    pass
+
+
+class ArakoonClusterNotFoundError(Exception):
+    """
+    Raised when an object was queries that doesn't exist
+    """
+    pass
+
+
+class UnsupportedInitManager(Exception):
+    """
+    Raised when an object was queries that doesn't exist
+    """
+    pass
+
+
+class PresetNotFoundError(Exception):
+    """
+    Raised when an object was queries that doesn't exist
+    """
+    pass
+
+
+class AlbaBackendNotFoundError(Exception):
+    """
+    Raised when an object was queries that doesn't exist
+    """
+    pass
+
+
+class VPoolNotFoundError(Exception):
+    """
+    Raised when an object was queries that doesn't exist
+    """
+    pass
+
+
+class VDiskNotFoundError(Exception):
+    """
+    Raised when an object was queries that doesn't exist
+    """
+    pass
+
+
+class VPoolNotFoundError(Exception):
+    """
+    Raised when an object was queries that doesn't exist
+    """
+    pass
+
+
+class ImageConvertError(Exception):
+    """
+    Raised when an object was queries that doesn't exist
+    """
+    pass
+
 class ObjectNotFoundException(Exception):
     """
     Raised when an object was queries that doesn't exist

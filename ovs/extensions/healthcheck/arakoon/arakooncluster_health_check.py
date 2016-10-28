@@ -23,7 +23,6 @@ Arakoon Health Check module
 import os
 import time
 import uuid
-import socket
 import subprocess
 import ConfigParser
 from StringIO import StringIO
@@ -31,10 +30,10 @@ from datetime import date, timedelta, datetime
 from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.utils.helper import Helper
 from ovs.extensions.healthcheck.decorators import ExposeToCli
-from ovs.dal.lists.storagerouterlist import StorageRouterList
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.storage.persistent.pyrakoonstore import PyrakoonStore
 from ovs.extensions.db.arakoon.ArakoonInstaller import ArakoonClusterConfig
+from ovs.extensions.healthcheck.helpers.storagerouter import StoragerouterHelper
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 
 
@@ -110,7 +109,7 @@ class ArakoonHealthCheck(object):
                 continue
 
             for node_id in master_node_ids:
-                node_info = StorageRouterList.get_by_machine_id(node_id)
+                node_info = StoragerouterHelper.get_by_machine_id(node_id)
 
                 # add node information
                 nodes_per_cluster_result.update({node_id: {

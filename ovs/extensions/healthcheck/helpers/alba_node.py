@@ -1,5 +1,3 @@
-#!/usr/bin/python
-
 # Copyright (C) 2016 iNuron NV
 #
 # This file is part of Open vStorage Open Source Edition (OSE),
@@ -15,7 +13,23 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
+from ovs.dal.lists.albanodelist import AlbaNodeList
 
-"""
-This package contains all check python logic
-"""
+
+class AlbaNodeHelper(object):
+    """
+    A Alba node helper class
+    """
+
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def get_albanode_by_node_id(alba_node_id):
+        """
+        Fetches the alba node object with the specified id
+
+        :param alba_node_id: id of the alba node
+        :return:
+        """
+        return AlbaNodeList.get_albanode_by_node_id(alba_node_id)
