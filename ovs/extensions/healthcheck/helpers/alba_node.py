@@ -17,6 +17,9 @@ from ovs.dal.lists.albanodelist import AlbaNodeList
 
 
 class AlbaNodeHelper(object):
+    """
+    A Alba node helper class
+    """
 
     def __init__(self):
         pass

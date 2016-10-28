@@ -17,6 +17,9 @@ from ovs.dal.lists.servicelist import ServiceList
 
 
 class ServiceHelper(object):
+    """
+    A Servicehelper class
+    """
 
     def __init__(self):
         pass
