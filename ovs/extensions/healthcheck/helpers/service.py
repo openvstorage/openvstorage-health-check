@@ -1,5 +1,3 @@
-#!/usr/bin/python
-
 # Copyright (C) 2016 iNuron NV
 #
 # This file is part of Open vStorage Open Source Edition (OSE),
@@ -15,7 +13,14 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
+from ovs.dal.lists.servicelist import ServiceList
 
-"""
-This package contains all check python logic
-"""
+
+class ServiceHelper(object):
+
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def get_services():
+        return ServiceList.get_services()
