@@ -32,7 +32,7 @@ class DiskHelper(object):
         """
         Fetch disk partitions by disk guid
 
-        :param diskguid: ip address of a storagerouter
+        :param diskguid: guid of disk object
         :type diskguid: str
         :return: list of DiskPartition Objects
         :rtype: list (ovs.dal.hybrids.diskpartition.diskpartition)
