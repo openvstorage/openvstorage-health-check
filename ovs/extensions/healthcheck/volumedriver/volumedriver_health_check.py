@@ -17,6 +17,10 @@ from ovs.extensions.healthcheck.decorators import ExposeToCli
 
 
 class VolumedriverHealthCheck(object):
+    """
+    A healthcheck for the volumedriver components
+    """
+
     @staticmethod
     @ExposeToCli('alba', 'check_dtl')
     def check_dtl(logger):
