@@ -106,6 +106,7 @@ class HealthCheckController(object):
 
         if HealthCheckController.PLATFORM == 0:
             HealthCheckController.check_openvstorage(logger)
+            HealthCheckController.check_volumedriver(logger)
             HealthCheckController.check_arakoon(logger)
             HealthCheckController.check_alba(logger)
         else:
@@ -159,6 +160,22 @@ class HealthCheckController(object):
 
         logger.info("Starting Alba Health Check!", 'starting_alba_hc')
         logger.info("===========================", 'starting_alba_hc_ul')
+
+        AlbaHealthCheck.run(logger)
+
+    @staticmethod
+    @celery.task(name='ovs.healthcheck.check_volumedriver')
+    def check_volumedriver(logger):
+        """
+        Checks all critical components of Alba
+
+        :param logger: logging object
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
+        :returns
+        """
+
+        logger.info("Starting Volumedriver Health Check!", 'starting_alba_hc')
+        logger.info("===================================", 'starting_alba_hc_ul')
 
         AlbaHealthCheck.run(logger)
 
