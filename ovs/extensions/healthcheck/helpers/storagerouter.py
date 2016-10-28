@@ -35,20 +35,9 @@ class StoragerouterHelper(object):
         pass
 
     @staticmethod
-    def get_storagerouter_guid_by_ip(storagerouter_ip):
-        """
-
-        :param storagerouter_ip: ip of a storagerouter
-        :type storagerouter_ip: str
-        :return: storagerouter guid
-        :rtype: str
-        """
-        return StoragerouterHelper.get_storagerouter_by_ip(storagerouter_ip).guid
-
-    @staticmethod
     def get_storagerouter_by_ip(storagerouter_ip):
         """
-
+        Fetch storagerouter object by ip
         :param storagerouter_ip: ip of a storagerouter
         :type storagerouter_ip: str
         :return: storagerouter object
@@ -59,7 +48,7 @@ class StoragerouterHelper(object):
     @staticmethod
     def get_disks_by_ip(storagerouter_ip):
         """
-
+        Fetch disks hosted on specified ip
         :param storagerouter_ip:
         :type storagerouter_ip: str
         :return: disks found for the storagerouter ip

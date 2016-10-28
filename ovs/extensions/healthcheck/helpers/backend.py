@@ -32,33 +32,9 @@ class BackendHelper(object):
         pass
 
     @staticmethod
-    def get_alba_backend_guid_by_name(backend_name):
-        """
-
-        :param backend_name: name of a backend
-        :type backend_name: str
-        :return: alba_backend_guid
-        :rtype: str
-        """
-
-        return BackendList.get_by_name(backend_name).alba_backend_guid
-
-    @staticmethod
-    def get_backend_guid_by_name(backend_name):
-        """
-
-        :param backend_name: name of a backend
-        :type backend_name: str
-        :return: backend_guid
-        :rtype: str
-        """
-
-        return BackendList.get_by_name(backend_name).guid
-
-    @staticmethod
     def get_backend_by_name(backend_name):
         """
-
+        Fetch backend object by name
         :param backend_name: name of a backend
         :type backend_name: str
         :return: Backend object
@@ -70,7 +46,7 @@ class BackendHelper(object):
     @staticmethod
     def get_backend_status_by_name(backend_name):
         """
-
+        Fetch the backendstatus of a named backend
         :param backend_name: name of a backend
         :type backend_name: str
         :return: backend status
