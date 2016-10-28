@@ -52,6 +52,7 @@ class Helper(object):
     def get_ovs_type():
         """
         Gets the TYPE of the Open vStorage local node
+
         :return: TYPE of openvstorage local node
             * MASTER
             * EXTRA
@@ -64,6 +65,7 @@ class Helper(object):
     def get_ovs_version():
         """
         Gets the RELEASE & BRANCH of the Open vStorage cluster
+
         :return: RELEASE & BRANCH of openvstorage cluster
         :rtype: tuple
         """
@@ -80,6 +82,7 @@ class Helper(object):
     def get_cluster_id():
         """
         Gets the cluster ID of the Open vStorage cluster
+
         :return: cluster id of openvstorage cluster
         :rtype: str
         """

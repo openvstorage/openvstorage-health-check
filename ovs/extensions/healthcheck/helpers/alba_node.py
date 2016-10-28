@@ -25,6 +25,7 @@ class AlbaNodeHelper(object):
     def get_albanode_by_node_id(alba_node_id):
         """
         Fetches the alba node object with the specified id
+
         :param alba_node_id: id of the alba node
         :return:
         """

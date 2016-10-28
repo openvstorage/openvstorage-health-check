@@ -25,6 +25,7 @@ class ServiceHelper(object):
     def get_services():
         """
         Fetch all services
+
         :return:
         """
         return ServiceList.get_services()
