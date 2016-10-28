@@ -26,6 +26,7 @@ class VolumedriverHealthCheck(object):
     def check_dtl(logger):
         """
         Checks the dtl for all vdisks
+
         :param logger: logging object
         :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
@@ -35,6 +36,7 @@ class VolumedriverHealthCheck(object):
     def run(logger):
         """
         Testing suite for volumedriver
+
         :param logger: logging object
         :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
