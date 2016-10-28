@@ -103,62 +103,6 @@ class BackendHelper(object):
             raise NameError(error_msg)
 
     @staticmethod
-    def get_asd_safety(albabackend_guid, asd_id, api):
-        """
-        Request the calculation of the disk safety
-
-        :param albabackend_guid: guid of the alba backend
-        :type albabackend_guid: str
-        :param asd_id: id of the asd
-        :type asd_id: str
-        :param api: specify a valid api connection to the setup
-        :type api: ci.helpers.api.OVSClient
-        :return: task id of celery
-        :rtype: str
-        """
-        params = {'asd_id': asd_id}
-        return api.get('alba/backends/{0}/calculate_safety'.format(albabackend_guid), params=params)
-
-    @staticmethod
-    def _map_alba_nodes(api):
-        """
-        Will map the alba_node_id with its guid counterpart and return the map dict
-
-        :param api: specify a valid api connection to the setup
-        :type api: ci.helpers.api.OVSClient
-        """
-        mapping = {}
-
-        options = {
-            'contents': 'node_id,_relations',
-        }
-        response = api.get(
-            api='alba/nodes',
-            params=options
-        )
-        for node in response['data']:
-            mapping[node['node_id']] = node['guid']
-
-        return mapping
-
-    @staticmethod
-    def get_backend_local_stack(albabackend_name, api):
-        """
-        Fetches the local stack property of a backend
-
-        :param albabackend_name: backend name
-        :type albabackend_name: str
-        :param api: specify a valid api connection to the setup
-        :type api: ci.helpers.api.OVSClient
-        """
-        options = {
-            'contents': 'local_stack',
-        }
-        return api.get(api='/alba/backends/{0}/'.format(BackendHelper.get_alba_backend_guid_by_name(albabackend_name)),
-                       params={'queryparams': options}
-                       )
-
-    @staticmethod
     def get_albabackends():
         """
         Fetches all the alba backends on the cluster
