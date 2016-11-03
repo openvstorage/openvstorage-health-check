@@ -31,9 +31,9 @@ You may delete this section
 
 ## Additional information
 ### Setup
-- [] Hyperconverged
-- [] Hyperscale
-- [] Geoscale
+- [ ] Hyperconverged
+- [ ] Hyperscale
+- [ ] Geoscale
 
 ### Packages
 // List packages here using dpkg -l
