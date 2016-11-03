@@ -5,6 +5,7 @@ Steps to a good issue format:
 - Fill in as much information as you can
 - Remove the arrows and sections that you cant fill in
 - Add the version on which you are facing the issues on
+
 <---------------------------------------------------------->
 
 ## Problem description
@@ -23,6 +24,7 @@ Steps to a good issue format:
 Fill this in whether you know a persistent fix for the possible
 You may also delete this section
 <---------------------------------------------------------->
+
 <---------------------------------------------------------->
 ## Temporary solution
 Was there a workaround to solve the issue?
@@ -36,6 +38,6 @@ You may delete this section
 - [ ] Geoscale
 
 ### Packages
-// List packages here using dpkg -l
+// List packages in the code tags using dpkg -l | grep openvstorage
 ```
 ```
