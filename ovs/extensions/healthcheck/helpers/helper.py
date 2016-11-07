@@ -129,6 +129,17 @@ class Helper(object):
             else:
                 return False
 
+    @staticmethod
+    def check_os():
+        """
+        Fetches the OS description
+
+        :return: OS description
+        :rtype: str
+        """
+
+        return subprocess.check_output("cat /etc/lsb-release | grep DISTRIB_DESCRIPTION | "
+                                       "cut -d '=' -f 2 | sed 's/\"//g'", shell=True).strip()
 
 class InitManagerSupported(object):
 
