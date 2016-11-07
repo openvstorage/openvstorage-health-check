@@ -64,3 +64,13 @@ class VDiskHelper(object):
         """
 
         return VDisk(vdisk_guid)
+
+    @staticmethod
+    def get_vdisks():
+        """
+        Fetch all vdisks
+
+        :return: List of vdisks
+        :rtype: ovs.dal.lists.vdisklist
+        """
+        return VDiskList.get_vdisks()

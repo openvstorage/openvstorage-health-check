@@ -30,6 +30,7 @@ from ovs.log.healthcheck_logHandler import HCLogHandler
 from ovs.extensions.healthcheck.alba.alba_health_check import AlbaHealthCheck
 from ovs.extensions.healthcheck.utils.exceptions import PlatformNotSupportedException
 from ovs.extensions.healthcheck.arakoon.arakooncluster_health_check import ArakoonHealthCheck
+from ovs.extensions.healthcheck.volumedriver.volumedriver_health_check import VolumedriverHealthCheck
 from ovs.extensions.healthcheck.openvstorage.openvstoragecluster_health_check import OpenvStorageHealthCheck
 
 
@@ -174,10 +175,10 @@ class HealthCheckController(object):
         :returns
         """
 
-        logger.info("Starting Volumedriver Health Check!", 'starting_alba_hc')
-        logger.info("===================================", 'starting_alba_hc_ul')
+        logger.info("Starting Volumedriver Health Check!", 'starting_volumedriver_hc')
+        logger.info("===================================", 'starting_volumedriver_hc_ul')
 
-        AlbaHealthCheck.run(logger)
+        VolumedriverHealthCheck.run(logger)
 
     @staticmethod
     @celery.task(name='ovs.healthcheck.get_results')

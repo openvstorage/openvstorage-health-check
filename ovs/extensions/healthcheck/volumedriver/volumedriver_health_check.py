@@ -19,7 +19,9 @@ import timeout_decorator
 from ovs.extensions.generic.system import System
 from timeout_decorator.timeout_decorator import TimeoutError
 from ovs.extensions.healthcheck.decorators import ExposeToCli
+from ovs.extensions.healthcheck.helpers.vdisk import VDiskHelper
 from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
+
 
 class VolumedriverHealthCheck(object):
     """
@@ -28,9 +30,10 @@ class VolumedriverHealthCheck(object):
 
     MODULE = "volumedriver"
     MACHINE_DETAILS = System.get_my_storagerouter()
+    MACHINE_ID = System.get_my_machine_id()
 
     @staticmethod
-    @ExposeToCli('alba', 'check_dtl')
+    @ExposeToCli('volumedriver', 'check_dtl')
     def check_dtl(logger):
         """
         Checks the dtl for all vdisks
@@ -38,9 +41,23 @@ class VolumedriverHealthCheck(object):
         :param logger: logging object
         :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
-        # Fetch vdisks hosted on this machine
+        test_name = "check_dtl"
 
-        pass
+        # Fetch vdisks hosted on this machine
+        for vdisk_guid in VolumedriverHealthCheck.MACHINE_DETAILS.vdisks_guids:
+            vdisk = VDiskHelper.get_vdisk_by_guid(vdisk_guid)
+            # Check dtl
+            dtl_status = vdisk.dtl_status
+            if dtl_status == "ok_standalone":
+                logger.warning("Vdisk {0}'s DTL is disabled because of a single node cluster".format(vdisk.name), test_name)
+            elif dtl_status == "ok_sync":
+                logger.success("Vdisk {0}'s DTL is enabled and running.".format(vdisk.name), test_name)
+            elif dtl_status == "degraded":
+                logger.failure("Vdisk {0}'s DTL is degraded.".format(vdisk.name), test_name)
+            elif dtl_status == "catchup" or dtl_status =="catch_up":
+                logger.warning("Vdisk {0}'s DTL is enabled but still syncing.".format(vdisk.name), test_name)
+            else:
+                logger.warning("Vdisk {0}'s DTL has an unknown status: {1}.".format(vdisk.name, dtl_status), test_name)
 
     @staticmethod
     @timeout_decorator.timeout(5)
@@ -130,5 +147,5 @@ class VolumedriverHealthCheck(object):
         :param logger: logging object
         :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
-
+        VolumedriverHealthCheck.check_volumedrivers(logger)
         VolumedriverHealthCheck.check_dtl(logger)
