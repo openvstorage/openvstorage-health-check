@@ -22,7 +22,7 @@ Helper module
 
 import json
 import socket
-
+import subprocess
 from ovs.extensions.generic.system import System
 from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.services.service import ServiceManager
@@ -35,6 +35,7 @@ class Helper(object):
     """
     MODULE = "utils"
     SETTINGS_LOC = "/opt/OpenvStorage/config/healthcheck/settings.json"
+    RAW_INIT_MANAGER = str(subprocess.check_output('cat /proc/1/comm', shell=True)).strip()
 
     with open(SETTINGS_LOC) as settings_file:
         settings = json.load(settings_file)
@@ -127,3 +128,10 @@ class Helper(object):
                 return True
             else:
                 return False
+
+
+class InitManagerSupported(object):
+
+    INIT = "init"
+    SYSTEMD = "systemd"
+

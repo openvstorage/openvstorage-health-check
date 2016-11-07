@@ -27,7 +27,7 @@ import timeout_decorator
 from pwd import getpwuid
 from ovs.extensions.generic.system import System
 from ovs.lib.storagerouter import StorageRouterController
-from ovs.extensions.healthcheck.utils.helper import Helper
+from ovs.extensions.healthcheck.helpers.helper import Helper
 from timeout_decorator.timeout_decorator import TimeoutError
 import volumedriver.storagerouter.storagerouterclient as src
 from ovs.extensions.healthcheck.decorators import ExposeToCli

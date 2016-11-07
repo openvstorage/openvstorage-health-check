@@ -22,13 +22,11 @@ import ast
 import imp
 import os
 import inspect
-
-from datetime import datetime, timedelta
-
 from ovs.celery_run import celery
+from datetime import datetime, timedelta
 from ovs.log.healthcheck_logHandler import HCLogHandler
 from ovs.extensions.healthcheck.alba.alba_health_check import AlbaHealthCheck
-from ovs.extensions.healthcheck.utils.exceptions import PlatformNotSupportedException
+from ovs.extensions.healthcheck.helpers.exceptions import PlatformNotSupportedException
 from ovs.extensions.healthcheck.arakoon.arakooncluster_health_check import ArakoonHealthCheck
 from ovs.extensions.healthcheck.openvstorage.openvstoragecluster_health_check import OpenvStorageHealthCheck
 
