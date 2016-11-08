@@ -27,7 +27,7 @@ import timeout_decorator
 from pwd import getpwuid
 from ovs.extensions.generic.system import System
 from ovs.lib.storagerouter import StorageRouterController
-from ovs.extensions.healthcheck.utils.helper import Helper
+from ovs.extensions.healthcheck.helpers.helper import Helper
 from timeout_decorator.timeout_decorator import TimeoutError
 import volumedriver.storagerouter.storagerouterclient as src
 from ovs.extensions.healthcheck.decorators import ExposeToCli
@@ -65,6 +65,7 @@ class OpenvStorageHealthCheck(object):
         logger.success("Storagerouter TYPE: {0}".format(OpenvStorageHealthCheck.MACHINE_DETAILS.node_type))
         logger.success("Environment RELEASE: {0}".format(ovs_version[0]))
         logger.success("Environment BRANCH: {0}".format(ovs_version[1].title()))
+        logger.success("Environment OS: {0}".format(Helper.check_os()))
 
     @staticmethod
     @ExposeToCli('ovs', 'log-files-test')

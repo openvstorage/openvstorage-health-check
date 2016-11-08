@@ -22,7 +22,7 @@ Helper module
 
 import json
 import socket
-
+import subprocess
 from ovs.extensions.generic.system import System
 from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.services.service import ServiceManager
@@ -35,6 +35,7 @@ class Helper(object):
     """
     MODULE = "utils"
     SETTINGS_LOC = "/opt/OpenvStorage/config/healthcheck/settings.json"
+    RAW_INIT_MANAGER = str(subprocess.check_output('cat /proc/1/comm', shell=True)).strip()
 
     with open(SETTINGS_LOC) as settings_file:
         settings = json.load(settings_file)
@@ -71,7 +72,7 @@ class Helper(object):
         """
 
         with open("/opt/OpenvStorage/webapps/frontend/locales/en-US/ovs.json") as ovs_json1:
-            ovs_releasename = json.load(ovs_json1)["releasename"]
+            ovs_releasename = json.load(ovs_json1)["support"]["release_name"]
 
         with open("/etc/apt/sources.list.d/ovsaptrepo.list") as ovs_json2:
             ovs_current_version = ovs_json2.read().split()[2]
@@ -127,3 +128,21 @@ class Helper(object):
                 return True
             else:
                 return False
+
+    @staticmethod
+    def check_os():
+        """
+        Fetches the OS description
+
+        :return: OS description
+        :rtype: str
+        """
+
+        return subprocess.check_output("cat /etc/lsb-release | grep DISTRIB_DESCRIPTION | "
+                                       "cut -d '=' -f 2 | sed 's/\"//g'", shell=True).strip()
+
+class InitManagerSupported(object):
+
+    INIT = "init"
+    SYSTEMD = "systemd"
+

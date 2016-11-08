@@ -28,12 +28,13 @@ import ConfigParser
 from StringIO import StringIO
 from datetime import date, timedelta, datetime
 from ovs.extensions.generic.system import System
-from ovs.extensions.healthcheck.utils.helper import Helper
+from ovs.extensions.healthcheck.helpers.helper import Helper
 from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.storage.persistent.pyrakoonstore import PyrakoonStore
 from ovs.extensions.db.arakoon.ArakoonInstaller import ArakoonClusterConfig
 from ovs.extensions.healthcheck.helpers.storagerouter import StoragerouterHelper
+from ovs.extensions.healthcheck.helpers.helper import Helper, InitManagerSupported
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 
 
@@ -133,6 +134,7 @@ class ArakoonHealthCheck(object):
         :param logger: logging object
         :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
+
         logger.info("Checking PORT CONNECTIONS of arakoon nodes ...", 'check_required_ports_arakoon')
 
         for arakoon_cluster in Configuration.list('/ovs/arakoon'):
@@ -171,10 +173,18 @@ class ArakoonHealthCheck(object):
         for cluster_name, cluster_info in arakoon_clusters.iteritems():
             if ArakoonHealthCheck.MACHINE_DETAILS.machine_id not in cluster_info:
                 continue
-            # @todo use log reader to fetch info
-            command = 'grep "NODE STARTED" {0} | awk -v d1="$(date --date="-{1} min" +"%F %R")" ' \
-                      '-v d2="$(date +"%F %R")" \'$0 > d1 && $0 < d2 || $0 ~ d2\''\
-                .format("/var/log/upstart/ovs-arakoon-{0}.log".format(cluster_name), last_minutes)
+
+            # check if systemd or upstart
+            if Helper.RAW_INIT_MANAGER == InitManagerSupported.INIT:
+                arakoon_log = "/var/log/upstart/ovs-arakoon-{0}.log".format(cluster_name)
+                command = 'grep "NODE STARTED" {0} | awk -v d1="$(date --date="-{1} min" +"%F %R")" ' \
+                          '-v d2="$(date +"%F %R")" \'$0 > d1 && $0 < d2 || $0 ~ d2\''\
+                          .format(arakoon_log, last_minutes)
+            elif Helper.RAW_INIT_MANAGER == InitManagerSupported.SYSTEMD:
+                arakoon_log = "journalctl -u ovs-arakoon-{0}.service".format(cluster_name)
+                command = '{0} | grep "NODE STARTED" | awk -v d1="$(date --date="-{1} min" +"%F %R")" ' \
+                          '-v d2="$(date +"%F %R")" \'$0 > d1 && $0 < d2 || $0 ~ d2\''\
+                          .format(arakoon_log, last_minutes)
 
             out, err = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE).communicate()
 
@@ -371,6 +381,13 @@ class ArakoonHealthCheck(object):
                                                                                 ', '.join(ver_result[2])),
                                'arakoon_down_exception'.format(len(ver_result[2])))
 
+                # check amount UNKNOWN_ERRORS arakoons
+                if len(ver_result[3]) > 0:
+                    logger.failure("{0} Arakoon(s) seem(s) to have UNKNOWN ERRORS, please check the logs"
+                                   .format(len(ver_result[3]),', '.join(ver_result[3])),
+                                   'arakoon_unknown_exception')
+                else:
+                    logger.failure("Some Arakoon(s) have problems, please check this!", 'arakoon_integrity')
             # check amount UNKNOWN_ERRORS arakoons
             if len(ver_result[3]) > 0:
                 logger.failure("{0} Arakoon(s) seem(s) to have UNKNOWN ERRORS, please check the logs @"
@@ -382,7 +399,7 @@ class ArakoonHealthCheck(object):
             else:
                 logger.failure("Some Arakoon(s) have problems, please check this!", 'arakoon_integrity')
 
-        return working_arakoon_list, no_master_arakoon_list, down_arakoon_list, unkown_arakoon_list
+            return working_arakoon_list, no_master_arakoon_list, down_arakoon_list, unkown_arakoon_list
 
     @staticmethod
     @ExposeToCli('arakoon', 'check-arakoons')

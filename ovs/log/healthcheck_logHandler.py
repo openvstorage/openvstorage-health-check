@@ -20,7 +20,7 @@
 LogHandler module for OVS health check
 """
 
-from ovs.extensions.healthcheck.utils.helper import Helper
+from ovs.extensions.healthcheck.helpers.helper import Helper
 from ovs.log.log_handler import LogHandler
 
 
