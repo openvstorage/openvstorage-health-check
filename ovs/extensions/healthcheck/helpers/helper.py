@@ -72,7 +72,7 @@ class Helper(object):
         """
 
         with open("/opt/OpenvStorage/webapps/frontend/locales/en-US/ovs.json") as ovs_json1:
-            ovs_releasename = json.load(ovs_json1)["support"]["release_name"]
+            ovs_releasename = json.load(ovs_json1)["releasename"]
 
         with open("/etc/apt/sources.list.d/ovsaptrepo.list") as ovs_json2:
             ovs_current_version = ovs_json2.read().split()[2]
