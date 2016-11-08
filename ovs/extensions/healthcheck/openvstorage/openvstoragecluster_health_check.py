@@ -25,16 +25,16 @@ import commands
 import subprocess
 import timeout_decorator
 from pwd import getpwuid
-from ovs.dal.lists.vpoollist import VPoolList
 from ovs.extensions.generic.system import System
-from ovs.dal.lists.servicelist import ServiceList
-from ovs.dal.hybrids.servicetype import ServiceType
 from ovs.lib.storagerouter import StorageRouterController
-from ovs.extensions.healthcheck.utils.helper import Helper
+from ovs.extensions.healthcheck.helpers.helper import Helper
 from timeout_decorator.timeout_decorator import TimeoutError
 import volumedriver.storagerouter.storagerouterclient as src
-from ovs.dal.lists.storagedriverlist import StorageDriverList
-from ovs.extensions.healthcheck.utils.configuration import ConfigurationManager, ConfigurationProduct
+from ovs.extensions.healthcheck.decorators import ExposeToCli
+from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
+from ovs.extensions.healthcheck.helpers.service import ServiceHelper
+from ovs.extensions.healthcheck.helpers.storagedriver import StoragedriverHelper
+from ovs.extensions.healthcheck.helpers.configuration import ConfigurationManager, ConfigurationProduct
 from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, ObjectNotFoundException, \
     MaxRedirectsExceededException
 
@@ -47,7 +47,8 @@ class OpenvStorageHealthCheck(object):
     MACHINE_DETAILS = System.get_my_storagerouter()
     MACHINE_ID = System.get_my_machine_id()
 
-    @staticmethod 
+    @staticmethod
+    @ExposeToCli('ovs', 'local-settings-test')
     def get_local_settings(logger):
         """
         Fetch settings of the local Open vStorage node
@@ -64,8 +65,10 @@ class OpenvStorageHealthCheck(object):
         logger.success("Storagerouter TYPE: {0}".format(OpenvStorageHealthCheck.MACHINE_DETAILS.node_type))
         logger.success("Environment RELEASE: {0}".format(ovs_version[0]))
         logger.success("Environment BRANCH: {0}".format(ovs_version[1].title()))
+        logger.success("Environment OS: {0}".format(Helper.check_os()))
 
-    @staticmethod 
+    @staticmethod
+    @ExposeToCli('ovs', 'log-files-test')
     def check_size_of_log_files(logger):
         """
         Checks the size of the initialized log files
@@ -76,7 +79,7 @@ class OpenvStorageHealthCheck(object):
 
         collection = []
         good_size = []
-        to_big = []
+        too_big = []
 
         logger.info("Checking if logfiles their size is not bigger than {0} MB: ".format(Helper.max_log_size),
                     'checkLogfilesSize')
@@ -125,16 +128,16 @@ class OpenvStorageHealthCheck(object):
                 good_size.append(c_files)
                 logger.success("Logfile '{0}' has a GOOD size!".format(c_files), 'log_{0}'.format(c_files))
             else:
-                to_big.append(c_files)
+                too_big.append(c_files)
                 logger.failure("Logfile '{0}' is a big ass logfile!".format(c_files), 'log_{0}'.format(c_files))
 
         # end for unattended_install
         if logger.print_progress:
-            if len(to_big) != 0:
-                logger.failure("Some logfiles are too big, please check this!".format(c_files),
+            if len(too_big) != 0:
+                logger.failure("Some logfiles are too big, please check these files {0}!".format(', '.join(too_big)),
                                'log_size')
             else:
-                logger.success("ALL log files are ok!".format(c_files), 'log_size')
+                logger.success("ALL log files are ok! Checked {0}".format(', '.join(good_size)), 'log_size')
 
     @staticmethod
     def _list_logs_in_directory(pwd):
@@ -162,33 +165,7 @@ class OpenvStorageHealthCheck(object):
 
         return next(os.walk(pwd))[1]
 
-    @staticmethod 
-    def _check_port_connection(port_number, ip=MACHINE_DETAILS.ip):
-        """
-        Checks the port connection on a IP address
-
-        :param port_number: Port number of a service that is running on the local machine. (Public or loopback)
-        :type port_number: int
-        :param ip: ip address to try
-        :type ip: str
-        :return: True if the port is available; False if the port is NOT available
-        :rtype: bool
-        """
-
-        # check if port is open
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        result = sock.connect_ex((ip, int(port_number)))
-        if result == 0:
-            return True
-        else:
-            # double check because some services run on localhost
-            result = sock.connect_ex(('127.0.0.1', int(port_number)))
-            if result == 0:
-                return True
-            else:
-                return False
-
-    @staticmethod 
+    @staticmethod
     def _is_port_listening(logger, process_name, port, ip=MACHINE_DETAILS.ip):
         """
         Checks the port connection of a process
@@ -203,14 +180,15 @@ class OpenvStorageHealthCheck(object):
         :type ip: str
         """
         logger.info("Checking port {0} of service {1} ...".format(port, process_name), '_is_port_listening')
-        if OpenvStorageHealthCheck._check_port_connection(port, ip):
+        if Helper.check_port_connection(port, ip):
             logger.success("Connection successfully established!",
                            'port_{0}_{1}'.format(process_name, port))
         else:
             logger.failure("Connection FAILED to service '{1}' on port {0}".format(port, process_name),
                            'port_{0}_{1}'.format(process_name, port))
 
-    @staticmethod 
+    @staticmethod
+    @ExposeToCli('ovs', 'required-ports-test')
     def check_required_ports(logger):
         """
         Checks all ports of Open vStorage components (framework, memcached, nginx, rabbitMQ and celery)
@@ -223,13 +201,12 @@ class OpenvStorageHealthCheck(object):
 
         # check ports for OVS services
         logger.info("Checking OVS ports", '')
-        for sr in ServiceList.get_services():
+        for sr in ServiceHelper.get_services():
             if sr.storagerouter_guid == OpenvStorageHealthCheck.MACHINE_DETAILS.guid:
                 for port in sr.ports:
                     if sr.name.split('_')[0] == 'albaproxy':
-                        ip = StorageDriverList.get_by_storagedriver_id("{0}{1}".format(sr.name.split('_')[1],
-                                                                                       OpenvStorageHealthCheck.
-                                                                                       MACHINE_ID)).storage_ip
+                        storagedriver_id = "{0}{1}".format(sr.name.split('_')[1], OpenvStorageHealthCheck.MACHINE_ID)
+                        ip = StoragedriverHelper.get_by_storagedriver_id(storagedriver_id).storage_ip
                         OpenvStorageHealthCheck._is_port_listening(logger, sr.name, port, ip)
                     else:
                         OpenvStorageHealthCheck._is_port_listening(logger, sr.name, port)
@@ -254,7 +231,8 @@ class OpenvStorageHealthCheck(object):
         else:
             logger.skip("RabbitMQ is not running/active on this server!", 'port_celery')
 
-    @staticmethod 
+    @staticmethod
+    @ExposeToCli('ovs', 'packages-test')
     def check_ovs_packages(logger):
         """
         Checks the availability of packages for Open vStorage
@@ -275,7 +253,8 @@ class OpenvStorageHealthCheck(object):
                 logger.skip("Package '{0}' is NOT present ...".format(package),
                             'package_{0}'.format(package))
 
-    @staticmethod 
+    @staticmethod
+    @ExposeToCli('ovs', 'processes-test')
     def check_ovs_processes(logger):
         """
         Checks the availability of processes for Open vStorage
@@ -325,7 +304,8 @@ class OpenvStorageHealthCheck(object):
 
         return False
 
-    @staticmethod 
+    @staticmethod
+    @ExposeToCli('ovs', 'ovs-workers-test')
     def check_ovs_workers(logger):
         """
         Extended check of the Open vStorage workers; When the simple check fails, it will execute a full/deep check.
@@ -346,7 +326,8 @@ class OpenvStorageHealthCheck(object):
             # apparently the basic check failed, so we are going crazy
             logger.failure("Error during check of celery! Is RabbitMQ and/or ovs-workers running?", 'process_celery')
 
-    @staticmethod 
+    @staticmethod
+    @ExposeToCli('ovs', 'directories-test')
     def check_required_dirs(logger):
         """
         Checks the directories their rights and owners for mistakes
@@ -428,7 +409,8 @@ class OpenvStorageHealthCheck(object):
         st = os.stat(filename)
         return oct(st.st_mode)[-3:] == str(rights)
 
-    @staticmethod 
+    @staticmethod
+    @ExposeToCli('ovs', 'dns-test')
     def check_if_dns_resolves(logger, fqdn="google.com"):
         """
         Checks if DNS resolving works on a local machine
@@ -452,7 +434,8 @@ class OpenvStorageHealthCheck(object):
                            'dns_resolving')
             return False
 
-    @staticmethod 
+    @staticmethod
+    @ExposeToCli('ovs', 'zombie-processes-test')
     def get_zombied_and_dead_processes(logger):
         """
         Finds zombied or dead processes on a local machine
@@ -528,40 +511,7 @@ class OpenvStorageHealthCheck(object):
                                        stderr=subprocess.STDOUT, shell=True)
 
     @staticmethod
-    @timeout_decorator.timeout(5)
-    def _check_volumedriver(vp_name, test_name):
-        """
-        Async method to checks if a VOLUMEDRIVER `truncate` works on a vpool
-        Always try to check if the file exists after performing this method
-
-        :param vp_name: name of the vpool
-        :type vp_name: str
-        :param test_name: name of the test file (e.g. `ovs-healthcheck-MACHINE_ID`)
-        :type test_name: str
-        :return: True if succeeded, False if failed
-        :rtype: bool
-        """
-
-        return subprocess.check_output("truncate -s 10GB /mnt/{0}/{1}.raw".format(vp_name, test_name),
-                                       stderr=subprocess.STDOUT, shell=True)
-
-    @staticmethod
-    @timeout_decorator.timeout(5)
-    def _check_volumedriver_remove(vp_name):
-        """
-        Async method to checks if a VOLUMEDRIVER `remove` works on a vpool
-        Always try to check if the file exists after performing this method
-
-        :param vp_name: name of the vpool
-        :type vp_name: str
-        :return: True if succeeded, False if failed
-        :rtype: bool
-        """
-
-        return subprocess.check_output("rm -f /mnt/{0}/ovs-healthcheck-test-*.raw".format(vp_name),
-                                       stderr=subprocess.STDOUT, shell=True)
-
-    @staticmethod 
+    @ExposeToCli('ovs', 'filedrivers-test')
     def check_filedrivers(logger):
         """
         Checks if the FILEDRIVERS work on a local machine (compatible with multiple vPools)
@@ -572,7 +522,7 @@ class OpenvStorageHealthCheck(object):
 
         logger.info("Checking filedrivers: ", 'filedriver')
 
-        vpools = VPoolList.get_vpools()
+        vpools = VPoolHelper.get_vpools()
 
         # perform tests
         if len(vpools) != 0:
@@ -604,51 +554,8 @@ class OpenvStorageHealthCheck(object):
         else:
             logger.skip("No vPools found!", 'filedrivers_nofound')
 
-    @staticmethod 
-    def check_volumedrivers(logger):
-        """
-        Checks if the VOLUMEDRIVERS work on a local machine (compatible with multiple vPools)
-
-        :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
-        """
-
-        logger.info("Checking volumedrivers: ", 'check_volumedrivers')
-
-        vpools = VPoolList.get_vpools()
-
-        if len(vpools) != 0:
-            for vp in vpools:
-                name = "ovs-healthcheck-test-{0}".format(OpenvStorageHealthCheck.MACHINE_ID)
-                if vp.guid in OpenvStorageHealthCheck.MACHINE_DETAILS.vpools_guids:
-                    try:
-                        OpenvStorageHealthCheck._check_volumedriver(vp.name, name)
-
-                        if os.path.exists("/mnt/{0}/{1}.raw".format(vp.name, name)):
-                            # working
-                            OpenvStorageHealthCheck._check_volumedriver_remove(vp.name)
-                            logger.success("Volumedriver of vPool '{0}' is working fine!".format(vp.name),
-                                           'volumedriver_{0}'.format(vp.name))
-                        else:
-                            # not working, file does not exists
-                            logger.failure("Volumedriver of vPool '{0}' seems to have problems"
-                                           .format(vp.name), 'volumedriver_{0}'.format(vp.name))
-                    except TimeoutError:
-                        # timeout occured, action took too long
-                        logger.failure("Volumedriver of vPool '{0}' seems to have `timeout` problems"
-                                       .format(vp.name), 'volumedriver_{0}'.format(vp.name))
-                    except subprocess.CalledProcessError:
-                        # can be input/output error by volumedriver
-                        logger.failure("Volumedriver of vPool '{0}' seems to have `input/output` problems"
-                                       .format(vp.name), 'volumedriver_{0}'.format(vp.name))
-
-                else:
-                    logger.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name),
-                                'volumedriver_{0}'.format(vp.name))
-        else:
-            logger.skip("No vPools found!", 'volumedrivers_nofound')
-
-    @staticmethod 
+    @staticmethod
+    @ExposeToCli('ovs', 'model-test')
     def check_model_consistency(logger):
         """
         Checks if the model consistency of OVSDB vs. VOLUMEDRIVER and does a preliminary check on RABBITMQ
@@ -689,7 +596,7 @@ class OpenvStorageHealthCheck(object):
         # Checking consistency of volumedriver vs. ovsdb and backwards
         #
 
-        for vp in VPoolList.get_vpools():
+        for vp in VPoolHelper.get_vpools():
             if vp.guid in OpenvStorageHealthCheck.MACHINE_DETAILS.vpools_guids:
                 logger.info("Checking consistency of volumedriver vs. ovsdb for vPool '{0}': ".format(vp.name))
 
@@ -748,7 +655,8 @@ class OpenvStorageHealthCheck(object):
                 logger.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name),
                             'discrepancies_voldrv_{0}'.format(vp.name))
 
-    @staticmethod 
+    @staticmethod
+    @ExposeToCli('ovs', 'halted-volumes-test')
     def check_for_halted_volumes(logger):
         """
         Checks for halted volumes on a single or multiple vPools
@@ -759,7 +667,7 @@ class OpenvStorageHealthCheck(object):
 
         logger.info("Checking for halted volumes: ", 'checkHaltedVolumes')
 
-        vpools = VPoolList.get_vpools()
+        vpools = VPoolHelper.get_vpools()
 
         if len(vpools) != 0:
 
@@ -829,3 +737,19 @@ class OpenvStorageHealthCheck(object):
         :return: volumedriver volume object
         """
         return voldrv_client.info_volume(volume_name)
+
+    @staticmethod
+    @ExposeToCli('ovs', 'test')
+    def run(logger):
+        OpenvStorageHealthCheck.get_local_settings(logger)
+        OpenvStorageHealthCheck.check_ovs_processes(logger)
+        OpenvStorageHealthCheck.check_ovs_workers(logger)
+        OpenvStorageHealthCheck.check_ovs_packages(logger)
+        OpenvStorageHealthCheck.check_required_ports(logger)
+        OpenvStorageHealthCheck.get_zombied_and_dead_processes(logger)
+        OpenvStorageHealthCheck.check_required_dirs(logger)
+        OpenvStorageHealthCheck.check_size_of_log_files(logger)
+        OpenvStorageHealthCheck.check_if_dns_resolves(logger)
+        OpenvStorageHealthCheck.check_model_consistency(logger)
+        OpenvStorageHealthCheck.check_for_halted_volumes(logger)
+        OpenvStorageHealthCheck.check_filedrivers(logger)

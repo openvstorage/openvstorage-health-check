@@ -1,0 +1,43 @@
+<---------------------------------------------------------->
+Steps to a good issue format:
+- Make sure you are on the right repo
+- Make sure that there isn't another ticket with the same issue
+- Fill in as much information as you can
+- Remove the arrows and sections that you cant fill in
+- Add the version on which you are facing the issues on
+
+<---------------------------------------------------------->
+
+## Problem description
+//Description of the problem you are facing
+
+## Possible root of the problem
+
+//Description of the possible root. Below you can also provide the log files
+
+### Logs
+```
+```
+
+<---------------------------------------------------------->
+## Possible solution
+Fill this in whether you know a persistent fix for the possible
+You may also delete this section
+<---------------------------------------------------------->
+
+<---------------------------------------------------------->
+## Temporary solution
+Was there a workaround to solve the issue?
+You may delete this section
+<---------------------------------------------------------->
+
+## Additional information
+### Setup
+- [ ] Hyperconverged
+- [ ] Hyperscale
+- [ ] Geoscale
+
+### Packages
+// List packages in the code tags using dpkg -l | grep openvstorage
+```
+```
