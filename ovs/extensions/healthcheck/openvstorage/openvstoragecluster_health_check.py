@@ -511,40 +511,6 @@ class OpenvStorageHealthCheck(object):
                                        stderr=subprocess.STDOUT, shell=True)
 
     @staticmethod
-    @timeout_decorator.timeout(5)
-    def _check_volumedriver(vp_name, test_name):
-        """
-        Async method to checks if a VOLUMEDRIVER `truncate` works on a vpool
-        Always try to check if the file exists after performing this method
-
-        :param vp_name: name of the vpool
-        :type vp_name: str
-        :param test_name: name of the test file (e.g. `ovs-healthcheck-MACHINE_ID`)
-        :type test_name: str
-        :return: True if succeeded, False if failed
-        :rtype: bool
-        """
-
-        return subprocess.check_output("truncate -s 10GB /mnt/{0}/{1}.raw".format(vp_name, test_name),
-                                       stderr=subprocess.STDOUT, shell=True)
-
-    @staticmethod
-    @timeout_decorator.timeout(5)
-    def _check_volumedriver_remove(vp_name):
-        """
-        Async method to checks if a VOLUMEDRIVER `remove` works on a vpool
-        Always try to check if the file exists after performing this method
-
-        :param vp_name: name of the vpool
-        :type vp_name: str
-        :return: True if succeeded, False if failed
-        :rtype: bool
-        """
-
-        return subprocess.check_output("rm -f /mnt/{0}/ovs-healthcheck-test-*.raw".format(vp_name),
-                                       stderr=subprocess.STDOUT, shell=True)
-
-    @staticmethod
     @ExposeToCli('ovs', 'filedrivers-test')
     def check_filedrivers(logger):
         """
@@ -587,51 +553,6 @@ class OpenvStorageHealthCheck(object):
                                 'filedriver_{0}'.format(vp.name))
         else:
             logger.skip("No vPools found!", 'filedrivers_nofound')
-
-    @staticmethod
-    @ExposeToCli('ovs', 'volumedriver-test')
-    def check_volumedrivers(logger):
-        """
-        Checks if the VOLUMEDRIVERS work on a local machine (compatible with multiple vPools)
-
-        :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
-        """
-
-        logger.info("Checking volumedrivers: ", 'check_volumedrivers')
-
-        vpools = VPoolHelper.get_vpools()
-
-        if len(vpools) != 0:
-            for vp in vpools:
-                name = "ovs-healthcheck-test-{0}".format(OpenvStorageHealthCheck.MACHINE_ID)
-                if vp.guid in OpenvStorageHealthCheck.MACHINE_DETAILS.vpools_guids:
-                    try:
-                        OpenvStorageHealthCheck._check_volumedriver(vp.name, name)
-
-                        if os.path.exists("/mnt/{0}/{1}.raw".format(vp.name, name)):
-                            # working
-                            OpenvStorageHealthCheck._check_volumedriver_remove(vp.name)
-                            logger.success("Volumedriver of vPool '{0}' is working fine!".format(vp.name),
-                                           'volumedriver_{0}'.format(vp.name))
-                        else:
-                            # not working, file does not exists
-                            logger.failure("Volumedriver of vPool '{0}' seems to have problems"
-                                           .format(vp.name), 'volumedriver_{0}'.format(vp.name))
-                    except TimeoutError:
-                        # timeout occured, action took too long
-                        logger.failure("Volumedriver of vPool '{0}' seems to have `timeout` problems"
-                                       .format(vp.name), 'volumedriver_{0}'.format(vp.name))
-                    except subprocess.CalledProcessError:
-                        # can be input/output error by volumedriver
-                        logger.failure("Volumedriver of vPool '{0}' seems to have `input/output` problems"
-                                       .format(vp.name), 'volumedriver_{0}'.format(vp.name))
-
-                else:
-                    logger.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name),
-                                'volumedriver_{0}'.format(vp.name))
-        else:
-            logger.skip("No vPools found!", 'volumedrivers_nofound')
 
     @staticmethod
     @ExposeToCli('ovs', 'model-test')
@@ -832,4 +753,3 @@ class OpenvStorageHealthCheck(object):
         OpenvStorageHealthCheck.check_model_consistency(logger)
         OpenvStorageHealthCheck.check_for_halted_volumes(logger)
         OpenvStorageHealthCheck.check_filedrivers(logger)
-        OpenvStorageHealthCheck.check_volumedrivers(logger)

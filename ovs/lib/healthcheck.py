@@ -28,6 +28,7 @@ from ovs.log.healthcheck_logHandler import HCLogHandler
 from ovs.extensions.healthcheck.alba.alba_health_check import AlbaHealthCheck
 from ovs.extensions.healthcheck.helpers.exceptions import PlatformNotSupportedException
 from ovs.extensions.healthcheck.arakoon.arakooncluster_health_check import ArakoonHealthCheck
+from ovs.extensions.healthcheck.volumedriver.volumedriver_health_check import VolumedriverHealthCheck
 from ovs.extensions.healthcheck.openvstorage.openvstoragecluster_health_check import OpenvStorageHealthCheck
 
 
@@ -104,6 +105,7 @@ class HealthCheckController(object):
 
         if HealthCheckController.PLATFORM == 0:
             HealthCheckController.check_openvstorage(logger)
+            HealthCheckController.check_volumedriver(logger)
             HealthCheckController.check_arakoon(logger)
             HealthCheckController.check_alba(logger)
         else:
@@ -159,6 +161,22 @@ class HealthCheckController(object):
         logger.info("===========================", 'starting_alba_hc_ul')
 
         AlbaHealthCheck.run(logger)
+
+    @staticmethod
+    @celery.task(name='ovs.healthcheck.check_volumedriver')
+    def check_volumedriver(logger):
+        """
+        Checks all critical components of Alba
+
+        :param logger: logging object
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
+        :returns
+        """
+
+        logger.info("Starting Volumedriver Health Check!", 'starting_volumedriver_hc')
+        logger.info("===================================", 'starting_volumedriver_hc_ul')
+
+        VolumedriverHealthCheck.run(logger)
 
     @staticmethod
     @celery.task(name='ovs.healthcheck.get_results')
