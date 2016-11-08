@@ -125,7 +125,7 @@ class HCLogHandler(object):
         :rtype: dict
         """
         # Checked with Jeroen Maelbrancke for this
-        excluded_messages = ['INFO', 'DEBUG', 'SKIPPED']
+        excluded_messages = ['INFO', 'DEBUG']
         if print_progress:
             for key, value in sorted(self.result_dict.items(), key=lambda x: x[1]):
                 if value not in excluded_messages:

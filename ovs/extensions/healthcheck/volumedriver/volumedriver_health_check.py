@@ -44,20 +44,23 @@ class VolumedriverHealthCheck(object):
         test_name = "check_dtl"
 
         # Fetch vdisks hosted on this machine
-        for vdisk_guid in VolumedriverHealthCheck.MACHINE_DETAILS.vdisks_guids:
-            vdisk = VDiskHelper.get_vdisk_by_guid(vdisk_guid)
-            # Check dtl
-            dtl_status = vdisk.dtl_status
-            if dtl_status == "ok_standalone":
-                logger.warning("Vdisk {0}'s DTL is disabled because of a single node cluster".format(vdisk.name), test_name)
-            elif dtl_status == "ok_sync":
-                logger.success("Vdisk {0}'s DTL is enabled and running.".format(vdisk.name), test_name)
-            elif dtl_status == "degraded":
-                logger.failure("Vdisk {0}'s DTL is degraded.".format(vdisk.name), test_name)
-            elif dtl_status == "catchup" or dtl_status =="catch_up":
-                logger.warning("Vdisk {0}'s DTL is enabled but still syncing.".format(vdisk.name), test_name)
-            else:
-                logger.warning("Vdisk {0}'s DTL has an unknown status: {1}.".format(vdisk.name, dtl_status), test_name)
+        if len(VolumedriverHealthCheck.MACHINE_DETAILS.vdisks_guids) != 0:
+            for vdisk_guid in VolumedriverHealthCheck.MACHINE_DETAILS.vdisks_guids:
+                vdisk = VDiskHelper.get_vdisk_by_guid(vdisk_guid)
+                # Check dtl
+                dtl_status = vdisk.dtl_status
+                if dtl_status == "ok_standalone":
+                    logger.warning("Vdisk {0}'s DTL is disabled because of a single node cluster".format(vdisk.name), test_name)
+                elif dtl_status == "ok_sync":
+                    logger.success("Vdisk {0}'s DTL is enabled and running.".format(vdisk.name), test_name)
+                elif dtl_status == "degraded":
+                    logger.failure("Vdisk {0}'s DTL is degraded.".format(vdisk.name), test_name)
+                elif dtl_status == "catchup" or dtl_status =="catch_up":
+                    logger.warning("Vdisk {0}'s DTL is enabled but still syncing.".format(vdisk.name), test_name)
+                else:
+                    logger.warning("Vdisk {0}'s DTL has an unknown status: {1}.".format(vdisk.name, dtl_status), test_name)
+        else:
+            logger.skip("No vdisks present in cluster.", test_name)
 
     @staticmethod
     @timeout_decorator.timeout(5)
@@ -94,7 +97,7 @@ class VolumedriverHealthCheck(object):
                                        stderr=subprocess.STDOUT, shell=True)
 
     @staticmethod
-    @ExposeToCli('volumedriver', 'check')
+    @ExposeToCli('volumedriver', 'check-volumedrivers')
     def check_volumedrivers(logger):
         """
         Checks if the VOLUMEDRIVERS work on a local machine (compatible with multiple vPools)
