@@ -35,6 +35,7 @@ class _Colors(object):
     WARNING = '\033[93m'
     FAILED = '\033[91m'
     SKIPPED = '\033[95m'
+    CUSTOM = '\033[94m'
     ENDC = '\033[0m'
 
     def __getitem__(self, item):
@@ -54,7 +55,8 @@ class HCLogHandler(object):
         'info': 'INFO',
         'skip': 'SKIPPED',
         'exception': 'EXCEPTION',
-        'warning': 'WARNING'
+        'warning': 'WARNING',
+        'custom': 'CUSTOM'
     }
 
     def __init__(self, print_progress=True):
@@ -78,7 +80,7 @@ class HCLogHandler(object):
 
         self._logger = LogHandler.get("healthcheck")
 
-    def _log(self, msg, test_name, error_message=None):
+    def _log(self, msg, test_name, error_message=None, value=None):
         """
         Log a message with a certain short test_name and type error message
 
@@ -97,23 +99,23 @@ class HCLogHandler(object):
         :type error_message: str
         :return:
         """
-        error_type = self.MESSAGES[error_message]
-        if not error_type or error_type not in self.SUPPORTED_TYPES:
-            raise ValueError('Found no error_type')
         if Helper.enable_logging:
-            # skip/success uses info:
-            if error_message == 'skip' or error_message == 'success':
-                error_message = 'info'
-            getattr(self._logger, error_message)('{0}'.format(msg))
+            error_type = self.MESSAGES[error_message]
+            if not error_type or error_type not in self.SUPPORTED_TYPES:
+                raise ValueError('Found no error_type')
 
-        # Exclude info values in the dict
-        excluded_messages = ['INFO']
-        if error_type not in excluded_messages:
-            self.result_dict[test_name] = error_type
-        self.counters[error_type] += 1
+            # Exclude info values in the dict
+            excluded_messages = ['INFO']
+            if error_type not in excluded_messages and test_name is not None:
+                # Enable custom error type:
+                if error_type == 'CUSTOM':
+                    self.result_dict[test_name] = value
+                else:
+                    self.result_dict[test_name] = error_type
+            self.counters[error_type] += 1
 
-        if self.print_progress:
-            print "{0}[{1}] {2}{3}".format(_Colors()[error_type], error_type, _Colors.ENDC, str(msg))
+            if self.print_progress:
+                print "{0}[{1}] {2}{3}".format(_Colors()[error_type], error_type, _Colors.ENDC, str(msg))
 
     def get_results(self, print_progress=False):
         """
@@ -215,3 +217,18 @@ class HCLogHandler(object):
         :return:
         """
         self._log(msg, test_name, 'debug')
+
+    def custom(self, msg, test_name=None, value=None):
+        """
+        Report a custom log. The value will determine the tag
+
+        :param msg: Log message for attended run
+        :type msg: str
+        :param test_name: name for monitoring output
+        :type test_name: str
+        :param value: Tag of the log
+        :type value: str
+        :return:
+        """
+
+        self._log(msg, test_name, 'custom', value)
