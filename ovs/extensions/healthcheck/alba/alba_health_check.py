@@ -416,10 +416,9 @@ class AlbaHealthCheck(object):
                 "lost_disks": None
             }
         for service in ServiceHelper.get_services():
-            if service.type.name == ServiceType.SERVICE_TYPES.ALBA_MGR:
+            if service.type.name == ServiceType.SERVICE_TYPES.ALBA_MGR and service not in abms:
                 abms.append(service.name)
 
-        abms = list(set(abms))
         abl = BackendHelper.get_albabackends()
         for ab in abl:
             # Determine if services are from ab instance
@@ -431,14 +430,18 @@ class AlbaHealthCheck(object):
 
             # Fetch alba info
             try:
-                namespaces = AlbaCLI.run('show-namespaces', config=config, to_json=True)[1]
-            except Exception as ex:
-                raise RuntimeError("Could not execute 'alba show-namespaces'. Got {0}".format(ex.message))
-
-            try:
-                presets = AlbaCLI.run('list-presets', config=config, to_json=True)
-            except Exception as ex:
-                raise RuntimeError("Could not execute 'list-presets'. Got {0}".format(ex.message))
+                try:
+                    namespaces = AlbaCLI.run('show-namespaces', config=config, to_json=True)[1]
+                except Exception as ex:
+                    raise SystemError("Could not execute 'alba show-namespaces'. Got {0}".format(ex.message))
+                try:
+                    presets = AlbaCLI.run('list-presets', config=config, to_json=True)
+                except Exception as ex:
+                    raise SystemError("Could not execute 'list-presets'. Got {0}".format(ex.message))
+            except SystemError as ex:
+                logger.exception('Could not fetch alba information. Message: {0}'.format(ex.message), test_name)
+                # Do not execute further
+                return None
 
             # Maximum amount of disks that may be lost - preset will determine this
             max_lost_disks = 0
@@ -511,7 +514,7 @@ class AlbaHealthCheck(object):
             if current_disks_lost == 0:
                 logger.success("Found no losts disks. All data is safe.")
             else:
-                logger.failure("Currently found {0} disks that are lost. Alba might or might not repair these disks.".format(current_disks_lost))
+                logger.failure("Currently found {0} disks that are lost.".format(current_disks_lost))
             logger.info("{0} out of {1} have to be repaired.".format(object_to_be_repaired, total_objects))
             logger.info('{0}% of the objects have to be repaired'.format(repair_percentage))
             # Log if the amount is rising

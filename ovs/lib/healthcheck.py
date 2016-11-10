@@ -408,5 +408,4 @@ class HealthCheckController(object):
         arguments = sys.argv
         # Remove filename
         del arguments[0]
-        # arguments = ('alba', 'disk-safety')
         HealthCheckController.run_method(*arguments)

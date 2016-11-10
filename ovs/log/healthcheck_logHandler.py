@@ -80,7 +80,7 @@ class HCLogHandler(object):
 
         self._logger = LogHandler.get("healthcheck")
 
-    def _log(self, msg, test_name, error_message=None, value=None):
+    def _log(self, msg, test_name, error_message=None, custom_value=None):
         """
         Log a message with a certain short test_name and type error message
 
@@ -97,6 +97,8 @@ class HCLogHandler(object):
             * 'exception'
             * 'warning'
         :type error_message: str
+        :param custom_value: a custom value that will be added when the error_message = custom
+        :param custom_value: object
         :return:
         """
         if Helper.enable_logging:
@@ -109,7 +111,7 @@ class HCLogHandler(object):
             if error_type not in excluded_messages and test_name is not None:
                 # Enable custom error type:
                 if error_type == 'CUSTOM':
-                    self.result_dict[test_name] = value
+                    self.result_dict[test_name] = custom_value
                 else:
                     self.result_dict[test_name] = error_type
             self.counters[error_type] += 1
@@ -226,8 +228,8 @@ class HCLogHandler(object):
         :type msg: str
         :param test_name: name for monitoring output
         :type test_name: str
-        :param value: Tag of the log
-        :type value: str
+        :param value: Value added to the log
+        :type value: object
         :return:
         """
 
