@@ -63,7 +63,7 @@ class VolumedriverHealthCheck(object):
             logger.skip("No vdisks present in cluster.", test_name)
 
     @staticmethod
-    @timeout_decorator.timeout(5)
+    @timeout_decorator.timeout(15)
     def _check_volumedriver(vp_name, test_name):
         """
         Async method to checks if a VOLUMEDRIVER `truncate` works on a vpool
@@ -81,7 +81,7 @@ class VolumedriverHealthCheck(object):
                                        stderr=subprocess.STDOUT, shell=True)
 
     @staticmethod
-    @timeout_decorator.timeout(5)
+    @timeout_decorator.timeout(15)
     def _check_volumedriver_remove(vp_name):
         """
         Async method to checks if a VOLUMEDRIVER `remove` works on a vpool
