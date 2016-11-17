@@ -129,12 +129,12 @@ class OpenvStorageHealthCheck(object):
                 logger.success("Logfile '{0}' has a GOOD size!".format(c_files), 'log_{0}'.format(c_files))
             else:
                 too_big.append(c_files)
-                logger.failure("Logfile '{0}' is a big ass logfile!".format(c_files), 'log_{0}'.format(c_files))
+                logger.failure("Logfile '{0}' is a BIG logfile!".format(c_files), 'log_{0}'.format(c_files))
 
         # end for unattended_install
         if logger.print_progress:
             if len(too_big) != 0:
-                logger.failure("Some logfiles are too big, please check these files {0}!".format(', '.join(too_big)),
+                logger.failure("Some logfiles are TOO BIG, please check these files {0}!".format(', '.join(too_big)),
                                'log_size')
             else:
                 logger.success("ALL log files are ok! Checked {0}".format(', '.join(good_size)), 'log_size')
