@@ -21,9 +21,10 @@ Alba Health Check Module
 """
 
 import os
+import re
+import ast
 import uuid
 import time
-import re
 import hashlib
 import subprocess
 from ovs.extensions.generic.system import System
@@ -31,6 +32,7 @@ from ovs.extensions.plugins.albacli import AlbaCLI
 from ovs.dal.hybrids.servicetype import ServiceType
 from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.extensions.generic.configuration import Configuration
+from ovs.extensions.healthcheck.helpers.cache import CacheHelper
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
 from ovs.extensions.healthcheck.helpers.alba_node import AlbaNodeHelper
 from ovs.extensions.healthcheck.helpers.backend import BackendHelper
@@ -400,6 +402,148 @@ class AlbaHealthCheck(object):
                            'arakoon_connected')
 
     @staticmethod
+    @ExposeToCli('alba', 'disk-safety')
+    def get_disk_safety(logger):
+        """
+        Send disk safety for each vpool and the amount of namespaces with the lowest disk safety to DB
+        """
+        points = []
+        abms = []
+
+        test_name = 'disk-safety'
+        result = {
+                "repair_percentage": None,
+                "lost_disks": None
+            }
+        for service in ServiceHelper.get_services():
+            if service.type.name == ServiceType.SERVICE_TYPES.ALBA_MGR and service not in abms:
+                abms.append(service.name)
+
+        abl = BackendHelper.get_albabackends()
+        for ab in abl:
+            # Determine if services are from ab instance
+            service_name = ServiceHelper.get_service(ab.abm_services[0].service_guid).name
+            if service_name not in abms:
+                continue
+
+            config = "arakoon://config/ovs/arakoon/{0}/config?ini=%2Fopt%2FOpenvStorage%2Fconfig%2Farakoon_cacc.ini".format(service_name)
+
+            # Fetch alba info
+            try:
+                try:
+                    namespaces = AlbaCLI.run('show-namespaces', config=config, to_json=True)[1]
+                except Exception as ex:
+                    raise SystemError("Could not execute 'alba show-namespaces'. Got {0}".format(ex.message))
+                try:
+                    presets = AlbaCLI.run('list-presets', config=config, to_json=True)
+                except Exception as ex:
+                    raise SystemError("Could not execute 'list-presets'. Got {0}".format(ex.message))
+            except SystemError as ex:
+                logger.exception('Could not fetch alba information. Message: {0}'.format(ex.message), test_name)
+                # Do not execute further
+                return None
+
+            # Maximum amount of disks that may be lost - preset will determine this
+            max_lost_disks = 0
+            for preset_name in presets:
+                for policy in preset_name['policies']:
+                    if policy[1] > max_lost_disks:
+                        max_lost_disks = policy[1]
+
+            disk_lost_overview = {}
+            disk_safety_overview = {}
+            bucket_overview = {}
+            max_disk_safety = 0
+            total_objects = 0
+
+            for namespace in namespaces:
+                statistics = namespace['statistics']
+                bucket_counts = statistics['bucket_count']
+                preset_name = namespace['namespace']['preset_name']
+                for bucket_count in bucket_counts:
+                    bucket, objects = bucket_count
+                    total_objects += objects
+                    # Amount of lost disks at this point
+                    disk_lost = bucket[0] + bucket[1] - bucket[2]
+                    disk_safety = bucket[1] - disk_lost
+                    if disk_safety > max_disk_safety:
+                        max_disk_safety = disk_safety
+
+                    if preset_name not in bucket_overview:
+                        bucket_overview[preset_name] = {}
+
+                    if str(bucket) not in bucket_overview[preset_name]:
+                        bucket_overview[preset_name][str(bucket)] = {'objects': 0, 'disk_safety': 0}
+                    if disk_lost not in disk_lost_overview:
+                        disk_lost_overview[disk_lost] = 0
+                    if disk_safety not in disk_safety_overview:
+                        disk_safety_overview[disk_safety] = 0
+                    disk_lost_overview[disk_lost] += objects
+                    disk_safety_overview[disk_safety] += objects
+                    bucket_overview[preset_name][str(bucket)]['objects'] += objects
+                    bucket_overview[preset_name][str(bucket)]['disk_safety'] = disk_safety
+
+            for disk_lost, objects in disk_lost_overview.iteritems():
+                lost = {
+                    'measurement': 'disk_lost',
+                    'tags': {
+                        'backend_name': ab.name,
+                        'disk_lost': disk_lost
+                    },
+                    'fields': {
+                        'total_objects': total_objects,
+                        'objects': objects
+                    }
+                }
+
+                points.append(lost)
+
+        if len(points) == 0:
+            logger.skip('Found no objects present of the system.', test_name)
+        else:
+            total_objects = 0
+            object_to_be_repaired = 0
+            current_disks_lost = 0
+            for result in points:
+                total_objects = result["fields"]["total_objects"]
+                # Ignore fully healthy ones
+                if result["tags"]["disk_lost"] != 0:
+                    current_disks_lost = result["tags"]["disk_lost"]
+                    object_to_be_repaired = result["fields"]["objects"]
+            repair_percentage = object_to_be_repaired / total_objects
+            if current_disks_lost == 0:
+                logger.success("Found no losts disks. All data is safe.")
+            else:
+                logger.failure("Currently found {0} disks that are lost.".format(current_disks_lost))
+            logger.info("{0} out of {1} have to be repaired.".format(object_to_be_repaired, total_objects))
+            logger.info('{0}% of the objects have to be repaired'.format(repair_percentage))
+            # Log if the amount is rising
+            cache = CacheHelper.get()
+            repair_rising = None
+            if cache is None:
+                # First run of healthcheck
+                logger.info("Object repair will be monitored on incrementations.")
+            elif cache["repair_percentage"] < repair_percentage:
+                # Amount of objects to repair are rising
+                repair_rising = True
+                logger.failure("Amount of objects to repair are rising!")
+            else:
+                repair_rising = False
+                logger.success("Amount of objects to repair are descending or the same!")
+
+            # Recap for Ops checkMK
+            logger.custom('Recap of disk-safety: {0}% of the objects have to be repaired. {1} of lost disks and number of objects to repair are {2}.'
+                          .format(repair_percentage, current_disks_lost, 'rising' if repair_rising is True else 'descending or the same'),
+                          test_name, " ".join([str(repair_percentage), 'SUCCESS' if current_disks_lost == 0 else 'FAILURE',
+                                               'FAILURE' if repair_rising is True else 'SUCCESS']))
+            result["repair_percentage"] = repair_percentage
+            result["lost_disks"] = current_disks_lost
+            CacheHelper.set(result)
+            return result
+        return result
+
+    @staticmethod
     @ExposeToCli('alba', 'test')
     def run(logger):
         AlbaHealthCheck.check_alba(logger)
+        AlbaHealthCheck.get_disk_safety(logger)

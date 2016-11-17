@@ -375,34 +375,32 @@ class HealthCheckController(object):
             print "Found no method {0} for module {1}".format(method_name, module_name)
             return HealthCheckController.print_methods(module_name)
         # Find the required method and execute it
-        try:
-            for option in obj[module_name]:
-                if option['method_name'] == method_name:
-                    mod = imp.load_source(option['module_name'], option['location'])
-                    cl = getattr(mod, option['class'])()
-                    if len(args) > 0 and args[0] == 'help':
-                        print getattr(cl, option['function']).__doc__
-                        return
-                    # Add a valid logger based on the optional arguments (unattended, silent) that could be present in args
-                    # Determine type of execution - default to attended
-                    unattended = False
-                    silent_mode = False
-                    if 'unattended' in args:
-                        unattended = True
-                        silent_mode = False
-                    elif 'silent' in args:
-                        unattended = False
-                        silent_mode = True
-
-                    logger = HCLogHandler(not silent_mode and not unattended)
-                    # Execute method
-                    getattr(cl, option['function'])(logger)
-                    # Get results
-                    HealthCheckController.get_results(logger, unattended, silent_mode, module_name, method_name)
+        for option in obj[module_name]:
+            if option['method_name'] == method_name:
+                mod = imp.load_source(option['module_name'], option['location'])
+                cl = getattr(mod, option['class'])()
+                if len(args) > 0 and args[0] == 'help':
+                    print getattr(cl, option['function']).__doc__
                     return
-        except KeyError:
-            print "Found no methods for module {0}".format(module_name)
-            return HealthCheckController.print_methods()
+                # Add a valid logger based on the optional arguments (unattended, silent) that could be present in args
+                # Determine type of execution - default to attended
+                unattended = False
+                silent_mode = False
+                if 'unattended' in args:
+                    unattended = True
+                    silent_mode = False
+                elif 'silent' in args:
+                    unattended = False
+                    silent_mode = True
+
+                logger = HCLogHandler(not silent_mode and not unattended)
+                # Execute method
+                getattr(cl, option['function'])(logger)
+                # Get results
+                HealthCheckController.get_results(logger, unattended, silent_mode, module_name, method_name)
+                return
+        print "Found no methods for module {0}".format(module_name)
+        return HealthCheckController.print_methods()
 
     if __name__ == '__main__':
         import sys
@@ -410,5 +408,4 @@ class HealthCheckController(object):
         arguments = sys.argv
         # Remove filename
         del arguments[0]
-        #arguments = ('alba', 'proxy-test')
         HealthCheckController.run_method(*arguments)
