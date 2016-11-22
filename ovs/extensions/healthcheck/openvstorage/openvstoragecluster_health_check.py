@@ -25,16 +25,18 @@ import commands
 import subprocess
 import timeout_decorator
 from pwd import getpwuid
-from ovs.extensions.generic.system import System
-from ovs.lib.storagerouter import StorageRouterController
-from ovs.extensions.healthcheck.helpers.helper import Helper
+from subprocess import CalledProcessError
 from timeout_decorator.timeout_decorator import TimeoutError
-import volumedriver.storagerouter.storagerouterclient as src
+from ovs.extensions.generic.configuration import NotFoundException
+from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.decorators import ExposeToCli
-from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
+from ovs.extensions.healthcheck.helpers.configuration import ConfigurationManager, ConfigurationProduct
+from ovs.extensions.healthcheck.helpers.helper import Helper
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
 from ovs.extensions.healthcheck.helpers.storagedriver import StoragedriverHelper
-from ovs.extensions.healthcheck.helpers.configuration import ConfigurationManager, ConfigurationProduct
+from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
+from ovs.lib.storagerouter import StorageRouterController
+from volumedriver.storagerouter import storagerouterclient as src
 from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, ObjectNotFoundException, \
     MaxRedirectsExceededException
 
@@ -69,7 +71,7 @@ class OpenvStorageHealthCheck(object):
             logger.info("Environment BRANCH: {0}".format(ovs_version[1].title()))
             logger.info("Environment OS: {0}".format(Helper.check_os()))
             logger.success('Fetched all local settings', 'local-settings')
-        except Exception as ex:
+        except (CalledProcessError, NotFoundException, IOError) as ex:
             logger.failure('Could not fetch local-settings. Got {0}'.format(ex.message))
 
     @staticmethod
