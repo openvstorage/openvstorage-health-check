@@ -133,18 +133,16 @@ class OpenvStorageHealthCheck(object):
             # check if logfile is larger than max_size
             if os.stat(c_files).st_size < 1024000 * Helper.max_log_size:
                 good_size.append(c_files)
-                logger.success("Logfile '{0}' has a GOOD size!".format(c_files), 'log_{0}'.format(c_files))
+                logger.success("Logfile '{0}' has a GOOD size!".format(c_files))
             else:
                 too_big.append(c_files)
-                logger.failure("Logfile '{0}' is a BIG logfile!".format(c_files), 'log_{0}'.format(c_files))
+                logger.failure("Logfile '{0}' is a BIG logfile!".format(c_files))
 
-        # end for unattended_install
-        if logger.print_progress:
-            if len(too_big) != 0:
-                logger.failure("Some logfiles are TOO BIG, please check these files {0}!".format(', '.join(too_big)),
-                               'log_size')
-            else:
-                logger.success("ALL log files are ok! Checked {0}".format(', '.join(good_size)), 'log_size')
+        if len(too_big) != 0:
+            logger.failure("Some logfiles are TOO BIG, please check these files {0}!".format(', '.join(too_big)),
+                           'log_size')
+        else:
+            logger.success("ALL log files are ok! Checked {0}".format(', '.join(good_size)), 'log_size')
 
     @staticmethod
     def _list_logs_in_directory(pwd):
