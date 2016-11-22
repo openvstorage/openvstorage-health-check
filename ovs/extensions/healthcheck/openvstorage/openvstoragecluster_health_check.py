@@ -59,13 +59,18 @@ class OpenvStorageHealthCheck(object):
         ovs_version = Helper.get_ovs_version()
 
         logger.info("Fetching LOCAL information of node: ")
-        logger.success("Cluster ID: {0}".format(Helper.get_cluster_id()))
-        logger.success("Hostname: {0}".format(socket.gethostname()))
-        logger.success("Storagerouter ID: {0}".format(OpenvStorageHealthCheck.MACHINE_ID))
-        logger.success("Storagerouter TYPE: {0}".format(OpenvStorageHealthCheck.MACHINE_DETAILS.node_type))
-        logger.success("Environment RELEASE: {0}".format(ovs_version[0]))
-        logger.success("Environment BRANCH: {0}".format(ovs_version[1].title()))
-        logger.success("Environment OS: {0}".format(Helper.check_os()))
+        # Fetch all details
+        try:
+            logger.info("Cluster ID: {0}".format(Helper.get_cluster_id()))
+            logger.info("Hostname: {0}".format(socket.gethostname()))
+            logger.info("Storagerouter ID: {0}".format(OpenvStorageHealthCheck.MACHINE_ID))
+            logger.info("Storagerouter TYPE: {0}".format(OpenvStorageHealthCheck.MACHINE_DETAILS.node_type))
+            logger.info("Environment RELEASE: {0}".format(ovs_version[0]))
+            logger.info("Environment BRANCH: {0}".format(ovs_version[1].title()))
+            logger.info("Environment OS: {0}".format(Helper.check_os()))
+            logger.success('Fetched all local settings', 'local-settings')
+        except Exception as ex:
+            logger.failure('Could not fetch local-settings. Got {0}'.format(ex.message))
 
     @staticmethod
     @ExposeToCli('ovs', 'log-files-test')
