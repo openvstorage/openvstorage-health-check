@@ -72,7 +72,7 @@ class OpenvStorageHealthCheck(object):
             logger.info("Environment OS: {0}".format(Helper.check_os()))
             logger.success('Fetched all local settings', 'local-settings')
         except (CalledProcessError, NotFoundException, IOError) as ex:
-            logger.failure('Could not fetch local-settings. Got {0}'.format(ex.message))
+            logger.failure('Could not fetch local-settings. Got {0}'.format(ex.message), 'local-settings')
 
     @staticmethod
     @ExposeToCli('ovs', 'log-files-test')
