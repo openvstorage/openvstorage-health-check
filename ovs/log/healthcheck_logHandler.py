@@ -115,7 +115,7 @@ class HCLogHandler(object):
                         self.result_dict[test_name] = custom_value
                     else:
                         self.result_dict[test_name] = error_type
-                self.counters[error_type] += 1
+            self.counters[error_type] += 1
 
             if self.print_progress:
                 print "{0}[{1}] {2}{3}".format(_Colors()[error_type], error_type, _Colors.ENDC, str(msg))
