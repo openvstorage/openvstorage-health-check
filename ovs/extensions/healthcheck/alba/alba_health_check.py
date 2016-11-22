@@ -27,20 +27,20 @@ import uuid
 import time
 import hashlib
 import subprocess
-from ovs.extensions.generic.system import System
-from ovs.extensions.plugins.albacli import AlbaCLI
 from ovs.dal.hybrids.servicetype import ServiceType
-from ovs.extensions.healthcheck.decorators import ExposeToCli
+from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 from ovs.extensions.generic.configuration import Configuration
+from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.helpers.cache import CacheHelper
-from ovs.extensions.healthcheck.helpers.service import ServiceHelper
+from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.extensions.healthcheck.helpers.alba_node import AlbaNodeHelper
 from ovs.extensions.healthcheck.helpers.backend import BackendHelper
-from ovs.extensions.healthcheck.helpers.storagedriver import StoragedriverHelper
 from ovs.extensions.healthcheck.helpers.configuration import ConfigurationManager, ConfigurationProduct
 from ovs.extensions.healthcheck.helpers.exceptions import ObjectNotFoundException, ConnectionFailedException, \
     DiskNotFoundException, ConfigNotMatchedException
-from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
+from ovs.extensions.healthcheck.helpers.service import ServiceHelper
+from ovs.extensions.healthcheck.helpers.storagedriver import StoragedriverHelper
+from ovs.extensions.plugins.albacli import AlbaCLI
 
 
 class AlbaHealthCheck(object):
@@ -510,7 +510,8 @@ class AlbaHealthCheck(object):
                 if result["tags"]["disk_lost"] != 0:
                     current_disks_lost = result["tags"]["disk_lost"]
                     object_to_be_repaired = result["fields"]["objects"]
-            repair_percentage = object_to_be_repaired / total_objects
+            # limit to 4 numbers
+            repair_percentage = float("{0:.4f}".format((float(object_to_be_repaired)/float(total_objects))*100))
             if current_disks_lost == 0:
                 logger.success("Found no losts disks. All data is safe.")
             else:
@@ -532,10 +533,9 @@ class AlbaHealthCheck(object):
                 logger.success("Amount of objects to repair are descending or the same!")
 
             # Recap for Ops checkMK
-            logger.custom('Recap of disk-safety: {0}% of the objects have to be repaired. {1} of lost disks and number of objects to repair are {2}.'
+            logger.custom('Recap of disk-safety: {0}% of the objects have to be repaired. {1} lost disks and number of objects to repair are {2}.'
                           .format(repair_percentage, current_disks_lost, 'rising' if repair_rising is True else 'descending or the same'),
-                          test_name, " ".join([str(repair_percentage), 'SUCCESS' if current_disks_lost == 0 else 'FAILURE',
-                                               'FAILURE' if repair_rising is True else 'SUCCESS']))
+                          test_name, " ".join([str(repair_percentage), 'SUCCESS' if current_disks_lost == 0 else 'FAILURE', 'FAILURE' if repair_rising is True else 'SUCCESS']))
             result["repair_percentage"] = repair_percentage
             result["lost_disks"] = current_disks_lost
             CacheHelper.set(result)
