@@ -72,30 +72,31 @@ class ArakoonHealthCheck(object):
                            'port_{0}_{1}'.format(process_name, port))
 
     @staticmethod
-    def fetch_available_clusters(logger):
+    def fetch_clusters(logger):
         """
         Fetches the available local arakoon clusters of a cluster
 
         :param logger: logging object
         :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
-        :return: if succeeded a dict; if failed `None`
-        :rtype: dict
+        :return: if succeeded a tuple; if failed both dicts are empty
+        :rtype: tuple of dict
         """
 
-        logger.info("Fetching available arakoon clusters: ", 'checkArakoons')
+        logger.info("Fetching available arakoon clusters.")
         arakoon_clusters = list(Configuration.list('/ovs/arakoon'))
 
         result = {}
+        missing_nodes = {}
         if len(arakoon_clusters) == 0:
             # no arakoon clusters on node
-            logger.warning("No installed arakoon clusters detected on this system ...", 'arakoon_no_clusters_found')
+            logger.warning("No installed arakoon clusters detected on this system.", 'arakoon_no_clusters_found')
             return {}
 
         # add arakoon clusters
         for cluster in arakoon_clusters:
             # add node that is available for arakoon cluster
             nodes_per_cluster_result = {}
-
+            missing_nodes_per_cluster = []
             ak = ArakoonClusterConfig(str(cluster), filesystem=False)
             ak.load_config()
             master_node_ids = [node.name for node in ak.nodes]
@@ -111,19 +112,23 @@ class ArakoonHealthCheck(object):
 
             for node_id in master_node_ids:
                 node_info = StoragerouterHelper.get_by_machine_id(node_id)
+                if node_info is None:
+                    # No information found about the storagerouter - old value in arakoon
+                    missing_nodes_per_cluster.append(node_id)
+                else:
+                    # add node information
+                    nodes_per_cluster_result.update({node_id: {
+                        'hostname': node_info.name,
+                        'ip-address': node_info.ip,
+                        'guid': node_info.guid,
+                        'node_type': node_info.node_type,
+                        'tlog_dir': tlog_dir
+                        }
+                    })
+            result[cluster] = nodes_per_cluster_result
+            missing_nodes[cluster] = missing_nodes_per_cluster
 
-                # add node information
-                nodes_per_cluster_result.update({node_id: {
-                    'hostname': node_info.name,
-                    'ip-address': node_info.ip,
-                    'guid': node_info.guid,
-                    'node_type': node_info.node_type,
-                    'tlog_dir': tlog_dir
-                    }
-                })
-            result.update({cluster: nodes_per_cluster_result})
-
-        return result
+        return result, missing_nodes
 
     @staticmethod
     @ExposeToCli('arakoon', 'required-ports-test')
@@ -167,7 +172,7 @@ class ArakoonHealthCheck(object):
         """
 
         if arakoon_clusters is None:
-            arakoon_clusters = ArakoonHealthCheck.fetch_available_clusters(logger)
+            arakoon_clusters = ArakoonHealthCheck.fetch_clusters(logger)[0]
 
         result = {"OK": [], "NOK": []}
         for cluster_name, cluster_info in arakoon_clusters.iteritems():
@@ -310,7 +315,7 @@ class ArakoonHealthCheck(object):
         down_arakoon_list = []
 
         if arakoon_clusters is None:
-            arakoon_clusters = ArakoonHealthCheck.fetch_available_clusters(logger)
+            arakoon_clusters = ArakoonHealthCheck.fetch_clusters(logger)[0]
 
         logger.info('Starting Arakoon integrity test')
         # verify integrity of arakoon clusters
@@ -411,8 +416,11 @@ class ArakoonHealthCheck(object):
         :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
 
-        arakoon_clusters = ArakoonHealthCheck.fetch_available_clusters(logger)
-
+        arakoon_clusters, missing_nodes = ArakoonHealthCheck.fetch_clusters(logger)
+        if len([nodes for nodes in missing_nodes.itervalues() if len(nodes) != 0]) != 0:
+            logger.failure("The following nodes are stored in arakoon but missing in reality: {0}".format(missing_nodes.items()), 'nodes_missing')
+        else:
+            logger.success("Found no nodes that are missing according to arakoons.", "nodes_missing")
         if len(arakoon_clusters.keys()) != 0:
             logger.success("{0} available Arakoons successfully fetched, starting verification of clusters ..."
                            .format(len(arakoon_clusters)), 'arakoon_found')
@@ -422,7 +430,7 @@ class ArakoonHealthCheck(object):
             ArakoonHealthCheck.check_restarts(logger=logger, arakoon_clusters=arakoon_clusters)
 
         else:
-            logger.skip("No clusters found", 'arakoon_found')
+            logger.skip("No available clusters found", 'arakoon_found')
 
     @staticmethod
     @ExposeToCli('arakoon', 'test')
