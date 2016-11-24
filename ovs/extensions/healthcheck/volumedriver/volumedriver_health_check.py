@@ -31,6 +31,7 @@ class VolumedriverHealthCheck(object):
     MODULE = "volumedriver"
     MACHINE_DETAILS = System.get_my_storagerouter()
     MACHINE_ID = System.get_my_machine_id()
+    VDISK_CHECK_SIZE = 10737418240  # 10GB in bytes
 
     @staticmethod
     @ExposeToCli('volumedriver', 'check_dtl')
@@ -64,7 +65,7 @@ class VolumedriverHealthCheck(object):
 
     @staticmethod
     @timeout_decorator.timeout(15)
-    def _check_volumedriver(volume_name, vpool_guid, volume_size=10*1024**3):
+    def _check_volumedriver(volume_name, vpool_guid, volume_size=VDISK_CHECK_SIZE):
         """
         Async method to checks if a VOLUMEDRIVER `truncate` works on a vpool
         Always try to check if the file exists after performing this method
