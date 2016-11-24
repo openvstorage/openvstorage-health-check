@@ -523,20 +523,30 @@ class AlbaHealthCheck(object):
             # display to be repaired amount of objects
             if object_to_be_repaired != 0:
                 logger.warning("{0} out of {1} have to be repaired.".format(object_to_be_repaired, total_objects))
-                logger.warning('{0}% of the objects have to be repaired'.format(repair_percentage))
+                logger.warning('{0}% of the objects have to be repaired'.format(repair_percentage),
+                               'repair_percentage_{0}'.format(repair_percentage))
             else:
-                logger.success("No objects have to be repaired.")
+                logger.success("No objects have to be repaired.", 'repair_percentage_0')
+
+            logger.info("Checking if objects repair queue has changed...")
 
             # Log if the amount is rising
             cache = CacheHelper.get()
             if cache is None:
                 # First run of healthcheck
-                logger.info("Object repair will be monitored on incrementations.")
-            elif cache["repair_percentage"] < repair_percentage:
+                logger.success("Object repair will be monitored on incrementations.", 'repair_OK')
+            elif repair_percentage == 0:
                 # Amount of objects to repair are rising
-                logger.failure("Amount of objects to repair are rising!")
-            else:
-                logger.success("Amount of objects to repair are descending or the same!")
+                logger.success("No objects in objects repair queue", 'repair_OK')
+            elif cache["repair_percentage"] > repair_percentage:
+                # Amount of objects to repair is descending
+                logger.failure("Amount of objects to repair is descending!", 'repair_DESCENDING')
+            elif cache["repair_percentage"] < repair_percentage:
+                # Amount of objects to repair is rising
+                logger.failure("Amount of objects to repair are rising!", 'repair_RISING')
+            elif cache["repair_percentage"] == repair_percentage:
+                # Amount of objects to repair is the same
+                logger.success("Amount of objects to repair are the same!", 'repair_SAME')
 
             result["repair_percentage"] = repair_percentage
             result["lost_asds"] = current_disks_lost
