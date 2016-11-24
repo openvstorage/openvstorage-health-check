@@ -64,33 +64,37 @@ class VolumedriverHealthCheck(object):
 
     @staticmethod
     @timeout_decorator.timeout(15)
-    def _check_volumedriver(file_path):
+    def _check_volumedriver(vp_name, test_name):
         """
         Async method to checks if a VOLUMEDRIVER `truncate` works on a vpool
         Always try to check if the file exists after performing this method
 
-        :param file_path: path of the file
-        :type file_path: str
+        :param vp_name: name of the vpool
+        :type vp_name: str
+        :param test_name: name of the test file (e.g. `ovs-healthcheck-MACHINE_ID`)
+        :type test_name: str
         :return: True if succeeded, False if failed
         :rtype: bool
         """
 
-        return subprocess.check_output("truncate -s 10GB {0}".format(file_path), stderr=subprocess.STDOUT, shell=True)
+        return subprocess.check_output("truncate -s 10GB /mnt/{0}/{1}.raw".format(vp_name, test_name),
+                                       stderr=subprocess.STDOUT, shell=True)
 
     @staticmethod
     @timeout_decorator.timeout(15)
-    def _check_volumedriver_remove(file_path):
+    def _check_volumedriver_remove(vp_name):
         """
         Async method to checks if a VOLUMEDRIVER `remove` works on a vpool
         Always try to check if the file exists after performing this method
 
-        :param file_path: path of the file
-        :type file_path: str
+        :param vp_name: name of the vpool
+        :type vp_name: str
         :return: True if succeeded, False if failed
         :rtype: bool
         """
 
-        return subprocess.check_output("rm -f {0}".format(file_path), stderr=subprocess.STDOUT, shell=True)
+        return subprocess.check_output("rm -f /mnt/{0}/ovs-healthcheck-test-*.raw".format(vp_name),
+                                       stderr=subprocess.STDOUT, shell=True)
 
     @staticmethod
     @ExposeToCli('volumedriver', 'check-volumedrivers')
@@ -111,11 +115,11 @@ class VolumedriverHealthCheck(object):
                 name = "ovs-healthcheck-test-{0}".format(VolumedriverHealthCheck.MACHINE_ID)
                 if vp.guid in VolumedriverHealthCheck.MACHINE_DETAILS.vpools_guids:
                     try:
-                        file_path = "/mnt/{0}/{1}.raw".format(vp.name, name)
-                        VolumedriverHealthCheck._check_volumedriver(file_path)
-                        if os.path.exists(file_path):
+                        VolumedriverHealthCheck._check_volumedriver(vp.name, name)
+
+                        if os.path.exists("/mnt/{0}/{1}.raw".format(vp.name, name)):
                             # working
-                            VolumedriverHealthCheck._check_volumedriver_remove(file_path)
+                            VolumedriverHealthCheck._check_volumedriver_remove(vp.name)
                             logger.success("Volumedriver of vPool '{0}' is working fine!".format(vp.name),
                                            'volumedriver_{0}'.format(vp.name))
                         else:
