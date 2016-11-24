@@ -15,6 +15,7 @@
 # but WITHOUT ANY WARRANTY of any kind.
 
 from ovs.log.log_handler import LogHandler
+from ovs.dal.hybrids.vpool import VPool
 from ovs.dal.lists.vpoollist import VPoolList
 from ovs.extensions.healthcheck.helpers.exceptions import VPoolNotFoundError
 
@@ -55,3 +56,20 @@ class VPoolHelper(object):
             return vpool
         else:
             raise VPoolNotFoundError("vPool with name `{0}` was not found!".format(vpool_name))
+
+    @staticmethod
+    def get_vpool_by_guid(vpool_guid):
+        """
+        Get a vpool by name
+
+        :param vpool_name: name of a existing vpool
+        :type vpool_name: str
+        :return: a vpool object
+        :rtype: ovs.dal.hybrids.vpool
+        """
+
+        vpool = VPool(vpool_guid)
+        if vpool:
+            return vpool
+        else:
+            raise VPoolNotFoundError("vPool with guid `{0}` was not found!".format(vpool_guid))
