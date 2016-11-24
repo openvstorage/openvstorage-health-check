@@ -152,7 +152,7 @@ class VolumedriverHealthCheck(object):
                     except IOError as ex:
                         # can be input/output error by volumedriver
                         logger.failure("Volumedriver of vPool '{0}' seems to have `input/output` problems. Got {1} while executing."
-                                       .format(vp.name, ex), 'volumedriver_{0}'.format(vp.name))
+                                       .format(vp.name, ex.message), 'volumedriver_{0}'.format(vp.name))
                     except ValueError as ex:
                         logger.failure(ex, 'volumedriver_{0}'.format(vp.name))
 
