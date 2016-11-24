@@ -84,10 +84,9 @@ class VolumedriverHealthCheck(object):
         if storagedriver is None:
             raise ValueError('Could not find the right storagedriver for storagerouter {0}'.format(VolumedriverHealthCheck.MACHINE_DETAILS.guid))
         try:
-            vdisk_guid = VDiskController.create_new(volume_name, volume_size, storagedriver.guid)
-            return vdisk_guid
+            return VDiskController.create_new(volume_name, volume_size, storagedriver.guid)
         except Exception as ex:
-            raise IOError(ex)
+            raise IOError(ex.message)
 
     @staticmethod
     @timeout_decorator.timeout(15)
@@ -106,7 +105,7 @@ class VolumedriverHealthCheck(object):
             VDiskController.delete(vdisk_guid)
             return True
         except RuntimeError as ex:
-            raise IOError('Could not remove vdisk {0}. Got {1}'.format(vdisk_guid, ex))
+            raise IOError('Could not remove vdisk {0}. Got {1}'.format(vdisk_guid, ex.message))
 
     @staticmethod
     @ExposeToCli('volumedriver', 'check-volumedrivers')
@@ -128,7 +127,15 @@ class VolumedriverHealthCheck(object):
                 if vp.guid in VolumedriverHealthCheck.MACHINE_DETAILS.vpools_guids:
                     try:
                         file_path = "/mnt/{0}/{1}".format(vp.name, name)
-                        vdisk_guid = VolumedriverHealthCheck._check_volumedriver(name, vp.guid)
+                        try:
+                            vdisk_guid = VolumedriverHealthCheck._check_volumedriver(name, vp.guid)
+                        except IOError as ex:
+                            # Try to cleanup
+                            try:
+                                subprocess.check_output("rm -rf {0}".format(file_path), stderr=subprocess.STDOUT, shell=True)
+                            except:
+                                pass
+                            raise
                         if os.path.exists(file_path):
                             # working
                             VolumedriverHealthCheck._check_volumedriver_remove(vdisk_guid)
