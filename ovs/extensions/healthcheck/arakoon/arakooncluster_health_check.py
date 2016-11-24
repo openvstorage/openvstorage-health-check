@@ -418,7 +418,10 @@ class ArakoonHealthCheck(object):
 
         arakoon_clusters, missing_nodes = ArakoonHealthCheck.fetch_clusters(logger)
         if len([nodes for nodes in missing_nodes.itervalues() if len(nodes) != 0]) != 0:
-            logger.failure("The following nodes are stored in arakoon but missing in reality: {0}".format(missing_nodes.items()), 'nodes_missing')
+            # Only return the (arakoon, system id) tuple for arakoons that have missing system ids
+            missing = [cluster for cluster in missing_nodes.items() if len(cluster[1]) != 0]
+            logger.failure("The following nodes are stored in arakoon but missing in reality (output format is "
+                           "(arakoon, [system ids]): {0}".format(missing), 'nodes_missing')
         else:
             logger.success("Found no nodes that are missing according to arakoons.", "nodes_missing")
         if len(arakoon_clusters.keys()) != 0:
