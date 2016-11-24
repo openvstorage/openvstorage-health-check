@@ -25,16 +25,18 @@ import commands
 import subprocess
 import timeout_decorator
 from pwd import getpwuid
-from ovs.extensions.generic.system import System
-from ovs.lib.storagerouter import StorageRouterController
-from ovs.extensions.healthcheck.helpers.helper import Helper
+from subprocess import CalledProcessError
 from timeout_decorator.timeout_decorator import TimeoutError
-import volumedriver.storagerouter.storagerouterclient as src
+from ovs.extensions.generic.configuration import NotFoundException
+from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.decorators import ExposeToCli
-from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
+from ovs.extensions.healthcheck.helpers.configuration import ConfigurationManager, ConfigurationProduct
+from ovs.extensions.healthcheck.helpers.helper import Helper
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
 from ovs.extensions.healthcheck.helpers.storagedriver import StoragedriverHelper
-from ovs.extensions.healthcheck.helpers.configuration import ConfigurationManager, ConfigurationProduct
+from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
+from ovs.lib.storagerouter import StorageRouterController
+from volumedriver.storagerouter import storagerouterclient as src
 from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, ObjectNotFoundException, \
     MaxRedirectsExceededException
 
@@ -59,13 +61,18 @@ class OpenvStorageHealthCheck(object):
         ovs_version = Helper.get_ovs_version()
 
         logger.info("Fetching LOCAL information of node: ")
-        logger.success("Cluster ID: {0}".format(Helper.get_cluster_id()))
-        logger.success("Hostname: {0}".format(socket.gethostname()))
-        logger.success("Storagerouter ID: {0}".format(OpenvStorageHealthCheck.MACHINE_ID))
-        logger.success("Storagerouter TYPE: {0}".format(OpenvStorageHealthCheck.MACHINE_DETAILS.node_type))
-        logger.success("Environment RELEASE: {0}".format(ovs_version[0]))
-        logger.success("Environment BRANCH: {0}".format(ovs_version[1].title()))
-        logger.success("Environment OS: {0}".format(Helper.check_os()))
+        # Fetch all details
+        try:
+            logger.info("Cluster ID: {0}".format(Helper.get_cluster_id()))
+            logger.info("Hostname: {0}".format(socket.gethostname()))
+            logger.info("Storagerouter ID: {0}".format(OpenvStorageHealthCheck.MACHINE_ID))
+            logger.info("Storagerouter TYPE: {0}".format(OpenvStorageHealthCheck.MACHINE_DETAILS.node_type))
+            logger.info("Environment RELEASE: {0}".format(ovs_version[0]))
+            logger.info("Environment BRANCH: {0}".format(ovs_version[1].title()))
+            logger.info("Environment OS: {0}".format(Helper.check_os()))
+            logger.success('Fetched all local settings', 'local-settings')
+        except (CalledProcessError, NotFoundException, IOError) as ex:
+            logger.failure('Could not fetch local-settings. Got {0}'.format(ex.message), 'local-settings')
 
     @staticmethod
     @ExposeToCli('ovs', 'log-files-test')
@@ -126,18 +133,16 @@ class OpenvStorageHealthCheck(object):
             # check if logfile is larger than max_size
             if os.stat(c_files).st_size < 1024000 * Helper.max_log_size:
                 good_size.append(c_files)
-                logger.success("Logfile '{0}' has a GOOD size!".format(c_files), 'log_{0}'.format(c_files))
+                logger.success("Logfile '{0}' has a GOOD size!".format(c_files))
             else:
                 too_big.append(c_files)
-                logger.failure("Logfile '{0}' is a BIG logfile!".format(c_files), 'log_{0}'.format(c_files))
+                logger.failure("Logfile '{0}' is a BIG logfile!".format(c_files))
 
-        # end for unattended_install
-        if logger.print_progress:
-            if len(too_big) != 0:
-                logger.failure("Some logfiles are TOO BIG, please check these files {0}!".format(', '.join(too_big)),
-                               'log_size')
-            else:
-                logger.success("ALL log files are ok! Checked {0}".format(', '.join(good_size)), 'log_size')
+        if len(too_big) != 0:
+            logger.failure("Some logfiles are TOO BIG, please check these files {0}!".format(', '.join(too_big)),
+                           'log_size')
+        else:
+            logger.success("ALL log files are ok! Checked {0}".format(', '.join(good_size)), 'log_size')
 
     @staticmethod
     def _list_logs_in_directory(pwd):

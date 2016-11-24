@@ -13,6 +13,7 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
+from ovs.dal.hybrids.service import Service
 from ovs.dal.lists.servicelist import ServiceList
 
 
@@ -32,3 +33,14 @@ class ServiceHelper(object):
         :return:
         """
         return ServiceList.get_services()
+
+    @staticmethod
+    def get_service(service_guid):
+        """
+        Fetches a service by guid
+        :param service_guid: guid of the service
+        :type service_guid: str
+        :return: Service object
+        :rtype: ovs.dal.hybrids.service.service
+        """
+        return Service(service_guid)
