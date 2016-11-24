@@ -142,10 +142,10 @@ class VolumedriverHealthCheck(object):
                         # timeout occured, action took too long
                         logger.failure("Volumedriver of vPool '{0}' seems to have `timeout` problems"
                                        .format(vp.name), 'volumedriver_{0}'.format(vp.name))
-                    except IOError:
+                    except IOError as ex:
                         # can be input/output error by volumedriver
-                        logger.failure("Volumedriver of vPool '{0}' seems to have `input/output` problems"
-                                       .format(vp.name), 'volumedriver_{0}'.format(vp.name))
+                        logger.failure("Volumedriver of vPool '{0}' seems to have `input/output` problems. Got {1} while executing."
+                                       .format(vp.name, ex), 'volumedriver_{0}'.format(vp.name))
                     except ValueError as ex:
                         logger.failure(ex, 'volumedriver_{0}'.format(vp.name))
 
