@@ -230,7 +230,7 @@ class AlbaHealthCheck(object):
                                     AlbaCLI.run('proxy-delete-object', host=ip, port=service.ports[0], extra_params=[namespace_key, object_key])
                                     subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_LOC)], stdout=fnull, stderr=subprocess.STDOUT)
                                     subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC)], stdout=fnull, stderr=subprocess.STDOUT)
-                                    # @todo uncomment when the issue has been that blocks uploads after namespaces are created
+                                    # @TODO uncomment when the issue has been that blocks uploads after namespaces are created
                                     # # Remove namespace afterwards
                                     # logger.info("Deleting namespace '{0}'.".format(namespace_key))
                                     # AlbaCLI.run('proxy-delete-namespace', host=ip, port=service.ports[0], extra_params=[namespace_key])
@@ -364,12 +364,12 @@ class AlbaHealthCheck(object):
                             if backend.get('is_available_for_vpool'):
                                 if len(defectivedisks) == 0:
                                     logger.success("Alba backend '{0}' should be AVAILABLE FOR vPOOL USE,"
-                                                   " ALL disks are working fine!".format(backend.get('name')),
+                                                   " ALL asds are working fine!".format(backend.get('name')),
                                                    'alba_backend_{0}'.format(backend.get('name')))
                                 else:
                                     logger.warning("Alba backend '{0}' should be "
-                                                   "AVAILABLE FOR vPOOL USE with {1} disks,"
-                                                   " BUT there are {2} defective disks: {3}".format(backend.get('name'),
+                                                   "AVAILABLE FOR vPOOL USE with {1} asds,"
+                                                   " BUT there are {2} defective asds: {3}".format(backend.get('name'),
                                                                                                     len(workingdisks),
                                                                                                     len(defectivedisks),
                                                                                                     ', '
@@ -379,12 +379,12 @@ class AlbaHealthCheck(object):
                             else:
                                 if len(workingdisks) == 0 and len(defectivedisks) == 0:
                                     logger.skip("Alba backend '{0}' is NOT available for vPool use, there are no"
-                                                " disks assigned to this backend!".format(backend.get('name')),
+                                                " asds assigned to this backend!".format(backend.get('name')),
                                                 'alba_backend_{0}'.format(backend.get('name')))
                                 else:
                                     logger.failure("Alba backend '{0}' is NOT available for vPool use, preset"
-                                                   " requirements NOT SATISFIED! There are {1} working disks AND {2}"
-                                                   " defective disks!".format(backend.get('name'), len(workingdisks),
+                                                   " requirements NOT SATISFIED! There are {1} working asds AND {2}"
+                                                   " defective asds!".format(backend.get('name'), len(workingdisks),
                                                                               len(defectivedisks)),
                                                    'alba_backend_{0}'.format(backend.get('name')))
                         else:
@@ -407,6 +407,9 @@ class AlbaHealthCheck(object):
         """
         Send disk safety for each vpool and the amount of namespaces with the lowest disk safety to DB
         """
+
+        logger.info("Checking if objects need to be repaired...")
+
         points = []
         abms = []
 
@@ -513,33 +516,31 @@ class AlbaHealthCheck(object):
             # limit to 4 numbers
             repair_percentage = float("{0:.4f}".format((float(object_to_be_repaired)/float(total_objects))*100))
             if current_disks_lost == 0:
-                logger.success("Found no losts disks. All data is safe.")
+                logger.success("Found no broken asds. All data is safe.")
             else:
-                logger.failure("Currently found {0} disks that are lost.".format(current_disks_lost))
-            logger.info("{0} out of {1} have to be repaired.".format(object_to_be_repaired, total_objects))
-            logger.info('{0}% of the objects have to be repaired'.format(repair_percentage))
+                logger.failure("Currently found {0} asds that are lost.".format(current_disks_lost))
+
+            # display to be repaired amount of objects
+            if object_to_be_repaired != 0:
+                logger.warning("{0} out of {1} have to be repaired.".format(object_to_be_repaired, total_objects))
+                logger.warning('{0}% of the objects have to be repaired'.format(repair_percentage))
+            else:
+                logger.success("No objects have to be repaired.")
+
             # Log if the amount is rising
             cache = CacheHelper.get()
-            repair_rising = None
             if cache is None:
                 # First run of healthcheck
                 logger.info("Object repair will be monitored on incrementations.")
             elif cache["repair_percentage"] < repair_percentage:
                 # Amount of objects to repair are rising
-                repair_rising = True
                 logger.failure("Amount of objects to repair are rising!")
             else:
-                repair_rising = False
                 logger.success("Amount of objects to repair are descending or the same!")
 
-            # Recap for Ops checkMK
-            logger.custom('Recap of disk-safety: {0}% of the objects have to be repaired. {1} lost disks and number of objects to repair are {2}.'
-                          .format(repair_percentage, current_disks_lost, 'rising' if repair_rising is True else 'descending or the same'),
-                          test_name, " ".join([str(repair_percentage), 'SUCCESS' if current_disks_lost == 0 else 'FAILURE', 'FAILURE' if repair_rising is True else 'SUCCESS']))
             result["repair_percentage"] = repair_percentage
-            result["lost_disks"] = current_disks_lost
+            result["lost_asds"] = current_disks_lost
             CacheHelper.set(result)
-            return result
         return result
 
     @staticmethod
