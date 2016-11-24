@@ -21,7 +21,7 @@ from timeout_decorator.timeout_decorator import TimeoutError
 from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.extensions.healthcheck.helpers.vdisk import VDiskHelper
 from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
-
+from ovs.lib.vdisk import VDiskController
 
 class VolumedriverHealthCheck(object):
     """
@@ -64,33 +64,48 @@ class VolumedriverHealthCheck(object):
 
     @staticmethod
     @timeout_decorator.timeout(15)
-    def _check_volumedriver(file_path):
+    def _check_volumedriver(volume_name, vpool_guid, volume_size=10*1024**3):
         """
         Async method to checks if a VOLUMEDRIVER `truncate` works on a vpool
         Always try to check if the file exists after performing this method
 
-        :param file_path: path of the file
-        :type file_path: str
-        :return: True if succeeded, False if failed
-        :rtype: bool
+        :param volume_name:
+        :param volume_size:
+        :param vpool_guid:
+        :return:
         """
-
-        return subprocess.check_output("truncate -s 10GB {0}".format(file_path), stderr=subprocess.STDOUT, shell=True)
+        vpool = VPoolHelper.get_vpool_by_guid(vpool_guid)
+        storagedriver = None
+        for std in vpool.storagedrivers:
+            if VolumedriverHealthCheck.MACHINE_DETAILS.guid == std.storagerouter_guid:
+                storagedriver = std
+                break
+        if storagedriver is None:
+            raise ValueError('Could not find the right storagedriver for storagerouter {0}'.format(VolumedriverHealthCheck.MACHINE_DETAILS.guid))
+        try:
+            vdisk_guid = VDiskController.create_new(volume_name, volume_size, storagedriver.guid)
+            return vdisk_guid
+        except Exception as ex:
+            raise IOError(ex)
 
     @staticmethod
     @timeout_decorator.timeout(15)
-    def _check_volumedriver_remove(file_path):
+    def _check_volumedriver_remove(vdisk_guid):
         """
         Async method to checks if a VOLUMEDRIVER `remove` works on a vpool
         Always try to check if the file exists after performing this method
 
-        :param file_path: path of the file
-        :type file_path: str
+        :param vdisk_guid: guid of the vdisk
+        :type vdisk_guid: str
         :return: True if succeeded, False if failed
         :rtype: bool
         """
 
-        return subprocess.check_output("rm -f {0}".format(file_path), stderr=subprocess.STDOUT, shell=True)
+        try:
+            VDiskController.delete(vdisk_guid)
+            return True
+        except RuntimeError as ex:
+            raise IOError('Could not remove vdisk {0}. Got {1}'.format(vdisk_guid, ex))
 
     @staticmethod
     @ExposeToCli('volumedriver', 'check-volumedrivers')
@@ -108,14 +123,14 @@ class VolumedriverHealthCheck(object):
 
         if len(vpools) != 0:
             for vp in vpools:
-                name = "ovs-healthcheck-test-{0}".format(VolumedriverHealthCheck.MACHINE_ID)
+                name = "ovs-healthcheck-test-{0}.raw".format(VolumedriverHealthCheck.MACHINE_ID)
                 if vp.guid in VolumedriverHealthCheck.MACHINE_DETAILS.vpools_guids:
                     try:
-                        file_path = "/mnt/{0}/{1}.raw".format(vp.name, name)
-                        VolumedriverHealthCheck._check_volumedriver(file_path)
+                        file_path = "/mnt/{0}/{1}".format(vp.name, name)
+                        vdisk_guid = VolumedriverHealthCheck._check_volumedriver(name, vp.guid)
                         if os.path.exists(file_path):
                             # working
-                            VolumedriverHealthCheck._check_volumedriver_remove(file_path)
+                            VolumedriverHealthCheck._check_volumedriver_remove(vdisk_guid)
                             logger.success("Volumedriver of vPool '{0}' is working fine!".format(vp.name),
                                            'volumedriver_{0}'.format(vp.name))
                         else:
@@ -126,10 +141,12 @@ class VolumedriverHealthCheck(object):
                         # timeout occured, action took too long
                         logger.failure("Volumedriver of vPool '{0}' seems to have `timeout` problems"
                                        .format(vp.name), 'volumedriver_{0}'.format(vp.name))
-                    except subprocess.CalledProcessError:
+                    except IOError:
                         # can be input/output error by volumedriver
                         logger.failure("Volumedriver of vPool '{0}' seems to have `input/output` problems"
                                        .format(vp.name), 'volumedriver_{0}'.format(vp.name))
+                    except ValueError as ex:
+                        logger.failure(ex, 'volumedriver_{0}'.format(vp.name))
 
                 else:
                     logger.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name),
