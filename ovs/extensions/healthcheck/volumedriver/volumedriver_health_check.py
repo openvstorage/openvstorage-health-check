@@ -16,12 +16,13 @@
 import os
 import time
 import timeout_decorator
+from ovs.lib.vdisk import VDiskController
 from ovs.extensions.generic.system import System
 from timeout_decorator.timeout_decorator import TimeoutError
 from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.extensions.healthcheck.helpers.vdisk import VDiskHelper
 from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
-from ovs.lib.vdisk import VDiskController
+from ovs.extensions.healthcheck.helpers.exceptions import VDiskNotFoundError
 
 
 class VolumedriverHealthCheck(object):
@@ -33,7 +34,7 @@ class VolumedriverHealthCheck(object):
     MACHINE_DETAILS = System.get_my_storagerouter()
     MACHINE_ID = System.get_my_machine_id()
     VDISK_CHECK_SIZE = 10737418240  # 10GB in bytes
-    VDISK_TIMEOUT_BEFORE_DELETE = 2
+    VDISK_TIMEOUT_BEFORE_DELETE = 0.5
 
     @staticmethod
     @ExposeToCli('volumedriver', 'check_dtl')
@@ -66,48 +67,52 @@ class VolumedriverHealthCheck(object):
             logger.skip("No vdisks present in cluster.", test_name)
 
     @staticmethod
-    @timeout_decorator.timeout(15)
-    def _check_volumedriver(volume_name, vpool_guid, volume_size=VDISK_CHECK_SIZE):
+    @timeout_decorator.timeout(30)
+    def _check_volumedriver(vdisk_name, storagedriver_guid, vpool_name, vdisk_size=VDISK_CHECK_SIZE):
         """
-        Async method to checks if a VOLUMEDRIVER `truncate` works on a vpool
-        Always try to check if the file exists after performing this method
+        Checks if the volumedriver can create a new vdisk
 
-        :param volume_name:
-        :param volume_size:
-        :param vpool_guid:
-        :return:
-        """
-        vpool = VPoolHelper.get_vpool_by_guid(vpool_guid)
-        storagedriver = None
-        for std in vpool.storagedrivers:
-            if VolumedriverHealthCheck.MACHINE_DETAILS.guid == std.storagerouter_guid:
-                storagedriver = std
-                break
-        if storagedriver is None:
-            raise ValueError('Could not find the right storagedriver for storagerouter {0}'.format(VolumedriverHealthCheck.MACHINE_DETAILS.guid))
-        try:
-            return VDiskController.create_new(volume_name, volume_size, storagedriver.guid)
-        except Exception as ex:
-            raise IOError(ex.message)
-
-    @staticmethod
-    @timeout_decorator.timeout(15)
-    def _check_volumedriver_remove(vdisk_guid):
-        """
-        Async method to checks if a VOLUMEDRIVER `remove` works on a vpool
-        Always try to check if the file exists after performing this method
-
-        :param vdisk_guid: guid of the vdisk
-        :type vdisk_guid: str
+        :param vdisk_name: name of a vdisk (e.g. test.raw)
+        :type vdisk_name: str
+        :param vdisk_size: size of the volume in bytes (e.g. 10737418240 is 10GB in bytes)
+        :type vdisk_size: int
+        :param storagedriver_guid: guid of a storagedriver
+        :type storagedriver_guid: str
         :return: True if succeeded, False if failed
         :rtype: bool
         """
 
+        VDiskController.create_new(vdisk_name, vdisk_size, storagedriver_guid)
+
+        return os.path.exists("/mnt/{0}/{1}".format(vpool_name, vdisk_name))
+
+    @staticmethod
+    @timeout_decorator.timeout(30)
+    def _check_volumedriver_remove(vpool_name, vdisk_name, present=True):
+        """
+        Remove a vdisk from a vpool
+
+        :param vdisk_name: name of a vdisk (e.g. test.raw)
+        :type vdisk_name: str
+        :param vpool_name: name of a vpool
+        :type vpool_name: str
+        :param present: should the disk be present?
+        :type present: bool
+        :return: True if disk is not present anymore
+        :rtype: bool
+        """
+
         try:
-            VDiskController.delete(vdisk_guid)
+            vdisk = VDiskHelper.get_vdisk_by_name(vdisk_name=vdisk_name, vpool_name=vpool_name)
+            VDiskController.delete(vdisk.guid)
+
             return True
-        except RuntimeError as ex:
-            raise IOError('Could not remove vdisk {0}. Got {1}'.format(vdisk_guid, ex.message))
+        except VDiskNotFoundError:
+            # not found, if it should be present, reraise the exception
+            if present:
+                raise
+            else:
+                return True
 
     @staticmethod
     @ExposeToCli('volumedriver', 'check-volumedrivers')
@@ -128,18 +133,32 @@ class VolumedriverHealthCheck(object):
                 name = "ovs-healthcheck-test-{0}.raw".format(VolumedriverHealthCheck.MACHINE_ID)
                 if vp.guid in VolumedriverHealthCheck.MACHINE_DETAILS.vpools_guids:
                     try:
-                        file_path = "/mnt/{0}/{1}".format(vp.name, name)
-                        vdisk_guid = VolumedriverHealthCheck._check_volumedriver(name, vp.guid)
-                        time.sleep(VolumedriverHealthCheck.VDISK_TIMEOUT_BEFORE_DELETE)
-                        if os.path.exists(file_path):
-                            # working
-                            VolumedriverHealthCheck._check_volumedriver_remove(vdisk_guid)
-                            logger.success("Volumedriver of vPool '{0}' is working fine!".format(vp.name),
-                                           'volumedriver_{0}'.format(vp.name))
+                        # delete if previous vdisk with this name exists
+                        if VolumedriverHealthCheck._check_volumedriver_remove(vpool_name=vp.name, vdisk_name=name,
+                                                                              present=False):
+                            storagedriver_guid = next((storagedriver.guid for storagedriver in vp.storagedrivers
+                                                       if storagedriver.storagedriver_id == vp.name +
+                                                       VolumedriverHealthCheck.MACHINE_ID))
+                            # create a new one
+                            if VolumedriverHealthCheck._check_volumedriver(name, storagedriver_guid, vp.name):
+                                # delete the recently created
+                                if VolumedriverHealthCheck._check_volumedriver_remove(vpool_name=vp.name,
+                                                                                      vdisk_name=name):
+                                    # working
+                                    logger.success("Volumedriver of vPool '{0}' is working fine!".format(vp.name),
+                                                   'volumedriver_{0}'.format(vp.name))
+                                else:
+                                    # not working
+                                    logger.failure("Volumedriver of vPool '{0}' seems to have problems"
+                                                   .format(vp.name), 'volumedriver_{0}'.format(vp.name))
+                            else:
+                                # not working
+                                logger.failure("Something went wrong during vdisk creation on vpool '{0}' ..."
+                                               .format(vp.name), 'volumedriver_{0}'.format(vp.name))
                         else:
-                            # not working, file does not exists
-                            logger.failure("Volumedriver of vPool '{0}' seems to have problems"
+                            logger.failure("Volumedriver of vPool '{0}' seems to have problems if vdisk already exists"
                                            .format(vp.name), 'volumedriver_{0}'.format(vp.name))
+
                     except TimeoutError:
                         # timeout occured, action took too long
                         logger.failure("Volumedriver of vPool '{0}' seems to have `timeout` problems"
@@ -147,11 +166,16 @@ class VolumedriverHealthCheck(object):
                     except IOError as ex:
                         # can be input/output error by volumedriver
                         logger.failure("Volumedriver of vPool '{0}' seems to have `input/output` problems. "
-                                       "Got {1} while executing.".format(vp.name, ex.message),
+                                       "Got `{1}` while executing.".format(vp.name, ex.message),
                                        'volumedriver_{0}'.format(vp.name))
-                    except ValueError as ex:
-                        logger.failure(ex, 'volumedriver_{0}'.format(vp.name))
-
+                    except (RuntimeError, VDiskNotFoundError) as ex:
+                        logger.failure("Volumedriver of vPool '{0}' seems to have `runtime` problems. "
+                                       "Got `{1}` while executing.".format(vp.name, ex), 'volumedriver_{0}'
+                                       .format(vp.name))
+                    except Exception as ex:
+                        logger.failure("Volumedriver of vPool '{0}' seems to have `exception` problems. "
+                                       "Got `{1}` while executing.".format(vp.name, ex), 'volumedriver_{0}'
+                                       .format(vp.name))
                 else:
                     logger.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name),
                                 'volumedriver_{0}'.format(vp.name))
