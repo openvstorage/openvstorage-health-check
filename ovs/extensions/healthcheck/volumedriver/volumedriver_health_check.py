@@ -14,7 +14,7 @@
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
 import os
-import subprocess
+import time
 import timeout_decorator
 from ovs.extensions.generic.system import System
 from timeout_decorator.timeout_decorator import TimeoutError
@@ -22,6 +22,7 @@ from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.extensions.healthcheck.helpers.vdisk import VDiskHelper
 from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
 from ovs.lib.vdisk import VDiskController
+
 
 class VolumedriverHealthCheck(object):
     """
@@ -32,6 +33,7 @@ class VolumedriverHealthCheck(object):
     MACHINE_DETAILS = System.get_my_storagerouter()
     MACHINE_ID = System.get_my_machine_id()
     VDISK_CHECK_SIZE = 10737418240  # 10GB in bytes
+    VDISK_TIMEOUT_BEFORE_DELETE = 2
 
     @staticmethod
     @ExposeToCli('volumedriver', 'check_dtl')
@@ -127,15 +129,8 @@ class VolumedriverHealthCheck(object):
                 if vp.guid in VolumedriverHealthCheck.MACHINE_DETAILS.vpools_guids:
                     try:
                         file_path = "/mnt/{0}/{1}".format(vp.name, name)
-                        try:
-                            vdisk_guid = VolumedriverHealthCheck._check_volumedriver(name, vp.guid)
-                        except IOError as ex:
-                            # Try to cleanup
-                            try:
-                                subprocess.check_output("rm -rf {0}".format(file_path), stderr=subprocess.STDOUT, shell=True)
-                            except:
-                                pass
-                            raise
+                        vdisk_guid = VolumedriverHealthCheck._check_volumedriver(name, vp.guid)
+                        time.sleep(VolumedriverHealthCheck.VDISK_TIMEOUT_BEFORE_DELETE)
                         if os.path.exists(file_path):
                             # working
                             VolumedriverHealthCheck._check_volumedriver_remove(vdisk_guid)
@@ -151,8 +146,9 @@ class VolumedriverHealthCheck(object):
                                        .format(vp.name), 'volumedriver_{0}'.format(vp.name))
                     except IOError as ex:
                         # can be input/output error by volumedriver
-                        logger.failure("Volumedriver of vPool '{0}' seems to have `input/output` problems. Got {1} while executing."
-                                       .format(vp.name, ex.message), 'volumedriver_{0}'.format(vp.name))
+                        logger.failure("Volumedriver of vPool '{0}' seems to have `input/output` problems. "
+                                       "Got {1} while executing.".format(vp.name, ex.message),
+                                       'volumedriver_{0}'.format(vp.name))
                     except ValueError as ex:
                         logger.failure(ex, 'volumedriver_{0}'.format(vp.name))
 
