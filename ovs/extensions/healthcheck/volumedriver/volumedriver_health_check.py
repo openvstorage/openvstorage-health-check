@@ -16,14 +16,13 @@
 import os
 import time
 import timeout_decorator
-from ovs.lib.vdisk import VDiskController
 from ovs.extensions.generic.system import System
 from timeout_decorator.timeout_decorator import TimeoutError
 from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.extensions.healthcheck.helpers.vdisk import VDiskHelper
 from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
 from ovs.extensions.healthcheck.helpers.exceptions import VDiskNotFoundError
-
+from ovs.lib.vdisk import VDiskController
 
 class VolumedriverHealthCheck(object):
     """
@@ -78,7 +77,7 @@ class VolumedriverHealthCheck(object):
         :type vdisk_size: int
         :param storagedriver_guid: guid of a storagedriver
         :type storagedriver_guid: str
-        :return: True if succeeded, False if failed
+        :return: True if succeeds
         :rtype: bool
         """
 
