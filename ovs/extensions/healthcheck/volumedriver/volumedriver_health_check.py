@@ -83,8 +83,7 @@ class VolumedriverHealthCheck(object):
         """
 
         VDiskController.create_new(vdisk_name, vdisk_size, storagedriver_guid)
-
-        return os.path.exists("/mnt/{0}/{1}".format(vpool_name, vdisk_name))
+        return True
 
     @staticmethod
     @timeout_decorator.timeout(30)
