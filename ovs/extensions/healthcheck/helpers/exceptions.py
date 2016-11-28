@@ -88,6 +88,7 @@ class ImageConvertError(Exception):
     """
     pass
 
+
 class ObjectNotFoundException(Exception):
     """
     Raised when an object was queries that doesn't exist
