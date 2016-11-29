@@ -22,7 +22,6 @@ Alba Health Check Module
 
 import os
 import re
-import ast
 import uuid
 import time
 import hashlib
@@ -133,7 +132,6 @@ class AlbaHealthCheck(object):
 
         # ignore possible subprocess output
         fnull = open(os.devnull, 'w')
-
         # try put/get/verify on all available proxies on the local node
         for service in ServiceHelper.get_services():
             if service.storagerouter_guid == AlbaHealthCheck.MACHINE_DETAILS.guid:
