@@ -109,7 +109,7 @@ class AlbaHealthCheck(object):
                     })
             except RuntimeError as e:
                 errors_found += 1
-                logger.failure("Error during fetch of alba backend '{0}': {1}".format(abl.name, e), 'check_alba', False)
+                logger.failure("Error during fetch of alba backend '{0}': {1}".format(abl.name, e), 'check_alba')
 
         # give a precheck result for fetching the backend data
         if errors_found == 0:
