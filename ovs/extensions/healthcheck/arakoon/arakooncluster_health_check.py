@@ -222,6 +222,9 @@ class ArakoonHealthCheck(object):
         # tlx file must have young timestamp than this one.
         max_age_timestamp = time.mktime((date.today() - timedelta(days=max_collapse_age)).timetuple())
 
+        if arakoon_clusters is None:
+            arakoon_clusters = ArakoonHealthCheck.fetch_clusters(logger)[0]
+
         for arakoon, arakoon_nodes in arakoon_clusters.iteritems():
             for node, config in arakoon_nodes.iteritems():
                 if node != ArakoonHealthCheck.MACHINE_DETAILS.machine_id:
