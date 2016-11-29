@@ -21,7 +21,9 @@ from timeout_decorator.timeout_decorator import TimeoutError
 from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.extensions.healthcheck.helpers.vdisk import VDiskHelper
 from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
+from ovs.dal.exceptions import ObjectNotFoundException
 from ovs.lib.vdisk import VDiskController
+
 
 class VolumedriverHealthCheck(object):
     """
@@ -47,7 +49,12 @@ class VolumedriverHealthCheck(object):
         # Fetch vdisks hosted on this machine
         if len(VolumedriverHealthCheck.MACHINE_DETAILS.vdisks_guids) != 0:
             for vdisk_guid in VolumedriverHealthCheck.MACHINE_DETAILS.vdisks_guids:
-                vdisk = VDiskHelper.get_vdisk_by_guid(vdisk_guid)
+                try:
+                    vdisk = VDiskHelper.get_vdisk_by_guid(vdisk_guid)
+                except ObjectNotFoundException:
+                    # ignore because this can create a race condition
+                    pass
+
                 # Check dtl
                 dtl_status = vdisk.dtl_status
                 if dtl_status == "ok_standalone":
