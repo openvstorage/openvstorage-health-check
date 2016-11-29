@@ -178,5 +178,5 @@ class VolumedriverHealthCheck(object):
         :param logger: logging object
         :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
-        VolumedriverHealthCheck.check_volumedrivers(logger)
         VolumedriverHealthCheck.check_dtl(logger)
+        VolumedriverHealthCheck.check_volumedrivers(logger)
