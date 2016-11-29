@@ -33,9 +33,10 @@ You may delete this section
 
 ## Additional information
 ### Setup
-- [ ] Hyperconverged
-- [ ] Hyperscale
-- [ ] Geoscale
+//Keep the one that you are using
+- Hyperconverged
+- Hyperscale
+- Geoscale
 
 ### Packages
 // List packages in the code tags using dpkg -l | grep openvstorage
