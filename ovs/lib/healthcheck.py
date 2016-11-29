@@ -416,5 +416,4 @@ class HealthCheckController(object):
         arguments = sys.argv
         # Remove filename
         del arguments[0]
-        arguments += ['unattended']
         HealthCheckController.run_method(*arguments)
