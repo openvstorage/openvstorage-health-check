@@ -53,7 +53,7 @@ class VolumedriverHealthCheck(object):
                     vdisk = VDiskHelper.get_vdisk_by_guid(vdisk_guid)
                 except ObjectNotFoundException:
                     # ignore because this can create a race condition
-                    pass
+                    continue
 
                 # Check dtl
                 dtl_status = vdisk.dtl_status
