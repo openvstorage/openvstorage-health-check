@@ -22,7 +22,6 @@ Alba Health Check Module
 
 import os
 import re
-import ast
 import uuid
 import time
 import hashlib
