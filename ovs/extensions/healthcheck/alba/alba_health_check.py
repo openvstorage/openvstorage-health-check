@@ -117,7 +117,7 @@ class AlbaHealthCheck(object):
             logger.failure("Error during fetch of alba backend '{0}': {1}".format(abl.name, e), 'fetch_alba_backends')
 
         return result
-    
+
     @staticmethod
     @ExposeToCli('alba', 'proxy-test')
     def check_if_proxies_work(logger):
@@ -132,6 +132,7 @@ class AlbaHealthCheck(object):
 
         # ignore possible subprocess output
         fnull = open(os.devnull, 'w')
+
         # try put/get/verify on all available proxies on the local node
         for service in ServiceHelper.get_services():
             if service.storagerouter_guid == AlbaHealthCheck.MACHINE_DETAILS.guid:
@@ -228,7 +229,8 @@ class AlbaHealthCheck(object):
                                     AlbaCLI.run('proxy-delete-object', host=ip, port=service.ports[0], extra_params=[namespace_key, object_key])
                                     subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_LOC)], stdout=fnull, stderr=subprocess.STDOUT)
                                     subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC)], stdout=fnull, stderr=subprocess.STDOUT)
-                                    # @todo uncomment when the issue has been that blocks uploads after namespaces are created
+                                    # @TODO uncomment when the issue has been that blocks uploads after namespaces are created
+                                    # linked ticket: https://github.com/openvstorage/alba/issues/427
                                     # # Remove namespace afterwards
                                     # logger.info("Deleting namespace '{0}'.".format(namespace_key))
                                     # AlbaCLI.run('proxy-delete-namespace', host=ip, port=service.ports[0], extra_params=[namespace_key])
@@ -362,27 +364,24 @@ class AlbaHealthCheck(object):
                             if backend.get('is_available_for_vpool'):
                                 if len(defectivedisks) == 0:
                                     logger.success("Alba backend '{0}' should be AVAILABLE FOR vPOOL USE,"
-                                                   " ALL disks are working fine!".format(backend.get('name')),
+                                                   " ALL asds are working fine!".format(backend.get('name')),
                                                    'alba_backend_{0}'.format(backend.get('name')))
                                 else:
                                     logger.warning("Alba backend '{0}' should be "
-                                                   "AVAILABLE FOR vPOOL USE with {1} disks,"
-                                                   " BUT there are {2} defective disks: {3}".format(backend.get('name'),
-                                                                                                    len(workingdisks),
-                                                                                                    len(defectivedisks),
-                                                                                                    ', '
-                                                                                                    .join(defectivedisks
-                                                                                                          )),
+                                                   "AVAILABLE FOR vPOOL USE with {1} asds,"
+                                                   " BUT there are {2} defective asds: {3}"
+                                                   .format(backend.get('name'), len(workingdisks), len(defectivedisks),
+                                                           ', '.join(defectivedisks)),
                                                    'alba_backend_{0}'.format(backend.get('name'), len(defectivedisks)))
                             else:
                                 if len(workingdisks) == 0 and len(defectivedisks) == 0:
                                     logger.skip("Alba backend '{0}' is NOT available for vPool use, there are no"
-                                                " disks assigned to this backend!".format(backend.get('name')),
+                                                " asds assigned to this backend!".format(backend.get('name')),
                                                 'alba_backend_{0}'.format(backend.get('name')))
                                 else:
                                     logger.failure("Alba backend '{0}' is NOT available for vPool use, preset"
-                                                   " requirements NOT SATISFIED! There are {1} working disks AND {2}"
-                                                   " defective disks!".format(backend.get('name'), len(workingdisks),
+                                                   " requirements NOT SATISFIED! There are {1} working asds AND {2}"
+                                                   " defective asds!".format(backend.get('name'), len(workingdisks),
                                                                               len(defectivedisks)),
                                                    'alba_backend_{0}'.format(backend.get('name')))
                         else:
@@ -405,6 +404,9 @@ class AlbaHealthCheck(object):
         """
         Send disk safety for each vpool and the amount of namespaces with the lowest disk safety to DB
         """
+
+        logger.info("Checking if objects need to be repaired...")
+
         points = []
         abms = []
 
@@ -424,14 +426,17 @@ class AlbaHealthCheck(object):
             if service_name not in abms:
                 continue
 
-            config = "arakoon://config/ovs/arakoon/{0}/config?ini=%2Fopt%2FOpenvStorage%2Fconfig%2Farakoon_cacc.ini".format(service_name)
+            config = Configuration.get_configuration_path('ovs/arakoon/{0}/config'.format(service_name))
 
             # Fetch alba info
             try:
                 try:
-                    namespaces = AlbaCLI.run('show-namespaces', config=config, to_json=True)[1]
+                    # @TODO add this to extra_params to include errored asds. Currently there is a bug with it
+                    # Ticket: https://github.com/openvstorage/alba/issues/441
+                    # extra_params=["--include-errored-as-dead"]
+                    namespaces = AlbaCLI.run('get-disk-safety', config=config, to_json=True, extra_params=[])
                 except Exception as ex:
-                    raise SystemError("Could not execute 'alba show-namespaces'. Got {0}".format(ex.message))
+                    raise SystemError("Could not execute 'alba get-disk-safety'. Got {0}".format(ex.message))
                 try:
                     presets = AlbaCLI.run('list-presets', config=config, to_json=True)
                 except Exception as ex:
@@ -449,37 +454,20 @@ class AlbaHealthCheck(object):
                         max_lost_disks = policy[1]
 
             disk_lost_overview = {}
-            disk_safety_overview = {}
-            bucket_overview = {}
-            max_disk_safety = 0
             total_objects = 0
 
             for namespace in namespaces:
-                statistics = namespace['statistics']
-                bucket_counts = statistics['bucket_count']
-                preset_name = namespace['namespace']['preset_name']
-                for bucket_count in bucket_counts:
-                    bucket, objects = bucket_count
+                for bucket_safety in namespace['bucket_safety']:
+                    bucket = bucket_safety['bucket']
+                    objects = bucket_safety['count']
                     total_objects += objects
+                    applicable_dead_osds = bucket_safety['applicable_dead_osds']
                     # Amount of lost disks at this point
+                    bucket[2] = bucket[2] - applicable_dead_osds
                     disk_lost = bucket[0] + bucket[1] - bucket[2]
-                    disk_safety = bucket[1] - disk_lost
-                    if disk_safety > max_disk_safety:
-                        max_disk_safety = disk_safety
-
-                    if preset_name not in bucket_overview:
-                        bucket_overview[preset_name] = {}
-
-                    if str(bucket) not in bucket_overview[preset_name]:
-                        bucket_overview[preset_name][str(bucket)] = {'objects': 0, 'disk_safety': 0}
                     if disk_lost not in disk_lost_overview:
                         disk_lost_overview[disk_lost] = 0
-                    if disk_safety not in disk_safety_overview:
-                        disk_safety_overview[disk_safety] = 0
                     disk_lost_overview[disk_lost] += objects
-                    disk_safety_overview[disk_safety] += objects
-                    bucket_overview[preset_name][str(bucket)]['objects'] += objects
-                    bucket_overview[preset_name][str(bucket)]['disk_safety'] = disk_safety
 
             for disk_lost, objects in disk_lost_overview.iteritems():
                 lost = {
@@ -499,45 +487,53 @@ class AlbaHealthCheck(object):
         if len(points) == 0:
             logger.skip('Found no objects present of the system.', test_name)
         else:
-            total_objects = 0
-            object_to_be_repaired = 0
-            current_disks_lost = 0
+            backends_to_be_repaired = {}
             for result in points:
-                total_objects = result["fields"]["total_objects"]
                 # Ignore fully healthy ones
-                if result["tags"]["disk_lost"] != 0:
-                    current_disks_lost = result["tags"]["disk_lost"]
-                    object_to_be_repaired = result["fields"]["objects"]
-            # limit to 4 numbers
-            repair_percentage = float("{0:.4f}".format((float(object_to_be_repaired)/float(total_objects))*100))
-            if current_disks_lost == 0:
-                logger.success("Found no losts disks. All data is safe.")
+                if result["tags"]["disk_lost"] == 0:
+                    continue
+                total_objects = result["fields"]["total_objects"]
+                objects = result["fields"]["objects"]
+
+                backend_name = result["tags"]["backend_name"]
+
+                if backend_name not in backends_to_be_repaired:
+                    backends_to_be_repaired[backend_name] = {"objects": 0, "total_objects": total_objects}
+                backends_to_be_repaired[backend_name]["objects"] += objects
+
+            repair_percentage = 0
+            if len(backends_to_be_repaired) == 0:
+                logger.success("Found no backends with disk lost. All data is safe.")
             else:
-                logger.failure("Currently found {0} disks that are lost.".format(current_disks_lost))
-            logger.info("{0} out of {1} have to be repaired.".format(object_to_be_repaired, total_objects))
-            logger.info('{0}% of the objects have to be repaired'.format(repair_percentage))
+                logger.failure("Currently found {0} backend(s) with disk lost.".format(len(backends_to_be_repaired)))
+                for backend, disk_lost in backends_to_be_repaired.iteritems():
+                    # limit to 4 numbers
+                    repair_percentage = float("{0:.4f}".format((float(disk_lost['objects']) / float(disk_lost['total_objects'])) * 100))
+                    logger.warning("Backend {0}: {1} out of {2} objects have to be repaired."
+                                   .format(backend, disk_lost['objects'], disk_lost['total_objects']))
+                    logger.warning('Backend {0}: {1}% of the objects have to be repaired'.format(backend, repair_percentage),
+                                   'repair_percentage_{0}_{1}'.format(backend, repair_percentage))
             # Log if the amount is rising
             cache = CacheHelper.get()
-            repair_rising = None
             if cache is None:
                 # First run of healthcheck
-                logger.info("Object repair will be monitored on incrementations.")
-            elif cache["repair_percentage"] < repair_percentage:
+                logger.success("Object repair will be monitored on incrementations.", 'repair_OK')
+            elif repair_percentage == 0:
                 # Amount of objects to repair are rising
-                repair_rising = True
-                logger.failure("Amount of objects to repair are rising!")
-            else:
-                repair_rising = False
-                logger.success("Amount of objects to repair are descending or the same!")
+                logger.success("No objects in objects repair queue", 'repair_OK')
+            elif cache["repair_percentage"] > repair_percentage:
+                # Amount of objects to repair is descending
+                logger.failure("Amount of objects to repair is descending!", 'repair_DESCENDING')
+            elif cache["repair_percentage"] < repair_percentage:
+                # Amount of objects to repair is rising
+                logger.failure("Amount of objects to repair are rising!", 'repair_RISING')
+            elif cache["repair_percentage"] == repair_percentage:
+                # Amount of objects to repair is the same
+                logger.success("Amount of objects to repair are the same!", 'repair_SAME')
 
-            # Recap for Ops checkMK
-            logger.custom('Recap of disk-safety: {0}% of the objects have to be repaired. {1} lost disks and number of objects to repair are {2}.'
-                          .format(repair_percentage, current_disks_lost, 'rising' if repair_rising is True else 'descending or the same'),
-                          test_name, " ".join([str(repair_percentage), 'SUCCESS' if current_disks_lost == 0 else 'FAILURE', 'FAILURE' if repair_rising is True else 'SUCCESS']))
             result["repair_percentage"] = repair_percentage
-            result["lost_disks"] = current_disks_lost
+            result["lost_backends"] = backends_to_be_repaired
             CacheHelper.set(result)
-            return result
         return result
 
     @staticmethod
