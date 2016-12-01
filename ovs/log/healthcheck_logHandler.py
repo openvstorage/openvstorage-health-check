@@ -35,6 +35,7 @@ class _Colors(object):
     WARNING = '\033[93m'
     EXCEPTION = '\033[91m'
     FAILED = '\033[91m'
+    EXCEPTION = '\033[91m'
     SKIPPED = '\033[95m'
     CUSTOM = '\033[94m'
     ENDC = '\033[0m'
@@ -61,6 +62,12 @@ class HCLogHandler(object):
     }
     # Exclude info values in the dict
     EXCLUDED_MESSAGES = ['INFO']
+    # Log types that need to be replaced before logging to file
+    LOG_CHANGING = {
+        "success": "info",
+        "skip": "info",
+        "custom": "info"
+    }
 
     def __init__(self, print_progress=True):
         """
@@ -108,7 +115,11 @@ class HCLogHandler(object):
             error_type = self.MESSAGES[error_message]
             if not error_type or error_type not in self.SUPPORTED_TYPES:
                 raise ValueError('Found no error_type')
-
+            # Log to file - success and skip should go back to info
+            if error_message in HCLogHandler.LOG_CHANGING:
+                getattr(self._logger, HCLogHandler.LOG_CHANGING[error_message])("Test: {0} - {1}".format(test_name, msg))
+            else:
+                getattr(self._logger, error_message)("Test: {0} - {1}".format(test_name, msg))
             if test_name is not None:
                 if error_type not in HCLogHandler.EXCLUDED_MESSAGES:
                     # Enable custom error type:
@@ -133,7 +144,7 @@ class HCLogHandler(object):
         # Checked with Jeroen Maelbrancke for this
         excluded_messages = ['INFO', 'DEBUG']
         if print_progress:
-            for key, value in sorted(self.result_dict.items(), key=lambda x: x[1]):
+            for key, value in sorted(self.result_dict.items(), key=lambda x: x[0]):
                 if value not in excluded_messages:
                     print "{0} {1}".format(key, value)
         return self.result_dict
