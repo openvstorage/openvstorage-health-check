@@ -35,7 +35,6 @@ class _Colors(object):
     WARNING = '\033[93m'
     EXCEPTION = '\033[91m'
     FAILED = '\033[91m'
-    EXCEPTION = '\033[91m'
     SKIPPED = '\033[95m'
     CUSTOM = '\033[94m'
     ENDC = '\033[0m'
