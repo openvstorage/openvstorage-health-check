@@ -230,6 +230,7 @@ class AlbaHealthCheck(object):
                                     subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_LOC)], stdout=fnull, stderr=subprocess.STDOUT)
                                     subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC)], stdout=fnull, stderr=subprocess.STDOUT)
                                     # @TODO uncomment when the issue has been that blocks uploads after namespaces are created
+                                    # linked ticket: https://github.com/openvstorage/alba/issues/427
                                     # # Remove namespace afterwards
                                     # logger.info("Deleting namespace '{0}'.".format(namespace_key))
                                     # AlbaCLI.run('proxy-delete-namespace', host=ip, port=service.ports[0], extra_params=[namespace_key])
@@ -368,12 +369,9 @@ class AlbaHealthCheck(object):
                                 else:
                                     logger.warning("Alba backend '{0}' should be "
                                                    "AVAILABLE FOR vPOOL USE with {1} asds,"
-                                                   " BUT there are {2} defective asds: {3}".format(backend.get('name'),
-                                                                                                    len(workingdisks),
-                                                                                                    len(defectivedisks),
-                                                                                                    ', '
-                                                                                                    .join(defectivedisks
-                                                                                                          )),
+                                                   " BUT there are {2} defective asds: {3}"
+                                                   .format(backend.get('name'), len(workingdisks), len(defectivedisks),
+                                                           ', '.join(defectivedisks)),
                                                    'alba_backend_{0}'.format(backend.get('name'), len(defectivedisks)))
                             else:
                                 if len(workingdisks) == 0 and len(defectivedisks) == 0:
