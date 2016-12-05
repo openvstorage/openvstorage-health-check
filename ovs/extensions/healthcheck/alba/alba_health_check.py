@@ -362,7 +362,6 @@ class AlbaHealthCheck(object):
                                                 extra_params=[key],
                                                 to_json=False)
                             except RuntimeError:
-                                raise
                                 raise ConnectionFailedException('Connection failed to disk')
 
                             # check if put/get is successfull
