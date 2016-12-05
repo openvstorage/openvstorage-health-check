@@ -642,9 +642,10 @@ class OpenvStorageHealthCheck(object):
 
                 # display discrepancies for vPool
                 if len(missing_in_volumedriver) != 0:
-                    logger.warning("Detected volumes that are MISSING in volumedriver but ARE in ovsdb in vPool (a known cause is a faulty preset) "
-                                   "vpool name: {0} - vdisk guid(s):{1} ".format(vp.name, ' '.join(missing_in_volumedriver)),
-                                    'discrepancies_ovsdb_{0}'.format(vp.name))
+                    logger.warning("Detected volumes that are MISSING in volumedriver but ARE in ovsdb in vPool"
+                                   "vpool name: {0} - vdisk guid(s):{1} "
+                                   .format(vp.name, ' '.join(missing_in_volumedriver)),
+                                   'discrepancies_ovsdb_{0}'.format(vp.name))
 
                 else:
                     logger.success("NO discrepancies found for ovsdb in vPool '{0}'".format(vp.name),
@@ -653,7 +654,8 @@ class OpenvStorageHealthCheck(object):
                 if len(missing_in_model) != 0:
                     logger.warning("Detected volumes that are AVAILABLE in volumedriver "
                                    "but ARE NOT in ovsdb in vPool "
-                                   "vpool name: {0} - vdisk volume id(s):{1}".format(vp.name, ' '.join(missing_in_model)),
+                                   "vpool name: {0} - vdisk volume id(s):{1}"
+                                   .format(vp.name, ' '.join(missing_in_model)),
                                    'discrepancies_voldrv_{0}'.format(vp.name))
                 else:
                     logger.success("NO discrepancies found for voldrv in vPool '{0}'".format(vp.name),
