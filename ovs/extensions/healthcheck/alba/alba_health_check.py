@@ -33,6 +33,7 @@ from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.helpers.cache import CacheHelper
 from ovs.extensions.healthcheck.decorators import ExposeToCli
+from ovs.extensions.healthcheck.helpers.albacli import AlbaCLI
 from ovs.extensions.healthcheck.helpers.alba_node import AlbaNodeHelper
 from ovs.extensions.healthcheck.helpers.backend import BackendHelper
 from ovs.extensions.healthcheck.helpers.configuration import ConfigurationManager, ConfigurationProduct
@@ -40,7 +41,6 @@ from ovs.extensions.healthcheck.helpers.exceptions import ObjectNotFoundExceptio
     DiskNotFoundException, ConfigNotMatchedException, AlbaException
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
 from ovs.extensions.healthcheck.helpers.storagedriver import StoragedriverHelper
-from ovs.extensions.healthcheck.helpers.albacli import AlbaCLI
 
 
 class AlbaHealthCheck(object):
