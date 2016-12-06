@@ -149,3 +149,29 @@ class PlatformNotSupportedException(Exception):
     Raised when the platform is not supported
     """
     pass
+
+
+class AlbaException(Exception):
+    """
+    Exceptions by AlbaCli will be derived from this class
+    """
+    ALBA_COMMANDS = [
+        "proxy-create-namespace",
+        "show-namespace",
+        "proxy-upload-object",
+        "download-object",
+        "proxy-delete-object"
+     ]
+
+    def __init__(self, message, alba_command):
+        # Call the base class constructor with the parameters it needs
+        super(AlbaException, self).__init__(message)
+        # Own properties
+        if alba_command in AlbaException.ALBA_COMMANDS:
+            self.alba_command = alba_command
+        else:
+            raise ValueError("'{0}' is not a valid alba command. Valid commands are {1}"
+                             .format(alba_command, " ".join(AlbaException.ALBA_COMMANDS)))
+
+    def __str__(self):
+        return "Command '{0}' failed with '{1}'.".format(self.alba_command, self.message)

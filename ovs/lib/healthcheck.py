@@ -207,7 +207,7 @@ class HealthCheckController(object):
         logger.info("SUCCESS={0} FAILED={1} SKIPPED={2} WARNING={3} EXCEPTION={4}"
                        .format(logger.counters['SUCCESS'], logger.counters['FAILED'],
                                logger.counters['SKIPPED'], logger.counters['WARNING'],
-                               logger.counters['EXCEPTION']), 'exception_occured')
+                               logger.counters['EXCEPTION']))
 
         if silent_mode:
             result = logger.get_results(False)
