@@ -142,7 +142,7 @@ class OpenvStorageHealthCheck(object):
             logger.failure("Some logfiles are TOO BIG, please check these files {0}!".format(', '.join(too_big)),
                            'log_size')
         else:
-            logger.success("ALL log files are ok!", 'log_size')
+            logger.success("ALL log files are ok! Checked {0}".format(', '.join(good_size)), 'log_size')
 
     @staticmethod
     def _list_logs_in_directory(pwd):
@@ -501,20 +501,18 @@ class OpenvStorageHealthCheck(object):
 
     @staticmethod
     @timeout_decorator.timeout(5)
-    def _check_filedriver_remove(vp_name, test_name):
+    def _check_filedriver_remove(vp_name):
         """
         Async method to checks if a FILEDRIVER `remove` works on a vpool
         Always try to check if the file exists after performing this method
 
         :param vp_name: name of the vpool
         :type vp_name: str
-        :param test_name: name of the test file (e.g. `ovs-healthcheck-MACHINE_ID`)
-        :type test_name: str
         :return: True if succeeded, False if failed
         :rtype: bool
         """
 
-        return subprocess.check_output("rm -f /mnt/{0}/{1}.xml".format(vp_name, test_name),
+        return subprocess.check_output("rm -f /mnt/{0}/ovs-healthcheck-test-*.xml".format(vp_name),
                                        stderr=subprocess.STDOUT, shell=True)
 
     @staticmethod
@@ -540,7 +538,7 @@ class OpenvStorageHealthCheck(object):
                         OpenvStorageHealthCheck._check_filedriver(vp.name, name)
                         if os.path.exists("/mnt/{0}/{1}.xml".format(vp.name, name)):
                             # working
-                            OpenvStorageHealthCheck._check_filedriver_remove(vp.name, name)
+                            OpenvStorageHealthCheck._check_filedriver_remove(vp.name)
                             logger.success("Filedriver for vPool '{0}' is working fine!".format(vp.name),
                                            'filedriver_{0}'.format(vp.name))
                         else:
