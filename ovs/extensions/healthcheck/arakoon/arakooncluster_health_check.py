@@ -28,7 +28,6 @@ import ConfigParser
 from StringIO import StringIO
 from datetime import date, timedelta, datetime
 from ovs.extensions.generic.system import System
-from ovs.extensions.healthcheck.helpers.helper import Helper
 from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.storage.persistent.pyrakoonstore import PyrakoonStore
@@ -222,6 +221,7 @@ class ArakoonHealthCheck(object):
         # tlx file must have young timestamp than this one.
 
         result = {"OK": [], "NOK": []}
+        # tlx file must have young timestamp than this one.
         max_age_timestamp = time.mktime((date.today() - timedelta(days=max_collapse_age)).timetuple())
 
         for arakoon, arakoon_nodes in arakoon_clusters.iteritems():
