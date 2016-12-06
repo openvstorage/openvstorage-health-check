@@ -104,14 +104,10 @@ class HealthCheckController(object):
             logger = HCLogHandler(not silent_mode and not unattended)
 
         if HealthCheckController.PLATFORM == 0:
-            try:
-                HealthCheckController._check_openvstorage(logger)
-                HealthCheckController._check_volumedriver(logger)
-                HealthCheckController._check_arakoon(logger)
-                HealthCheckController._check_alba(logger)
-            except:
-                logger.exception('Error during execution of the healthcheck')
-                raise
+            HealthCheckController.check_openvstorage(logger)
+            HealthCheckController.check_volumedriver(logger)
+            HealthCheckController.check_arakoon(logger)
+            HealthCheckController.check_alba(logger)
         else:
             raise PlatformNotSupportedException("Platform '{0}' is currently NOT supported"
                                                 .format(HealthCheckController.PLATFORM))
@@ -120,7 +116,7 @@ class HealthCheckController(object):
 
     @staticmethod
     @celery.task(name='ovs.healthcheck.check_openvstorage')
-    def _check_openvstorage(logger):
+    def check_openvstorage(logger):
         """
         Checks all critical components of Open vStorage
 
@@ -136,7 +132,7 @@ class HealthCheckController(object):
 
     @staticmethod
     @celery.task(name='ovs.healthcheck.check_arakoon')
-    def _check_arakoon(logger):
+    def check_arakoon(logger):
         """
         Checks all critical components of Arakoon
 
@@ -152,7 +148,7 @@ class HealthCheckController(object):
 
     @staticmethod
     @celery.task(name='ovs.healthcheck.check_alba')
-    def _check_alba(logger):
+    def check_alba(logger):
         """
         Checks all critical components of Alba
 
@@ -168,7 +164,7 @@ class HealthCheckController(object):
 
     @staticmethod
     @celery.task(name='ovs.healthcheck.check_volumedriver')
-    def _check_volumedriver(logger):
+    def check_volumedriver(logger):
         """
         Checks all critical components of Alba
 
@@ -399,11 +395,7 @@ class HealthCheckController(object):
 
                 logger = HCLogHandler(not silent_mode and not unattended)
                 # Execute method
-                try:
-                    getattr(cl, option['function'])(logger)
-                except:
-                    logger.exception('Error during execution of {0}.{1}'.format(cl, option['function']))
-                    raise
+                getattr(cl, option['function'])(logger)
                 # Get results
                 HealthCheckController.get_results(logger, unattended, silent_mode, module_name, method_name)
                 return

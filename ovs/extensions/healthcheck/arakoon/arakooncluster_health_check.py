@@ -217,11 +217,9 @@ class ArakoonHealthCheck(object):
         :return: list with OK, NOK status
         :rtype: list
         """
-        if arakoon_clusters is None:
-            arakoon_clusters = ArakoonHealthCheck.fetch_clusters(logger)[0]
-        # tlx file must have young timestamp than this one.
 
         result = {"OK": [], "NOK": []}
+        # tlx file must have young timestamp than this one.
         max_age_timestamp = time.mktime((date.today() - timedelta(days=max_collapse_age)).timetuple())
 
         for arakoon, arakoon_nodes in arakoon_clusters.iteritems():
