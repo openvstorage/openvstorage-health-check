@@ -28,7 +28,6 @@ import ConfigParser
 from StringIO import StringIO
 from datetime import date, timedelta, datetime
 from ovs.extensions.generic.system import System
-from ovs.extensions.healthcheck.helpers.helper import Helper
 from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.storage.persistent.pyrakoonstore import PyrakoonStore
@@ -217,6 +216,9 @@ class ArakoonHealthCheck(object):
         :return: list with OK, NOK status
         :rtype: list
         """
+        if arakoon_clusters is None:
+            arakoon_clusters = ArakoonHealthCheck.fetch_clusters(logger)[0]
+        # tlx file must have young timestamp than this one.
 
         result = {"OK": [], "NOK": []}
         # tlx file must have young timestamp than this one.
