@@ -13,8 +13,6 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
-import os
-import time
 import timeout_decorator
 from ovs.extensions.generic.system import System
 from timeout_decorator.timeout_decorator import TimeoutError
