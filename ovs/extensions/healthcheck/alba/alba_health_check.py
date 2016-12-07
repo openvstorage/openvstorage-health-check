@@ -621,5 +621,5 @@ class AlbaHealthCheck(object):
     @ExposeToCli('alba', 'test')
     def run(logger):
         AlbaHealthCheck.check_if_proxies_work(logger)
-        AlbaHealthCheck.check_asds(logger)
+        AlbaHealthCheck.check_backends(logger)
         AlbaHealthCheck.get_disk_safety(logger)
