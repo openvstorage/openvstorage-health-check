@@ -19,7 +19,7 @@ import subprocess
 import time
 import timeout_decorator
 from ovs.extensions.generic.system import System
-from ovs.extensions.generic.volatilemutex import volatile_mutex
+from ovs.extensions.generic.filemutex import file_mutex
 from timeout_decorator.timeout_decorator import TimeoutError
 from ovs.extensions.healthcheck.helpers.configuration import ConfigurationManager, ConfigurationProduct
 from ovs.extensions.healthcheck.decorators import ExposeToCli
@@ -139,8 +139,7 @@ class VolumedriverHealthCheck(object):
         if len(vpools) != 0:
             for vp in vpools:
                 name = "ovs-healthcheck-test-{0}.raw".format(VolumedriverHealthCheck.MACHINE_ID)
-                with volatile_mutex('ovs-healthcheck_check-volumedrivers_{0}'
-                                    .format(VolumedriverHealthCheck.MACHINE_ID)):
+                with file_mutex('ovs-healthcheck_check-volumedrivers'):
                     if vp.guid in VolumedriverHealthCheck.MACHINE_DETAILS.vpools_guids:
                         try:
                             # delete if previous vdisk with this name exists
@@ -339,7 +338,7 @@ class VolumedriverHealthCheck(object):
         if len(vpools) != 0:
             for vp in vpools:
                 name = "ovs-healthcheck-test-{0}".format(VolumedriverHealthCheck.MACHINE_ID)
-                with volatile_mutex('ovs-healthcheck_filedrivers-test_{0}'.format(VolumedriverHealthCheck.MACHINE_ID)):
+                with file_mutex('ovs-healthcheck_filedrivers-test'):
                     if vp.guid in VolumedriverHealthCheck.MACHINE_DETAILS.vpools_guids:
                         try:
                             VolumedriverHealthCheck._check_filedriver(vp.name, name)

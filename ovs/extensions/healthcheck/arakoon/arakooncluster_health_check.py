@@ -31,7 +31,7 @@ from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.storage.persistent.pyrakoonstore import PyrakoonStore
 from ovs.extensions.db.arakoon.ArakoonInstaller import ArakoonClusterConfig
-from ovs.extensions.generic.volatilemutex import volatile_mutex
+from ovs.extensions.generic.filemutex import file_mutex
 from ovs.extensions.healthcheck.helpers.storagerouter import StoragerouterHelper
 from ovs.extensions.healthcheck.helpers.helper import Helper, InitManagerSupported
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
@@ -330,7 +330,7 @@ class ArakoonHealthCheck(object):
             if ArakoonHealthCheck.MACHINE_DETAILS.machine_id not in cluster_info:
                 continue
 
-            with volatile_mutex('ovs-healthcheck_arakoon-test_{0}'.format(cluster_name)):
+            with file_mutex('ovs-healthcheck_arakoon-test_{0}'.format(cluster_name)):
                 tries = 1
                 max_tries = 2  # should be 5 but .nop is taking WAY to long
 
