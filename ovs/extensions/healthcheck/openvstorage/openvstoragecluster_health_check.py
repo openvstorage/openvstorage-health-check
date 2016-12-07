@@ -22,7 +22,6 @@ import glob
 import psutil
 import socket
 import commands
-import subprocess
 import timeout_decorator
 from pwd import getpwuid
 from subprocess import CalledProcessError
@@ -142,7 +141,7 @@ class OpenvStorageHealthCheck(object):
             logger.failure("Some logfiles are TOO BIG, please check these files {0}!".format(', '.join(too_big)),
                            'log_size')
         else:
-            logger.success("ALL log files are ok! Checked {0}".format(', '.join(good_size)), 'log_size')
+            logger.success("ALL log files are ok!", 'log_size')
 
     @staticmethod
     def _list_logs_in_directory(pwd):
@@ -345,8 +344,8 @@ class OpenvStorageHealthCheck(object):
         for dirname, owner_settings in Helper.owners_files.iteritems():
             # check if directory/file exists
             if os.path.exists(dirname):
-                if owner_settings.get('user') == OpenvStorageHealthCheck._get_owner_of_file(dirname) and owner_settings.get(
-                        'group') == OpenvStorageHealthCheck._get_group_of_file(dirname):
+                if owner_settings.get('user') == OpenvStorageHealthCheck._get_owner_of_file(dirname) \
+                        and owner_settings.get('group') == OpenvStorageHealthCheck._get_group_of_file(dirname):
                     logger.success("Directory '{0}' has correct owners!".format(dirname), 'dir_{0}'.format(dirname))
                 else:
                     logger.failure(
@@ -482,84 +481,6 @@ class OpenvStorageHealthCheck(object):
                            'process_dead')
 
     @staticmethod
-    @timeout_decorator.timeout(5)
-    def _check_filedriver(vp_name, test_name):
-        """
-        Async method to checks if a FILEDRIVER `touch` works on a vpool
-        Always try to check if the file exists after performing this method
-
-        :param vp_name: name of the vpool
-        :type vp_name: str
-        :param test_name: name of the test file (e.g. `ovs-healthcheck-MACHINE_ID`)
-        :type test_name: str
-        :return: True if succeeded, False if failed
-        :rtype: bool
-        """
-
-        return subprocess.check_output("touch /mnt/{0}/{1}.xml".format(vp_name, test_name),
-                                       stderr=subprocess.STDOUT, shell=True)
-
-    @staticmethod
-    @timeout_decorator.timeout(5)
-    def _check_filedriver_remove(vp_name):
-        """
-        Async method to checks if a FILEDRIVER `remove` works on a vpool
-        Always try to check if the file exists after performing this method
-
-        :param vp_name: name of the vpool
-        :type vp_name: str
-        :return: True if succeeded, False if failed
-        :rtype: bool
-        """
-
-        return subprocess.check_output("rm -f /mnt/{0}/ovs-healthcheck-test-*.xml".format(vp_name),
-                                       stderr=subprocess.STDOUT, shell=True)
-
-    @staticmethod
-    @ExposeToCli('ovs', 'filedrivers-test')
-    def check_filedrivers(logger):
-        """
-        Checks if the FILEDRIVERS work on a local machine (compatible with multiple vPools)
-
-        :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
-        """
-
-        logger.info("Checking filedrivers: ", 'filedriver')
-
-        vpools = VPoolHelper.get_vpools()
-
-        # perform tests
-        if len(vpools) != 0:
-            for vp in vpools:
-                name = "ovs-healthcheck-test-{0}".format(OpenvStorageHealthCheck.MACHINE_ID)
-                if vp.guid in OpenvStorageHealthCheck.MACHINE_DETAILS.vpools_guids:
-                    try:
-                        OpenvStorageHealthCheck._check_filedriver(vp.name, name)
-                        if os.path.exists("/mnt/{0}/{1}.xml".format(vp.name, name)):
-                            # working
-                            OpenvStorageHealthCheck._check_filedriver_remove(vp.name)
-                            logger.success("Filedriver for vPool '{0}' is working fine!".format(vp.name),
-                                           'filedriver_{0}'.format(vp.name))
-                        else:
-                            # not working
-                            logger.failure("Filedriver for vPool '{0}' seems to have problems!".format(vp.name),
-                                           'filedriver_{0}'.format(vp.name))
-                    except TimeoutError:
-                        # timeout occured, action took too long
-                        logger.failure("Filedriver of vPool '{0}' seems to have `timeout` problems"
-                                       .format(vp.name), 'filedriver_{0}'.format(vp.name))
-                    except subprocess.CalledProcessError:
-                        # can be input/output error by filedriver
-                        logger.failure("Filedriver of vPool '{0}' seems to have `input/output` problems"
-                                       .format(vp.name), 'filedriver_{0}'.format(vp.name))
-                else:
-                    logger.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name),
-                                'filedriver_{0}'.format(vp.name))
-        else:
-            logger.skip("No vPools found!", 'filedrivers_nofound')
-
-    @staticmethod
     @ExposeToCli('ovs', 'model-test')
     def check_model_consistency(logger):
         """
@@ -663,89 +584,6 @@ class OpenvStorageHealthCheck(object):
                             'discrepancies_voldrv_{0}'.format(vp.name))
 
     @staticmethod
-    @ExposeToCli('ovs', 'halted-volumes-test')
-    def check_for_halted_volumes(logger):
-        """
-        Checks for halted volumes on a single or multiple vPools
-
-        :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
-        """
-
-        logger.info("Checking for halted volumes: ", 'checkHaltedVolumes')
-
-        vpools = VPoolHelper.get_vpools()
-
-        if len(vpools) != 0:
-
-            for vp in vpools:
-                
-                if vp.guid in OpenvStorageHealthCheck.MACHINE_DETAILS.vpools_guids:
-
-                    haltedvolumes = []
-
-                    logger.info("Checking vPool '{0}': ".format(vp.name), 'halted_title')
-
-                    config_file = ConfigurationManager.get_config_file_path(product=ConfigurationProduct.VPOOL,
-                                                                            vpool_guid=vp.guid,
-                                                                            vpool_name=vp.name,
-                                                                            node_id=OpenvStorageHealthCheck.MACHINE_ID)
-                    voldrv_client = src.LocalStorageRouterClient(config_file)
-
-                    try:
-                        voldrv_volume_list = voldrv_client.list_volumes()
-                    except ClusterNotReachableException:
-                        logger.failure("Seems like the Volumedriver {0} is not running.".format(vp.name),
-                                       'halted_{0}'.format(vp.name))
-                        continue
-
-                    for volume in voldrv_volume_list:
-                        # check if volume is halted, returns: 0 or 1
-                        try:
-                            if int(OpenvStorageHealthCheck._info_volume(voldrv_client, volume).halted):
-                                haltedvolumes.append(volume)
-                        except ObjectNotFoundException:
-                            # ignore ovsdb invalid entrees
-                            # model consistency will handle it.
-                            continue
-                        except MaxRedirectsExceededException:
-                            # this means the volume is not halted but detached or unreachable for the volumedriver
-                            haltedvolumes.append(volume)
-                        except RuntimeError:
-                            haltedvolumes.append(volume)
-                        except TimeoutError:
-                            # timeout occured
-                            haltedvolumes.append(volume)
-
-                    # print all results
-                    if len(haltedvolumes) > 0:
-                        logger.failure("Detected volumes that are HALTED in vPool '{0}': {1}"
-                                       .format(vp.name, ', '.join(haltedvolumes)), 'halted_{0}'.format(vp.name))
-                    else:
-                        logger.success("No halted volumes detected in vPool '{0}'"
-                                       .format(vp.name), 'halted_{0}'.format(vp.name))
-                else:
-                    logger.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name),
-                                'halted_{0}'.format(vp.name))
-
-        else:
-            logger.skip("No vPools found!".format(len(vpools)), 'halted_nofound')
-
-    @staticmethod
-    @timeout_decorator.timeout(5)
-    def _info_volume(voldrv_client, volume_name):
-        """
-        Fetch the information from a volume through the volumedriver client
-
-        :param voldrv_client: client of a volumedriver
-        :type voldrv_client: volumedriver.storagerouter.storagerouterclient.LocalStorageRouterClient
-        :param volume_name: name of a volume in the volumedriver
-        :type volume_name: str
-        :return: volumedriver volume object
-        """
-        return voldrv_client.info_volume(volume_name)
-
-    @staticmethod
     @ExposeToCli('ovs', 'test')
     def run(logger):
         OpenvStorageHealthCheck.get_local_settings(logger)
@@ -758,5 +596,3 @@ class OpenvStorageHealthCheck(object):
         OpenvStorageHealthCheck.check_size_of_log_files(logger)
         OpenvStorageHealthCheck.check_if_dns_resolves(logger)
         OpenvStorageHealthCheck.check_model_consistency(logger)
-        OpenvStorageHealthCheck.check_for_halted_volumes(logger)
-        OpenvStorageHealthCheck.check_filedrivers(logger)

@@ -22,7 +22,6 @@ Arakoon Health Check module
 
 import os
 import time
-import uuid
 import subprocess
 import ConfigParser
 from StringIO import StringIO
@@ -32,6 +31,7 @@ from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.storage.persistent.pyrakoonstore import PyrakoonStore
 from ovs.extensions.db.arakoon.ArakoonInstaller import ArakoonClusterConfig
+from ovs.extensions.generic.volatilemutex import volatile_mutex
 from ovs.extensions.healthcheck.helpers.storagerouter import StoragerouterHelper
 from ovs.extensions.healthcheck.helpers.helper import Helper, InitManagerSupported
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
@@ -151,12 +151,15 @@ class ArakoonHealthCheck(object):
                     process_name = "{0}-{1}".format(arakoon_cluster, section)
                     ports = [config.get(section, 'client_port'), config.get(section, 'messaging_port')]
                     for port in ports:
-                        logger.info("Checking port {0} of service {1} ...".format(port, process_name), '_is_port_listening')
-                        ArakoonHealthCheck._is_port_listening(logger, process_name, port, ArakoonHealthCheck.MACHINE_DETAILS.ip)
+                        logger.info("Checking port {0} of service {1} ...".format(port, process_name),
+                                    '_is_port_listening')
+                        ArakoonHealthCheck._is_port_listening(logger, process_name, port,
+                                                              ArakoonHealthCheck.MACHINE_DETAILS.ip)
 
     @staticmethod
     @ExposeToCli('arakoon', 'restart-test')
-    def check_restarts(logger, arakoon_clusters=None, last_minutes=LAST_MINUTES, max_amount_node_restarted=MAX_AMOUNT_NODE_RESTARTED):
+    def check_restarts(logger, arakoon_clusters=None, last_minutes=LAST_MINUTES,
+                       max_amount_node_restarted=MAX_AMOUNT_NODE_RESTARTED):
         """
         Check the amount of restarts of an Arakoon node
         :param logger: Logger instance
@@ -262,7 +265,8 @@ class ArakoonHealthCheck(object):
                 elif amount_tlx == 0 and len([tlog_file for tlog_file in files if tlog_file.endswith('.tlog')]) < 0:
                     result['NOK'].append(arakoon)
                     if not logger.print_progress:
-                        logger.failure("No tlx files found and head.db is out of sync or is not present in {0}.".format(tlog_dir), 'arakoon_tlx_path')
+                        logger.failure("No tlx files found and head.db is out of sync or is not present in {0}."
+                                       .format(tlog_dir), 'arakoon_tlx_path')
                     continue
 
                 tlx_files.sort(key=lambda tup: tup[0])
@@ -292,7 +296,8 @@ class ArakoonHealthCheck(object):
 
         # Testing conditions
         if len(result['NOK']) > 0:
-            logger.failure("{0} Arakoon(s) having issues with collapsing: {1}".format(len(result['NOK']), ','.join(result['NOK'])),
+            logger.failure("{0} Arakoon(s) having issues with collapsing: {1}"
+                           .format(len(result['NOK']), ','.join(result['NOK'])),
                            'arakoon_collapse')
         elif len(result['OK']) > 0:
             logger.success("ALL Arakoon(s) are collapsed.", 'arakoon_collapse')
@@ -325,45 +330,46 @@ class ArakoonHealthCheck(object):
             if ArakoonHealthCheck.MACHINE_DETAILS.machine_id not in cluster_info:
                 continue
 
-            tries = 1
-            max_tries = 2  # should be 5 but .nop is taking WAY to long
+            with volatile_mutex('ovs-healthcheck_arakoon-test_{0}'.format(cluster_name)):
+                tries = 1
+                max_tries = 2  # should be 5 but .nop is taking WAY to long
 
-            while tries <= max_tries:
-                logger.info("Executing testing cluster '{0}'. Will try a maximum amount of {1} tries."
-                            " Currently on try {2}".format(cluster_name, max_tries, tries), 'arakoonTryCheck')
+                while tries <= max_tries:
+                    logger.info("Executing testing cluster '{0}'. Will try a maximum amount of {1} tries."
+                                " Currently on try {2}".format(cluster_name, max_tries, tries), 'arakoonTryCheck')
 
-                key = 'ovs-healthcheck-{0}'.format(str(uuid.uuid4()))
-                value = str(time.time())
+                    key = 'ovs-healthcheck-{0}'.format(ArakoonHealthCheck.MACHINE_DETAILS.machine_id)
+                    value = str(time.time())
 
-                try:
-                    # determine if there is a healthy cluster
-                    client = PyrakoonStore(str(cluster_name))
-                    client.nop()
+                    try:
+                        # determine if there is a healthy cluster
+                        client = PyrakoonStore(str(cluster_name))
+                        client.nop()
 
-                    # perform more complicated action to arakoon
-                    client.set(key, value)
-                    if client.get(key) == value:
-                        client.delete(key)
-                        working_arakoon_list.append(cluster_name)
-                        break
+                        # perform more complicated action to arakoon
+                        client.set(key, value)
+                        if client.get(key) == value:
+                            client.delete(key)
+                            working_arakoon_list.append(cluster_name)
+                            break
 
-                except ArakoonNotFound:
-                    if tries == max_tries:
-                        down_arakoon_list.append(cluster_name)
-                        break
+                    except ArakoonNotFound:
+                        if tries == max_tries:
+                            down_arakoon_list.append(cluster_name)
+                            break
 
-                except (ArakoonNoMaster, ArakoonNoMasterResult):
-                    if tries == max_tries:
-                        no_master_arakoon_list.append(cluster_name)
-                        break
+                    except (ArakoonNoMaster, ArakoonNoMasterResult):
+                        if tries == max_tries:
+                            no_master_arakoon_list.append(cluster_name)
+                            break
 
-                except Exception:
-                    if tries == max_tries:
-                        unkown_arakoon_list.append(cluster_name)
-                        break
+                    except Exception:
+                        if tries == max_tries:
+                            unkown_arakoon_list.append(cluster_name)
+                            break
 
-                # finish try if failed
-                tries += 1
+                    # finish try if failed
+                    tries += 1
 
         # Processing results
         ver_result = working_arakoon_list, no_master_arakoon_list, down_arakoon_list, unkown_arakoon_list
@@ -391,7 +397,7 @@ class ArakoonHealthCheck(object):
                 # check amount UNKNOWN_ERRORS arakoons
                 if len(ver_result[3]) > 0:
                     logger.failure("{0} Arakoon(s) seem(s) to have UNKNOWN ERRORS, please check the logs"
-                                   .format(len(ver_result[3]),', '.join(ver_result[3])),
+                                   .format(len(ver_result[3]), ', '.join(ver_result[3])),
                                    'arakoon_unknown_exception')
                 else:
                     logger.failure("Some Arakoon(s) have problems, please check this!", 'arakoon_integrity')
