@@ -36,7 +36,9 @@ class RabbitMQ(object):
     def __init__(self, ip):
         """
         Create RabbitMQ object
+
         :param ip: ip from the server
+        :type ip: str
         """
         # check if rabbitmq is available on the ip
         if not RabbitMQ._check_rabbitmq_ip(ip):
@@ -47,10 +49,15 @@ class RabbitMQ(object):
             self._storagerouter = StorageRouterList.get_by_ip(ip)
             self._client = SSHClient(ip, username='root')
 
+        if not self.check_management_plugin():
+            self.enable_management_plugin()
+
     def list_queues(self):
         """
         List all the queues in RabbitMQ
+
         :return: tuple with api exit code and list from queues
+        :rtype: tuple
         """
         status = self.status()
         if status[0] != 'RUNNING':
@@ -67,7 +74,9 @@ class RabbitMQ(object):
     def cluster_status(self):
         """
         Get RabbitMQ cluster status
+
         :return: tuple with api exit code and list from nodes with their status
+        :rtype: tuple
         """
         status = self.status()
         if status[0] != 'RUNNING':
@@ -82,10 +91,34 @@ class RabbitMQ(object):
                 nodes[node['name']] = {'running': node['running'], 'partitions': node['partitions']}
             return api_output[0], nodes
 
+    def partition_status(self):
+        """
+        Get RabbitMQ nodes who have partitions
+
+        :return: list with rabbitmq nodes who have partitions
+        :rtype: list
+        """
+        status = self.status()
+        if status[0] != 'RUNNING':
+            return status[0], 'RabbitMQ is not running.'
+
+        cluster_status = self.cluster_status()
+        nodes_in_partition = []
+        if cluster_status[0] != 200:
+            return cluster_status
+        else:
+            for rabbitmq_info, rabbitmq_status in self.cluster_status()[1].iteritems():
+                if len(rabbitmq_status['partitions']) != 0:
+                    nodes_in_partition.append(rabbitmq_info.split('@')[1])
+
+        return nodes_in_partition
+
     def status(self):
         """
         Get status of this RabbitMQ node
+
         :return: tuple with status and information
+        :rtype: tuple
         """
         api_output = self.api_request('/api/overview')
         if api_output[0] == 404 and RabbitMQ.INTERNAL:
@@ -106,7 +139,9 @@ class RabbitMQ(object):
     def check_management_plugin(self):
         """
         Check if the management plugin already is installed on this RabbitMQ
+
         :return: True/False
+        :rtype: bool
         """
         if not RabbitMQ.INTERNAL:
             return 'UNKNOWN', "Unable to check the management plugin, this is not an internal RabbitMQ from ovs."
@@ -122,8 +157,11 @@ class RabbitMQ(object):
     def api_request(self, path):
         """
         Run an api request
+
         :param path: api path for example: "/api/nodes"
+        :type path: str
         :return: tuple with exit code and Response object
+        :rtype: tuple
         """
         try:
             r = requests.get('http://{0}:15672{1}'.format(self.ip, path),
@@ -134,6 +172,14 @@ class RabbitMQ(object):
 
     @staticmethod
     def _check_rabbitmq_ip(ip):
+        """
+        Check if RabbitMQ is running on the requested ip
+
+        :param ip: ip address with a active RabbitMQ node
+        :type ip: str
+        :return: True/False
+        :rtype: bool
+        """
         endpoints = Configuration.get('/ovs/framework/messagequeue|endpoints')
 
         if any(endpoint for endpoint in endpoints if ip in endpoint):
@@ -143,33 +189,31 @@ class RabbitMQ(object):
     def enable_management_plugin(self):
         """
         Enable the management plugin for this RabbitMQ
+
         :return: tuple with exit code and information
+        :rtype: tuple
         """
         if not RabbitMQ.INTERNAL:
             return 'UNKNOWN', "Unable to enable the management plugin, this is not an internal RabbitMQ from ovs."
         management_enabled = self.check_management_plugin()
 
         if not management_enabled:
-            print "Enabling RabbitMQ management"
             self._client.run(['rabbitmq-plugins', 'enable', 'rabbitmq_management'])
-            print "Set user rights: ovs"
             self._client.run(['rabbitmqctl', 'set_user_tags', 'ovs', 'administrator'])
-            print "Delete user: guest"
             users = StringIO(self._client.run("rabbitmqctl list_users | awk '{ print $1}'", allow_insecure=True))\
                 .readlines()
             if 'guest' in users:
                 self._client.run(['rabbitmqctl', 'delete_user', 'guest'])
-            print "Restart Rabbitmq"
             return self.restart()
         else:
-            print "Management plugin already installed."
             return self.status()
-
 
     def start(self):
         """
         Start the RabbitMQ
+
         :return: tuple with status and information
+        :rtype: tuple
         """
         status = self.status()
         if status[0] != 'STOP':
@@ -182,7 +226,9 @@ class RabbitMQ(object):
     def stop(self):
         """
         Stop the RabbitMQ
+
         :return: tuple with status and information
+        :rtype: tuple
         """
         status = self.status()
         if status[0] != 'RUNNING':
@@ -195,7 +241,9 @@ class RabbitMQ(object):
     def restart(self):
         """
         Restart the Rabbitmq
+
         :return: tuple with status and information
+        :rtype: tuple
         """
         status = self.status()
         if status[0] != 'RUNNING':

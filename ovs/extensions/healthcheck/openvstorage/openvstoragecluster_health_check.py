@@ -15,7 +15,7 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
-import re
+
 import os
 import grp
 import glob
@@ -32,6 +32,7 @@ from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.extensions.healthcheck.helpers.configuration import ConfigurationManager, ConfigurationProduct
 from ovs.extensions.healthcheck.helpers.helper import Helper
+from ovs.extensions.healthcheck.helpers.rabbitmq import RabbitMQ
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
 from ovs.extensions.healthcheck.helpers.storagedriver import StoragedriverHelper
 from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
@@ -565,7 +566,14 @@ class OpenvStorageHealthCheck(object):
         # RabbitMQ check: cluster verification
         logger.info("Precheck: verification of RabbitMQ cluster: ", 'checkRabbitMQcluster')
         if Helper.get_ovs_type() == "MASTER":
-            print ""
+            r = RabbitMQ(ip=OpenvStorageHealthCheck.MACHINE_DETAILS.ip)
+            partitions = r.partition_status()
+            if len(partitions) == 0:
+                logger.success("RabbitMQ has no partition issues!",
+                               'process_rabbitmq')
+            else:
+                logger.failure("RabbitMQ has partition issues: {0}".format(', '.join(partitions)),
+                               'process_rabbitmq')
         else:
             logger.skip("RabbitMQ is not running/active on this server!",
                         'process_rabbitmq')
