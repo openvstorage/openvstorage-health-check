@@ -616,12 +616,12 @@ class OpenvStorageHealthCheck(object):
                                                                         vpool_guid=vp.guid,
                                                                         vpool_name=vp.name,
                                                                         node_id=OpenvStorageHealthCheck.MACHINE_ID)
-                voldrv_client = src.LocalStorageRouterClient(config_file)
 
                 # collect data from volumedriver
                 try:
+                    voldrv_client = src.LocalStorageRouterClient(config_file)
                     voldrv_volume_list = voldrv_client.list_volumes()
-                except ClusterNotReachableException:
+                except (ClusterNotReachableException, RuntimeError):
                     logger.failure("Seems like the volumedriver '{0}' is not running.".format(vp.name),
                                    'discrepancies_ovsdb_{0}'.format(vp.name))
                     continue
@@ -690,11 +690,11 @@ class OpenvStorageHealthCheck(object):
                                                                             vpool_guid=vp.guid,
                                                                             vpool_name=vp.name,
                                                                             node_id=OpenvStorageHealthCheck.MACHINE_ID)
-                    voldrv_client = src.LocalStorageRouterClient(config_file)
 
                     try:
+                        voldrv_client = src.LocalStorageRouterClient(config_file)
                         voldrv_volume_list = voldrv_client.list_volumes()
-                    except ClusterNotReachableException:
+                    except (ClusterNotReachableException, RuntimeError):
                         logger.failure("Seems like the Volumedriver {0} is not running.".format(vp.name),
                                        'halted_{0}'.format(vp.name))
                         continue
