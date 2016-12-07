@@ -411,10 +411,10 @@ class AlbaHealthCheck(object):
         return workingdisks, defectivedisks
 
     @staticmethod
-    @ExposeToCli('alba', 'asds-test')
-    def check_asds(logger):
+    @ExposeToCli('alba', 'backend-test')
+    def check_backends(logger):
         """
-        Checks Alba as a whole
+        Checks backends usability (asd healthiness and usability for vpool)
 
         :param logger: logging object
         :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
