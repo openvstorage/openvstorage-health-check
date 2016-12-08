@@ -81,11 +81,11 @@ class InitManager(object):
         client = SSHClient(ip, username='root')
 
         if InitManager.INIT_MANAGER == InitManagerSupported.INIT:
-            output = client.run('service {0} status'.format(service_name))
+            output = client.run(['service', service_name, 'status'])
             return output.split()[1] == "start/running,"
         elif InitManager.INIT_MANAGER == InitManagerSupported.SYSTEMD:
             try:
-                output = client.run('systemctl is-active {0}.service'.format(service_name))
+                output = client.run(['systemctl', 'is-active', '{0}.service'.format(service_name)])
             except subprocess.CalledProcessError:
                 InitManager.LOGGER.warning("Exception caught when checking service `{0}` on node with ip `{1}`"
                                            .format(service_name, ip))
@@ -93,3 +93,40 @@ class InitManager(object):
 
             # if not failed, check output
             return output == 'active'
+
+    @staticmethod
+    def get_local_services(prefix, ip):
+        """
+        Fetch the local services with a grep on the chosen prefix
+
+        :param prefix: substring to search for in the local service list
+        :type prefix: str
+        :param ip: ip address of a node
+        :type ip: str
+        :return: list of services
+        :rtype: list
+        """
+
+        if InitManager.INIT_MANAGER == InitManagerSupported.INIT:
+            return InitManager._list_local_services(prefix=prefix, ip=ip, basedir=InitManager.UPSTART_BASEDIR)
+        elif InitManager.INIT_MANAGER == InitManagerSupported.SYSTEMD:
+            return InitManager._list_local_services(prefix=prefix, ip=ip, basedir=InitManager.SYSTEMD_BASEDIR)
+
+    @staticmethod
+    def _list_local_services(prefix, ip, basedir):
+        """
+        List the local services
+
+        :param prefix: substring to search for in the local service list
+        :type prefix: str
+        :param ip: ip address of a node
+        :type ip: str
+        :return: list of services
+        :param basedir: absolute path where to search for the services
+        :type basedir: ovs.extensions.healthcheck.helpers.init_manager.InitManager.BASEDIR
+        :rtype: list
+        """
+
+        client = SSHClient(ip, username='root')
+        return [service.split('.')[0] for service in client.run("ls {0} | grep {1}-".format(basedir, prefix),
+                                                                allow_insecure=True).split()]

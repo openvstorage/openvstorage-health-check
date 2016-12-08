@@ -39,6 +39,7 @@ from ovs.extensions.healthcheck.helpers.backend import BackendHelper
 from ovs.extensions.healthcheck.helpers.configuration import ConfigurationManager, ConfigurationProduct
 from ovs.extensions.healthcheck.helpers.exceptions import ObjectNotFoundException, ConnectionFailedException, \
     DiskNotFoundException, ConfigNotMatchedException, AlbaException
+from ovs.extensions.healthcheck.helpers.init_manager import InitManager
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
 from ovs.extensions.healthcheck.helpers.storagedriver import StoragedriverHelper
 
@@ -639,7 +640,29 @@ class AlbaHealthCheck(object):
         return result
 
     @staticmethod
+    @ExposeToCli('alba', 'processes-test')
+    def check_alba_processes(logger):
+        """
+        Checks the availability of processes for Alba
+
+        :param logger: logging object
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
+        """
+
+        logger.info("Checking LOCAL ALBA services: ", 'check_alba_processes')
+
+        for service_name in InitManager.get_local_services(prefix='alba',
+                                                           ip=AlbaHealthCheck.MACHINE_DETAILS.ip):
+            if InitManager.service_running(service_name=service_name, ip=AlbaHealthCheck.MACHINE_DETAILS.ip):
+                logger.success("Service '{0}' is running!".format(service_name),
+                               'process_{0}'.format(service_name))
+            else:
+                logger.failure("Service '{0}' is NOT running, please check this... ".format(service_name),
+                               'process_{0}'.format(service_name))
+
+    @staticmethod
     @ExposeToCli('alba', 'test')
     def run(logger):
         AlbaHealthCheck.check_alba(logger)
         AlbaHealthCheck.get_disk_safety(logger)
+        AlbaHealthCheck.check_alba_processes(logger)
