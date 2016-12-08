@@ -565,7 +565,6 @@ class AlbaHealthCheck(object):
                     # Amount of lost disks at this point
                     bucket[2] = bucket[2] - applicable_dead_osds
                     disk_lost = bucket[2] - (bucket[0] + bucket[1])
-                    print disk_lost
                     if disk_lost not in disk_lost_overview:
                         disk_lost_overview[disk_lost] = 0
                     disk_lost_overview[disk_lost] += objects
