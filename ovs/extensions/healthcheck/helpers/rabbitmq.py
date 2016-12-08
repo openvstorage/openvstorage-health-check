@@ -88,7 +88,10 @@ class RabbitMQ(object):
             output = json.loads(api_output[1].text)
             nodes = {}
             for node in output:
-                nodes[node['name']] = {'running': node['running'], 'partitions': node['partitions']}
+                if 'partitions' in node:
+                    nodes[node['name']] = {'running': node['running'], 'partitions': node['partitions']}
+                else:
+                    nodes[node['name']] = {'running': node['running'], 'partitions': []}
             return api_output[0], nodes
 
     def partition_status(self):

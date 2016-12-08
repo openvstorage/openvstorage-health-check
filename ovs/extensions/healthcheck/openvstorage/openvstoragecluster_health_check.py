@@ -31,6 +31,7 @@ from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.extensions.healthcheck.helpers.configuration import ConfigurationManager, ConfigurationProduct
 from ovs.extensions.healthcheck.helpers.helper import Helper
+from ovs.extensions.healthcheck.helpers.init_manager import InitManager
 from ovs.extensions.healthcheck.helpers.rabbitmq import RabbitMQ
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
 from ovs.extensions.healthcheck.helpers.storagedriver import StoragedriverHelper
@@ -270,15 +271,14 @@ class OpenvStorageHealthCheck(object):
 
         logger.info("Checking LOCAL OVS services: ", 'check_ovs_processes')
 
-        for ovs_service in os.listdir("/etc/init"):
-            if ovs_service.startswith("ovs-"):
-                process_name = ovs_service.split(".conf", 1)[0].strip()
-                if Helper.check_status_of_service(process_name):
-                    logger.success("Service '{0}' is running!".format(process_name),
-                                   'process_{0}'.format(process_name))
-                else:
-                    logger.failure("Service '{0}' is NOT running, please check this... ".format(process_name),
-                                   'process_{0}'.format(process_name))
+        for service_name in InitManager.get_local_services(prefix='ovs',
+                                                           ip=OpenvStorageHealthCheck.MACHINE_DETAILS.ip):
+            if InitManager.service_running(service_name=service_name, ip=OpenvStorageHealthCheck.MACHINE_DETAILS.ip):
+                logger.success("Service '{0}' is running!".format(service_name),
+                               'process_{0}'.format(service_name))
+            else:
+                logger.failure("Service '{0}' is NOT running, please check this... ".format(service_name),
+                               'process_{0}'.format(service_name))
 
     @staticmethod
     @timeout_decorator.timeout(7)
