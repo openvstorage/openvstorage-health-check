@@ -15,7 +15,7 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
-import re
+
 import os
 import grp
 import glob
@@ -31,6 +31,7 @@ from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.extensions.healthcheck.helpers.configuration import ConfigurationManager, ConfigurationProduct
 from ovs.extensions.healthcheck.helpers.helper import Helper
+from ovs.extensions.healthcheck.helpers.rabbitmq import RabbitMQ
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
 from ovs.extensions.healthcheck.helpers.storagedriver import StoragedriverHelper
 from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
@@ -226,7 +227,7 @@ class OpenvStorageHealthCheck(object):
         if Helper.get_ovs_type() == "MASTER":
             pcommand = "celery inspect ping -b amqp://ovs:0penv5tor4ge@{0}//"\
                 .format(OpenvStorageHealthCheck.MACHINE_DETAILS.ip)
-            pcel = commands.getoutput(pcommand.format(process)).split("\n")
+            pcel = commands.getoutput(pcommand.format(pcommand)).split("\n")
             if len(pcel) != 1 and 'pong' in pcel[1].strip():
                 logger.success("Connection successfully established!", 'port_celery')
             else:
@@ -300,14 +301,6 @@ class OpenvStorageHealthCheck(object):
         else:
             return False
 
-    @staticmethod 
-    def _extended_check_celery():
-        """
-        Extended check for Celery and RabbitMQ component
-        """
-
-        return False
-
     @staticmethod
     @ExposeToCli('ovs', 'ovs-workers-test')
     def check_ovs_workers(logger):
@@ -326,9 +319,8 @@ class OpenvStorageHealthCheck(object):
             OpenvStorageHealthCheck._check_celery()
             logger.success("The OVS-WORKERS are working smoothly!", 'process_celery')
         except TimeoutError:
-
             # apparently the basic check failed, so we are going crazy
-            logger.failure("Error during check of celery! Is RabbitMQ and/or ovs-workers running?", 'process_celery')
+            logger.failure("Error during check of celery! Is RabbitMQ and ovs-workers running?", 'process_celery')
 
     @staticmethod
     @ExposeToCli('ovs', 'directories-test')
@@ -495,24 +487,13 @@ class OpenvStorageHealthCheck(object):
         # RabbitMQ check: cluster verification
         logger.info("Precheck: verification of RabbitMQ cluster: ", 'checkRabbitMQcluster')
         if Helper.get_ovs_type() == "MASTER":
-            cluster_status = commands.getoutput("rabbitmqctl cluster_status").split("\n")
-            if "Error" not in cluster_status[1]:
-
-                partition_status = ''
-                for status in cluster_status:
-                    if re.match('^.*\{partitions,\[.*$', status):
-                        partition_status = status
-
-                # check parition status
-                if '@' in partition_status:
-                    logger.failure(
-                        "Seems like the RabbitMQ cluster has 'partition' problems, please check this...",
-                        'process_rabbitmq')
-                else:
-                    logger.success("RabbitMQ does not seem to have 'partition' problems",
-                                   'process_rabbitmq')
+            r = RabbitMQ(ip=OpenvStorageHealthCheck.MACHINE_DETAILS.ip)
+            partitions = r.partition_status()
+            if len(partitions) == 0:
+                logger.success("RabbitMQ has no partition issues!",
+                               'process_rabbitmq')
             else:
-                logger.failure("Seems like the RabbitMQ cluster has errors, maybe it is offline?",
+                logger.failure("RabbitMQ has partition issues: {0}".format(', '.join(partitions)),
                                'process_rabbitmq')
         else:
             logger.skip("RabbitMQ is not running/active on this server!",
