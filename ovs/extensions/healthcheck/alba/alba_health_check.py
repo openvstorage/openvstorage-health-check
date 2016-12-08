@@ -20,7 +20,6 @@
 Alba Health Check Module
 """
 
-import json
 import os
 import re
 import uuid
@@ -31,6 +30,7 @@ from ovs.dal.hybrids.servicetype import ServiceType
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.generic.system import System
+from ovs.extensions.generic.volatilemutex import volatile_mutex
 from ovs.extensions.healthcheck.helpers.cache import CacheHelper
 from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.extensions.healthcheck.helpers.albacli import AlbaCLI
@@ -150,10 +150,12 @@ class AlbaHealthCheck(object):
 
                         # Fetch arakoon information
                         abm_name = proxy_client_cfg.get("cluster_id", None)
-                        abm_config = ConfigurationManager.get_config_file_path(arakoon_name=abm_name, product=ConfigurationProduct.ARAKOON)
+                        abm_config = ConfigurationManager.get_config_file_path(arakoon_name=abm_name,
+                                                                               product=ConfigurationProduct.ARAKOON)
 
                         # Check if proxy config is correctly setup
-                        if abm_name is None or re.match('^client_cfg:\n{ cluster_id = "(?P<cluster_id>[0-9a-zA-Z_-]+)";.*', abm_name) is None:
+                        if abm_name is None or re.match('^client_cfg:\n{ cluster_id = '
+                                                        '"(?P<cluster_id>[0-9a-zA-Z_-]+)";.*', abm_name) is None:
                             ConfigNotMatchedException('Proxy config does not have the correct format on node {0}'
                                                       ' with port {1}.'.format(ip, service.ports[0]))
 
@@ -171,84 +173,97 @@ class AlbaHealthCheck(object):
                                 # Generate new namespace name using the preset
                                 namespace_key = 'ovs-healthcheck-ns-{0}'.format(preset.get('name'))
                                 object_key = 'ovs-healthcheck-obj-{0}'.format(str(uuid.uuid4()))
-                                try:
-                                    # Create namespace
-                                    AlbaCLI.run(command="proxy-create-namespace",
-                                                named_params={'host': ip, 'port': service.ports[0]},
-                                                extra_params=[namespace_key, preset['name']])
-                                except RuntimeError as ex:
-                                    # @TODO remove check when the issue has been that blocks uploads
-                                    # after namespaces are created
-                                    # linked ticket: https://github.com/openvstorage/alba/issues/427
-                                    if "Proxy exception: Proxy_protocol.Protocol.Error.NamespaceAlreadyExists" in str(ex):
-                                        logger.skip("Namespace {0} already exists.".format(namespace_key))
-                                    else:
-                                        # pass
-
-                                        raise AlbaException("Create namespace has failed with {0} on namespace {1} with proxy {2} with preset {3}"
-                                                        .format(str(ex), namespace_key, service.name, preset.get('name')),
-                                                        "proxy-create-namespace")
-                                try:
-                                    # Fetch namespace
-                                    AlbaCLI.run(command="show-namespace", config=abm_config, extra_params=[namespace_key])
-                                    logger.success("Namespace successfully fetched on proxy '{0}' with preset '{1}'!"
-                                                   .format(service.name, preset.get('name')),
-                                                   '{0}_preset_{1}_create_namespace'
-                                                   .format(service.name, preset.get('name')))
-                                except RuntimeError as ex:
-                                    raise AlbaException("Show namespace has failed with {0} on namespace {1} with proxy {2} with preset {3}"
-                                                        .format(str(ex), namespace_key, service.name, preset.get('name')),
-                                                        "show-namespace")
-
-                                # Put test object to given dir
-                                with open(AlbaHealthCheck.TEMP_FILE_LOC, 'wb') as fout:
-                                    fout.write(os.urandom(AlbaHealthCheck.TEMP_FILE_SIZE))
-                                try:
-                                    # try to put object
-                                    AlbaCLI.run(command="proxy-upload-object",
-                                                named_params={'host': ip, 'port': service.ports[0]},
-                                                extra_params=[namespace_key, AlbaHealthCheck.TEMP_FILE_LOC, object_key])
-                                    logger.success("Succesfully uploaded the object to namespace {0}".format(namespace_key),
-                                                  "{0}_preset_{1}_upload_object".format(service.name, preset.get('name')))
-                                except RuntimeError as ex:
-                                    raise AlbaException("Uploading the object has failed with {0} on namespace {1} with proxy {2} with preset {3}"
-                                                        .format(str(ex), namespace_key, service.name, preset.get('name')),
-                                                        "proxy-upload-object")
-                                try:
-                                    # download object
-                                    AlbaCLI.run(command="proxy-download-object",
-                                                named_params={'host': ip, 'port': service.ports[0]},
-                                                extra_params=[namespace_key, object_key, AlbaHealthCheck.TEMP_FILE_FETCHED_LOC])
-                                    logger.success("Succesfully downloaded the object to namespace {0}".format(namespace_key),
-                                                  "{0}_preset_{1}_download_object".format(service.name, preset.get('name')))
-                                except RuntimeError as ex:
-                                    raise AlbaException("Downloading the object has failed with {0} on namespace {1} with proxy {2} with preset {3}"
-                                                        .format(str(ex), namespace_key, service.name, preset.get('name')),
-                                                        "proxy-download-object")
-                                # check if files exists - issue #57
-                                if os.path.isfile(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC) \
-                                        and os.path.isfile(AlbaHealthCheck.TEMP_FILE_LOC):
-                                    hash_original = hashlib.md5(open(AlbaHealthCheck.TEMP_FILE_LOC, 'rb').read())\
-                                        .hexdigest()
-                                    hash_fetched = hashlib.md5(open(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC, 'rb')
-                                                               .read()).hexdigest()
-
-                                    if hash_original == hash_fetched:
-                                        logger.success("Creation of a object in namespace '{0}' on proxy '{1}' "
-                                                       "with preset '{2}' succeeded!"
-                                                       .format(namespace_key,service.name,preset.get('name')),
-                                                       '{0}_preset_{1}_compare_object'
+                                with volatile_mutex('ovs-healthcheck_proxy-test'):
+                                    try:
+                                        # Create namespace
+                                        AlbaCLI.run(command="proxy-create-namespace",
+                                                    named_params={'host': ip, 'port': service.ports[0]},
+                                                    extra_params=[namespace_key, preset['name']])
+                                    except RuntimeError as ex:
+                                        # @TODO remove check when the issue has been that blocks uploads
+                                        # after namespaces are created
+                                        # linked ticket: https://github.com/openvstorage/alba/issues/427
+                                        if "Proxy exception: Proxy_protocol.Protocol.Error.NamespaceAlreadyExists" in \
+                                                str(ex):
+                                            logger.skip("Namespace {0} already exists.".format(namespace_key))
+                                        else:
+                                            # pass
+                                            raise AlbaException("Create namespace has failed with {0} on namespace {1} "
+                                                                "with proxy {2} with preset {3}"
+                                                                .format(str(ex), namespace_key, service.name,
+                                                                        preset.get('name')), "proxy-create-namespace")
+                                    try:
+                                        # Fetch namespace
+                                        AlbaCLI.run(command="show-namespace", config=abm_config,
+                                                    extra_params=[namespace_key])
+                                        logger.success("Namespace successfully fetched on proxy '{0}' "
+                                                       "with preset '{1}'!".format(service.name, preset.get('name')),
+                                                       '{0}_preset_{1}_create_namespace'
                                                        .format(service.name, preset.get('name')))
-                                    else:
-                                        logger.failure("Creation of a object '{0}' in namespace '{1}' on proxy"
-                                                       " '{2}' with preset '{3}' failed!"
-                                                       .format(object_key, namespace_key, service.name,
-                                                               preset.get('name')),
-                                                       '{0}_preset_{1}_compare_object'
+                                    except RuntimeError as ex:
+                                        raise AlbaException("Show namespace has failed with {0} on namespace {1} "
+                                                            "with proxy {2} with preset {3}"
+                                                            .format(str(ex), namespace_key, service.name,
+                                                                    preset.get('name')), "show-namespace")
+
+                                    # Put test object to given dir
+                                    with open(AlbaHealthCheck.TEMP_FILE_LOC, 'wb') as fout:
+                                        fout.write(os.urandom(AlbaHealthCheck.TEMP_FILE_SIZE))
+                                    try:
+                                        # try to put object
+                                        AlbaCLI.run(command="proxy-upload-object",
+                                                    named_params={'host': ip, 'port': service.ports[0]},
+                                                    extra_params=[namespace_key, AlbaHealthCheck.TEMP_FILE_LOC,
+                                                                  object_key])
+                                        logger.success("Succesfully uploaded the object to namespace {0}"
+                                                       .format(namespace_key),
+                                                       "{0}_preset_{1}_upload_object"
                                                        .format(service.name, preset.get('name')))
-                                else:
-                                    # creation of object failed
-                                    raise ObjectNotFoundException(ValueError('Creation of object has failed'))
+                                    except RuntimeError as ex:
+                                        raise AlbaException("Uploading the object has failed with {0} on namespace {1} "
+                                                            "with proxy {2} with preset {3}"
+                                                            .format(str(ex), namespace_key, service.name,
+                                                                    preset.get('name')), "proxy-upload-object")
+                                    try:
+                                        # download object
+                                        AlbaCLI.run(command="proxy-download-object",
+                                                    named_params={'host': ip, 'port': service.ports[0]},
+                                                    extra_params=[namespace_key, object_key,
+                                                                  AlbaHealthCheck.TEMP_FILE_FETCHED_LOC])
+                                        logger.success("Succesfully downloaded the object to namespace {0}"
+                                                       .format(namespace_key),
+                                                       "{0}_preset_{1}_download_object".format(service.name,
+                                                                                               preset.get('name')))
+                                    except RuntimeError as ex:
+                                        raise AlbaException("Downloading the object has failed with {0} "
+                                                            "on namespace {1} with proxy {2} with preset {3}"
+                                                            .format(str(ex), namespace_key, service.name,
+                                                                    preset.get('name')),
+                                                            "proxy-download-object")
+                                    # check if files exists - issue #57
+                                    if os.path.isfile(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC) \
+                                            and os.path.isfile(AlbaHealthCheck.TEMP_FILE_LOC):
+                                        hash_original = hashlib.md5(open(AlbaHealthCheck.TEMP_FILE_LOC, 'rb').read())\
+                                            .hexdigest()
+                                        hash_fetched = hashlib.md5(open(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC, 'rb')
+                                                                   .read()).hexdigest()
+
+                                        if hash_original == hash_fetched:
+                                            logger.success("Creation of a object in namespace '{0}' on proxy '{1}' "
+                                                           "with preset '{2}' succeeded!"
+                                                           .format(namespace_key, service.name, preset.get('name')),
+                                                           '{0}_preset_{1}_compare_object'
+                                                           .format(service.name, preset.get('name')))
+                                        else:
+                                            logger.failure("Creation of a object '{0}' in namespace '{1}' on proxy"
+                                                           " '{2}' with preset '{3}' failed!"
+                                                           .format(object_key, namespace_key, service.name,
+                                                                   preset.get('name')),
+                                                           '{0}_preset_{1}_compare_object'
+                                                           .format(service.name, preset.get('name')))
+                                    else:
+                                        # creation of object failed
+                                        raise ObjectNotFoundException(ValueError('Creation of object has failed'))
 
                             except ObjectNotFoundException as e:
                                 amount_of_presets_not_working.append(preset.get('name'))
@@ -262,28 +277,35 @@ class AlbaHealthCheck(object):
                                     # after namespaces are created
                                     # linked ticket: https://github.com/openvstorage/alba/issues/427
                                     # Should fail as we do not cleanup
-                                    logger.warning(str(e), '{0}_preset_{1}_create_namespace'.format(service.name, preset.get('name')))
+                                    logger.warning(str(e), '{0}_preset_{1}_create_namespace'.format(service.name,
+                                                                                                    preset.get('name')))
                                 if e.alba_command == "show-namespace":
-                                    logger.failure(str(e), '{0}_preset_{1}_show_namespace'.format(service.name, preset.get('name')))
+                                    logger.failure(str(e), '{0}_preset_{1}_show_namespace'.format(service.name,
+                                                                                                  preset.get('name')))
                                 if e.alba_command == "proxy-upload-object":
-                                    logger.failure(str(e), "{0}_preset_{1}_create_object".format(service.name, preset.get('name')))
+                                    logger.failure(str(e), "{0}_preset_{1}_create_object".format(service.name,
+                                                                                                 preset.get('name')))
                                 if e.alba_command == "download-object":
-                                    logger.failure(str(e), "{0}_preset_{1}_download_object".format(service.name, preset.get('name')))
+                                    logger.failure(str(e), "{0}_preset_{1}_download_object".format(service.name,
+                                                                                                   preset.get('name')))
                             finally:
                                 # Delete the created namespace and preset
                                 try:
                                     # Remove object first
-                                    logger.info("Deleting created object '{0}' on '{1}'.".format(object_key, namespace_key))
+                                    logger.info("Deleting created object '{0}' on '{1}'.".format(object_key,
+                                                                                                 namespace_key))
                                     try:
                                         AlbaCLI.run(command="proxy-delete-object",
                                                     named_params={'host': ip, 'port': service.ports[0]},
                                                     extra_params=[namespace_key, object_key])
                                     except RuntimeError as ex:
                                         # Ignore object not found
-                                        if "Proxy exception: Proxy_protocol.Protocol.Error.ObjectDoesNotExist" in str(ex):
+                                        if "Proxy exception: Proxy_protocol.Protocol.Error.ObjectDoesNotExist" \
+                                                in str(ex):
                                             pass
                                         else:
-                                            raise AlbaException("Deleting the object has failed with {0}".format(str(ex)), "proxy-delete-object")
+                                            raise AlbaException("Deleting the object has failed with {0}"
+                                                                .format(str(ex)), "proxy-delete-object")
                                     subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_LOC)], stdout=fnull,
                                                     stderr=subprocess.STDOUT)
                                     subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC)], stdout=fnull,
@@ -299,7 +321,8 @@ class AlbaHealthCheck(object):
                                     #                 named_params={'host': ip, 'port': service.ports[0]},
                                     #                 extra_params=[namespace_key])
                                     # except RuntimeError as ex:
-                                    #     raise AlbaException("Deleting namespace failed with {0}".format(str(ex)), "proxy-delete-namespace")
+                                    #     raise AlbaException("Deleting namespace failed with {0}".format(str(ex)),
+                                    # "proxy-delete-namespace")
                                 except subprocess.CalledProcessError:
                                     raise
                                 except AlbaException:
