@@ -232,11 +232,11 @@ class VolumedriverHealthCheck(object):
                                                                             vpool_guid=vp.guid,
                                                                             vpool_name=vp.name,
                                                                             node_id=VolumedriverHealthCheck.MACHINE_ID)
-                    voldrv_client = src.LocalStorageRouterClient(config_file)
 
                     try:
+                        voldrv_client = src.LocalStorageRouterClient(config_file)
                         voldrv_volume_list = voldrv_client.list_volumes()
-                    except ClusterNotReachableException:
+                    except (ClusterNotReachableException, RuntimeError):
                         logger.failure("Seems like the Volumedriver {0} is not running.".format(vp.name),
                                        'halted_{0}'.format(vp.name))
                         continue
