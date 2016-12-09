@@ -236,28 +236,30 @@ class VolumedriverHealthCheck(object):
                     try:
                         voldrv_client = src.LocalStorageRouterClient(config_file)
                         voldrv_volume_list = voldrv_client.list_volumes()
-                    except (ClusterNotReachableException, RuntimeError) as ex:
-                        logger.failure("Seems like the Volumedriver {0} is not running.".format(vp.name, ex.message),
-                                       'halted_{0}'.format(vp.name))
-                        continue
 
-                    for volume in voldrv_volume_list:
-                        # check if volume is halted, returns: 0 or 1
-                        try:
-                            if int(VolumedriverHealthCheck._info_volume(voldrv_client, volume).halted):
+                        for volume in voldrv_volume_list:
+                            # check if volume is halted, returns: 0 or 1
+                            try:
+                                if int(VolumedriverHealthCheck._info_volume(voldrv_client, volume).halted):
+                                    haltedvolumes.append(volume)
+                            except ObjectNotFoundException:
+                                # ignore ovsdb invalid entrees
+                                # model consistency will handle it.
+                                continue
+                            except MaxRedirectsExceededException:
+                                # this means the volume is not halted but detached or unreachable for the volumedriver
                                 haltedvolumes.append(volume)
-                        except ObjectNotFoundException:
-                            # ignore ovsdb invalid entrees
-                            # model consistency will handle it.
-                            continue
-                        except MaxRedirectsExceededException:
-                            # this means the volume is not halted but detached or unreachable for the volumedriver
-                            haltedvolumes.append(volume)
-                        except RuntimeError:
-                            haltedvolumes.append(volume)
-                        except TimeoutError:
-                            # timeout occured
-                            haltedvolumes.append(volume)
+                            except RuntimeError:
+                                haltedvolumes.append(volume)
+                            except TimeoutError:
+                                # timeout occured
+                                haltedvolumes.append(volume)
+
+                    except (ClusterNotReachableException, RuntimeError) as ex:
+                        logger.failure(
+                            "Seems like the Volumedriver {0} is not running.".format(vp.name, ex.message),
+                            'halted_{0}'.format(vp.name))
+                        continue
 
                     # print all results
                     if len(haltedvolumes) > 0:
@@ -285,6 +287,7 @@ class VolumedriverHealthCheck(object):
         :type volume_name: str
         :return: volumedriver volume object
         """
+
         return voldrv_client.info_volume(volume_name)
 
     @staticmethod
