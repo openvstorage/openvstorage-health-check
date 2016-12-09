@@ -647,17 +647,19 @@ class AlbaHealthCheck(object):
         :param logger: logging object
         :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
-
-        logger.info("Checking LOCAL ALBA services: ", 'check_alba_processes')
-
-        for service_name in InitManager.get_local_services(prefix='alba',
-                                                           ip=AlbaHealthCheck.MACHINE_DETAILS.ip):
-            if InitManager.service_running(service_name=service_name, ip=AlbaHealthCheck.MACHINE_DETAILS.ip):
-                logger.success("Service '{0}' is running!".format(service_name),
-                               'process_{0}'.format(service_name))
-            else:
-                logger.failure("Service '{0}' is NOT running, please check this... ".format(service_name),
-                               'process_{0}'.format(service_name))
+        test_name = 'check_alba_processes'
+        logger.info("Checking LOCAL ALBA services: ", test_name)
+        services = InitManager.get_local_services(prefix='alba', ip=AlbaHealthCheck.MACHINE_DETAILS.ip)
+        if len(services) > 0:
+            for service_name in services:
+                if InitManager.service_running(service_name=service_name, ip=AlbaHealthCheck.MACHINE_DETAILS.ip):
+                    logger.success("Service '{0}' is running!".format(service_name),
+                                   'process_{0}'.format(service_name))
+                else:
+                    logger.failure("Service '{0}' is NOT running, please check this... ".format(service_name),
+                                   'process_{0}'.format(service_name))
+        else:
+            logger.skip("Found no LOCAL ALBA services.", test_name)
 
     @staticmethod
     @ExposeToCli('alba', 'test')

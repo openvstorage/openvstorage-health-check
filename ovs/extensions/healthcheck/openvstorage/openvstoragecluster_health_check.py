@@ -268,17 +268,19 @@ class OpenvStorageHealthCheck(object):
         :param logger: logging object
         :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
-
-        logger.info("Checking LOCAL OVS services: ", 'check_ovs_processes')
-
-        for service_name in InitManager.get_local_services(prefix='ovs',
-                                                           ip=OpenvStorageHealthCheck.MACHINE_DETAILS.ip):
-            if InitManager.service_running(service_name=service_name, ip=OpenvStorageHealthCheck.MACHINE_DETAILS.ip):
-                logger.success("Service '{0}' is running!".format(service_name),
-                               'process_{0}'.format(service_name))
-            else:
-                logger.failure("Service '{0}' is NOT running, please check this... ".format(service_name),
-                               'process_{0}'.format(service_name))
+        test_name = 'check_ovs_processes'
+        logger.info("Checking LOCAL OVS services: ", test_name)
+        services = InitManager.get_local_services(prefix='ovs', ip=OpenvStorageHealthCheck.MACHINE_DETAILS.ip)
+        if len(services) > 0:
+            for service_name in services:
+                if InitManager.service_running(service_name=service_name, ip=OpenvStorageHealthCheck.MACHINE_DETAILS.ip):
+                    logger.success("Service '{0}' is running!".format(service_name),
+                                   'process_{0}'.format(service_name))
+                else:
+                    logger.failure("Service '{0}' is NOT running, please check this... ".format(service_name),
+                                   'process_{0}'.format(service_name))
+        else:
+            logger.failure("Found no LOCAL OVS services", test_name)
 
     @staticmethod
     @timeout_decorator.timeout(7)
