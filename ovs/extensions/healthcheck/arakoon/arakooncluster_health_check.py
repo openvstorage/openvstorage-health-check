@@ -221,8 +221,6 @@ class ArakoonHealthCheck(object):
         """
         if arakoon_clusters is None:
             arakoon_clusters = ArakoonHealthCheck.fetch_clusters(logger)[0]
-        # tlx file must have young timestamp than this one.
-
         result = {"OK": [], "NOK": []}
         # tlx file must have young timestamp than this one.
         max_age_timestamp = time.mktime((date.today() - timedelta(days=max_collapse_age)).timetuple())
