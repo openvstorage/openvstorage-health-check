@@ -527,7 +527,6 @@ class AlbaHealthCheck(object):
                 continue
 
             config = Configuration.get_configuration_path('ovs/arakoon/{0}/config'.format(service_name))
-
             # Fetch alba info
             try:
                 try:
@@ -564,11 +563,10 @@ class AlbaHealthCheck(object):
                     applicable_dead_osds = bucket_safety['applicable_dead_osds']
                     # Amount of lost disks at this point
                     bucket[2] = bucket[2] - applicable_dead_osds
-                    disk_lost = bucket[0] + bucket[1] - bucket[2]
+                    disk_lost = bucket[2] - (bucket[0] + bucket[1])
                     if disk_lost not in disk_lost_overview:
                         disk_lost_overview[disk_lost] = 0
                     disk_lost_overview[disk_lost] += objects
-
             for disk_lost, objects in disk_lost_overview.iteritems():
                 lost = {
                     'measurement': 'disk_lost',
@@ -581,7 +579,6 @@ class AlbaHealthCheck(object):
                         'objects': objects
                     }
                 }
-
                 points.append(lost)
 
         if len(points) == 0:
@@ -613,26 +610,34 @@ class AlbaHealthCheck(object):
                     logger.warning("Backend {0}: {1} out of {2} objects have to be repaired."
                                    .format(backend, disk_lost['objects'], disk_lost['total_objects']))
                     logger.warning('Backend {0}: {1}% of the objects have to be repaired'.format(backend,
-                                                                                                 repair_percentage),
-                                   'repair_percentage_{0}_{1}'.format(backend, repair_percentage))
+                                                                                                 repair_percentage))
             # Log if the amount is rising
             cache = CacheHelper.get()
+            repair_rising = False
             if cache is None:
                 # First run of healthcheck
-                logger.success("Object repair will be monitored on incrementations.", 'repair_OK')
+                logger.success("Object repair will be monitored on incrementations.")
             elif repair_percentage == 0:
                 # Amount of objects to repair are rising
-                logger.success("No objects in objects repair queue", 'repair_OK')
+                logger.success("No objects in objects repair queue")
             elif cache["repair_percentage"] > repair_percentage:
                 # Amount of objects to repair is descending
-                logger.failure("Amount of objects to repair is descending!", 'repair_DESCENDING')
+                logger.failure("Amount of objects to repair is descending!")
             elif cache["repair_percentage"] < repair_percentage:
                 # Amount of objects to repair is rising
-                logger.failure("Amount of objects to repair are rising!", 'repair_RISING')
+                repair_rising = True
+                logger.failure("Amount of objects to repair are rising!")
             elif cache["repair_percentage"] == repair_percentage:
                 # Amount of objects to repair is the same
-                logger.success("Amount of objects to repair are the same!", 'repair_SAME')
+                logger.success("Amount of objects to repair are the same!")
 
+            if logger.print_progress is False:
+                # Custom recap for operations
+                logger.custom(
+                    'Recap of disk-safety: {0}% of the objects have to be repaired. {1} backend(s) with disk lost and number of objects to repair are {2}.'
+                    .format(repair_percentage, len(backends_to_be_repaired),'rising' if repair_rising is True else 'descending or the same'),
+                    test_name,
+                    " ".join([str(repair_percentage), 'SUCCESS' if repair_rising == 0 else 'FAILURE', 'FAILURE' if repair_rising is True else 'SUCCESS']))
             result["repair_percentage"] = repair_percentage
             result["lost_backends"] = backends_to_be_repaired
             CacheHelper.set(result)
