@@ -129,4 +129,4 @@ class InitManager(object):
 
         client = SSHClient(ip, username='root')
         return [service.split('.')[0] for service in client.run("ls {0} | grep {1}-".format(basedir, prefix),
-                                                                allow_insecure=True).split()]
+                                                                allow_insecure=True, allow_nonzero=True).split()]
