@@ -225,6 +225,8 @@ class ArakoonHealthCheck(object):
         :return: list with OK, NOK status
         :rtype: list
         """
+        if arakoon_clusters is None:
+            arakoon_clusters = ArakoonHealthCheck.fetch_clusters(logger)[0]
 
         result = {"OK": [], "NOK": []}
         # tlx file must have young timestamp than this one.
