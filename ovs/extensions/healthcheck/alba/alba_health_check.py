@@ -97,7 +97,7 @@ class AlbaHealthCheck(object):
                                     asd['port'] = Configuration.get('/ovs/alba/asds/{0}/config|port'.format(asd_id))
                                     disks.append(asd)
                                 except Exception as ex:
-                                    raise ConnectionFailedException(ex)
+                                    raise ConnectionFailedException(str(ex))
                 # create result
                 result.append({
                         'name': abl.name,
@@ -369,7 +369,6 @@ class AlbaHealthCheck(object):
             for disk in disks:
                 key = 'ovs-healthcheck-{0}'.format(str(uuid.uuid4()))
                 value = str(time.time())
-
                 if disk.get('status') != 'error':
                     ip_address = AlbaNodeHelper.get_albanode_by_node_id(disk.get('node_id')).ip
                     try:
@@ -381,8 +380,8 @@ class AlbaHealthCheck(object):
                                             named_params={'host': ip_address, 'port': str(disk.get('port')),
                                                           'long-id': disk.get('asd_id')},
                                             extra_params=[key, value])
-                            except RuntimeError:
-                                raise ConnectionFailedException('Connection failed to disk')
+                            except RuntimeError as ex:
+                                raise AlbaException(str(ex), 'asd-set')
                             # get object
                             try:
                                 g = AlbaCLI.run(command="asd-multi-get",
@@ -390,8 +389,8 @@ class AlbaHealthCheck(object):
                                                               'long-id': disk.get('asd_id')},
                                                 extra_params=[key],
                                                 to_json=False)
-                            except RuntimeError:
-                                raise ConnectionFailedException('Connection failed to disk')
+                            except RuntimeError as ex:
+                                raise AlbaException(str(ex), 'asd-multi-get')
 
                             # check if put/get is successfull
                             if 'None' in g:
@@ -410,8 +409,8 @@ class AlbaHealthCheck(object):
                                             named_params={'host': ip_address, 'port': str(disk.get('port')),
                                                           'long-id': disk.get('asd_id')},
                                             extra_params=[key])
-                            except RuntimeError:
-                                raise ConnectionFailedException('Connection failed to disk when trying to delete!')
+                            except RuntimeError as ex:
+                                raise AlbaException(str(ex), 'asd-delete')
                         else:
                             # disk is missing
                             raise DiskNotFoundException('Disk is missing')
@@ -421,10 +420,10 @@ class AlbaHealthCheck(object):
                         logger.failure("ASD test with DISK_ID '{0}' failed on NODE '{1}'!"
                                        .format(disk.get('asd_id'), ip_address),
                                        'alba_asd_{0}'.format(disk.get('asd_id')))
-                    except (ConnectionFailedException, DiskNotFoundException) as e:
+                    except (AlbaException, DiskNotFoundException) as e:
                         defectivedisks.append(disk.get('asd_id'))
                         logger.failure("ASD test with DISK_ID '{0}' failed because: {1}"
-                                       .format(disk.get('asd_id'), e),
+                                       .format(disk.get('asd_id'), str(e)),
                                        'alba_asd_{0}'.format(disk.get('asd_id')))
                 else:
                     defectivedisks.append(disk.get('asd_id'))
