@@ -376,10 +376,13 @@ class AlbaHealthCheck(object):
                         # check if disk is missing
                         if disk.get('port'):
                             # put object
-                            AlbaCLI.run(command="asd-set",
-                                        named_params={'host': ip_address, 'port': str(disk.get('port')),
-                                                      'long-id': disk.get('asd_id')},
-                                        extra_params=[key, value])
+                            try:
+                                AlbaCLI.run(command="asd-set",
+                                            named_params={'host': ip_address, 'port': str(disk.get('port')),
+                                                          'long-id': disk.get('asd_id')},
+                                            extra_params=[key, value])
+                            except RuntimeError:
+                                raise ConnectionFailedException('Connection failed to disk')
                             # get object
                             try:
                                 g = AlbaCLI.run(command="asd-multi-get",
