@@ -100,7 +100,10 @@ class AlbaHealthCheck(object):
                                     logger.failure("Could not find {0} in Arakoon. Got {1}"
                                                    .format('/ovs/alba/asds/{0}/config|port'.format(asd_id), str(ex)))
                                     raise
-                # create result
+                                except Exception as ex:
+                                    logger.failure("Could not connect to the Arakoon.")
+                                    raise ConnectionFailedException(str(ex))
+               # create result
                 result.append({
                         'name': abl.name,
                         'alba_id': abl.alba_id,
@@ -495,7 +498,9 @@ class AlbaHealthCheck(object):
             else:
                 logger.skip("No backends found ...", 'alba_backends_found')
         except NotFoundException as ex:
-            logger.failure("Failed to fetch the object with exception: {0}".format(ex),
+            logger.failure("Failed to fetch the object with exception: {0}".format(ex))
+        except ConnectionFailedException as ex:
+            logger.failure("Failed to connect to configuration master with exception: {0}".format(ex),
                            'configuration_master')
         except (ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult) as e:
             logger.failure("Seems like a arakoon has some problems: {0}".format(e),
