@@ -103,7 +103,7 @@ class AlbaHealthCheck(object):
                                 except Exception as ex:
                                     logger.failure("Could not connect to the Arakoon.")
                                     raise ConnectionFailedException(str(ex))
-               # create result
+                # create result
                 result.append({
                         'name': abl.name,
                         'alba_id': abl.alba_id,
