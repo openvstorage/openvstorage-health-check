@@ -28,7 +28,7 @@ import hashlib
 import subprocess
 from ovs.dal.hybrids.servicetype import ServiceType
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
-from ovs.extensions.generic.configuration import Configuration
+from ovs.extensions.generic.configuration import Configuration, NotFoundException
 from ovs.extensions.generic.system import System
 from ovs.extensions.generic.volatilemutex import volatile_mutex
 from ovs.extensions.healthcheck.helpers.cache import CacheHelper
@@ -96,8 +96,10 @@ class AlbaHealthCheck(object):
                                 try:
                                     asd['port'] = Configuration.get('/ovs/alba/asds/{0}/config|port'.format(asd_id))
                                     disks.append(asd)
-                                except Exception as ex:
-                                    raise ConnectionFailedException(str(ex))
+                                except NotFoundException as ex:
+                                    logger.failure("Could not find {0} in Arakoon. Got {1}"
+                                                   .format('/ovs/alba/asds/{0}/config|port'.format(asd_id), str(ex)))
+                                    raise
                 # create result
                 result.append({
                         'name': abl.name,
@@ -110,8 +112,7 @@ class AlbaHealthCheck(object):
                     })
             except RuntimeError as e:
                 errors_found += 1
-                logger.failure("Error during fetch of alba backend '{0}': {1}".format(abl.name, e), 'check_alba')
-
+                logger.failure("Error during fetch of alba backend '{0}': {1}".format(abl.name, e))
             # give a precheck result for fetching the backend data
             if errors_found == 0:
                 logger.success("No problems occured when fetching alba backends!", 'fetch_alba_backends')
@@ -493,8 +494,8 @@ class AlbaHealthCheck(object):
                     logger.skip("Skipping ASD check because this is a EXTRA node ...", 'check_alba_asds')
             else:
                 logger.skip("No backends found ...", 'alba_backends_found')
-        except ConnectionFailedException as ex:
-            logger.failure("Failed to connect to configuration master with exception: {0}".format(ex),
+        except NotFoundException as ex:
+            logger.failure("Failed to fetch the object with exception: {0}".format(ex),
                            'configuration_master')
         except (ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult) as e:
             logger.failure("Seems like a arakoon has some problems: {0}".format(e),
