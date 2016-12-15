@@ -28,7 +28,7 @@ import hashlib
 import subprocess
 from ovs.dal.hybrids.servicetype import ServiceType
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
-from ovs.extensions.generic.configuration import Configuration
+from ovs.extensions.generic.configuration import Configuration, NotFoundException
 from ovs.extensions.generic.system import System
 from ovs.extensions.generic.volatilemutex import volatile_mutex
 from ovs.extensions.healthcheck.helpers.cache import CacheHelper
@@ -96,8 +96,13 @@ class AlbaHealthCheck(object):
                                 try:
                                     asd['port'] = Configuration.get('/ovs/alba/asds/{0}/config|port'.format(asd_id))
                                     disks.append(asd)
+                                except NotFoundException as ex:
+                                    logger.failure("Could not find {0} in Arakoon. Got {1}"
+                                                   .format('/ovs/alba/asds/{0}/config|port'.format(asd_id), str(ex)))
+                                    raise
                                 except Exception as ex:
-                                    raise ConnectionFailedException(ex)
+                                    logger.failure("Could not connect to the Arakoon.")
+                                    raise ConnectionFailedException(str(ex))
                 # create result
                 result.append({
                         'name': abl.name,
@@ -110,8 +115,7 @@ class AlbaHealthCheck(object):
                     })
             except RuntimeError as e:
                 errors_found += 1
-                logger.failure("Error during fetch of alba backend '{0}': {1}".format(abl.name, e), 'check_alba')
-
+                logger.failure("Error during fetch of alba backend '{0}': {1}".format(abl.name, e))
             # give a precheck result for fetching the backend data
             if errors_found == 0:
                 logger.success("No problems occured when fetching alba backends!", 'fetch_alba_backends')
@@ -369,17 +373,19 @@ class AlbaHealthCheck(object):
             for disk in disks:
                 key = 'ovs-healthcheck-{0}'.format(str(uuid.uuid4()))
                 value = str(time.time())
-
                 if disk.get('status') != 'error':
                     ip_address = AlbaNodeHelper.get_albanode_by_node_id(disk.get('node_id')).ip
                     try:
                         # check if disk is missing
                         if disk.get('port'):
                             # put object
-                            AlbaCLI.run(command="asd-set",
-                                        named_params={'host': ip_address, 'port': str(disk.get('port')),
-                                                      'long-id': disk.get('asd_id')},
-                                        extra_params=[key, value])
+                            try:
+                                AlbaCLI.run(command="asd-set",
+                                            named_params={'host': ip_address, 'port': str(disk.get('port')),
+                                                          'long-id': disk.get('asd_id')},
+                                            extra_params=[key, value])
+                            except RuntimeError as ex:
+                                raise AlbaException(str(ex), 'asd-set')
                             # get object
                             try:
                                 g = AlbaCLI.run(command="asd-multi-get",
@@ -387,8 +393,8 @@ class AlbaHealthCheck(object):
                                                               'long-id': disk.get('asd_id')},
                                                 extra_params=[key],
                                                 to_json=False)
-                            except RuntimeError:
-                                raise ConnectionFailedException('Connection failed to disk')
+                            except RuntimeError as ex:
+                                raise AlbaException(str(ex), 'asd-multi-get')
 
                             # check if put/get is successfull
                             if 'None' in g:
@@ -407,8 +413,8 @@ class AlbaHealthCheck(object):
                                             named_params={'host': ip_address, 'port': str(disk.get('port')),
                                                           'long-id': disk.get('asd_id')},
                                             extra_params=[key])
-                            except RuntimeError:
-                                raise ConnectionFailedException('Connection failed to disk when trying to delete!')
+                            except RuntimeError as ex:
+                                raise AlbaException(str(ex), 'asd-delete')
                         else:
                             # disk is missing
                             raise DiskNotFoundException('Disk is missing')
@@ -418,10 +424,10 @@ class AlbaHealthCheck(object):
                         logger.failure("ASD test with DISK_ID '{0}' failed on NODE '{1}'!"
                                        .format(disk.get('asd_id'), ip_address),
                                        'alba_asd_{0}'.format(disk.get('asd_id')))
-                    except (ConnectionFailedException, DiskNotFoundException) as e:
+                    except (AlbaException, DiskNotFoundException) as e:
                         defectivedisks.append(disk.get('asd_id'))
                         logger.failure("ASD test with DISK_ID '{0}' failed because: {1}"
-                                       .format(disk.get('asd_id'), e),
+                                       .format(disk.get('asd_id'), str(e)),
                                        'alba_asd_{0}'.format(disk.get('asd_id')))
                 else:
                     defectivedisks.append(disk.get('asd_id'))
@@ -491,6 +497,8 @@ class AlbaHealthCheck(object):
                     logger.skip("Skipping ASD check because this is a EXTRA node ...", 'check_alba_asds')
             else:
                 logger.skip("No backends found ...", 'alba_backends_found')
+        except NotFoundException as ex:
+            logger.failure("Failed to fetch the object with exception: {0}".format(ex))
         except ConnectionFailedException as ex:
             logger.failure("Failed to connect to configuration master with exception: {0}".format(ex),
                            'configuration_master')

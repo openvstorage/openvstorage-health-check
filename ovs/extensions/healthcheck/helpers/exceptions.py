@@ -75,18 +75,12 @@ class VDiskNotFoundError(Exception):
     pass
 
 
-class VPoolNotFoundError(Exception):
-    """
-    Raised when an object was queries that doesn't exist
-    """
-    pass
-
-
 class ImageConvertError(Exception):
     """
     Raised when an object was queries that doesn't exist
     """
     pass
+
 
 class ObjectNotFoundException(Exception):
     """
@@ -160,8 +154,15 @@ class AlbaException(Exception):
         "show-namespace",
         "proxy-upload-object",
         "download-object",
-        "proxy-delete-object"
+        "proxy-delete-object",
+        "asd-delete",
+        "asd-multi-get",
+        "asd-set"
      ]
+    # Certain exceptions are unclear.
+    EXCEPTION_MAPPING = {
+        '(Unix.Unix_error "Connection refused" connect "")': "Could not connect to to ASD."
+    }
 
     def __init__(self, message, alba_command):
         # Call the base class constructor with the parameters it needs
@@ -174,4 +175,5 @@ class AlbaException(Exception):
                              .format(alba_command, " ".join(AlbaException.ALBA_COMMANDS)))
 
     def __str__(self):
-        return "Command '{0}' failed with '{1}'.".format(self.alba_command, self.message)
+        return "Command '{0}' failed with '{1}'.".format(self.alba_command, self.EXCEPTION_MAPPING.get(self.message,
+                                                                                                       self.message))
