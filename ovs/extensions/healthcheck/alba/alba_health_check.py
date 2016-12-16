@@ -516,7 +516,7 @@ class AlbaHealthCheck(object):
         logger.info("Checking if objects need to be repaired...")
 
         points = []
-        ambs = []
+        abms = []
 
         test_name = 'disk-safety'
         result = {
