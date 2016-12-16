@@ -516,6 +516,7 @@ class AlbaHealthCheck(object):
         logger.info("Checking if objects need to be repaired...")
 
         points = []
+        abms = []
 
         test_name = 'disk-safety'
         result = {
@@ -523,8 +524,9 @@ class AlbaHealthCheck(object):
                 "lost_disks": None
             }
 
-        abms = set(service.name.replace('arakoon-', '') for service in ServiceHelper.get_services()
-                   if service.type.name == ServiceType.SERVICE_TYPES.ALBA_MGR)
+        for service in ServiceHelper.get_services():
+            if service.type.name == ServiceType.SERVICE_TYPES.ALBA_MGR and service not in abms:
+                abms.append(service.name)
 
         abl = BackendHelper.get_albabackends()
         for ab in abl:
