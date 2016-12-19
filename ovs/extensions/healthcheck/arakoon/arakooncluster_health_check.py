@@ -202,6 +202,14 @@ class ArakoonHealthCheck(object):
 
             result['OK'].append(cluster_name)
 
+        if len(result['NOK']) > 0:
+            logger.failure("{0} Arakoon(s) restarted more than {1} times in {2} minutes: {3}"
+                           .format(len(result['NOK']),
+                                   ArakoonHealthCheck.MAX_AMOUNT_NODE_RESTARTED,
+                                   ArakoonHealthCheck.LAST_MINUTES,
+                                   ','.join(result['NOK'])), 'arakoon_restarts')
+        elif len(result['OK']) > 0:
+            logger.success("ALL Arakoon(s) restart check(s) is/are OK!", 'arakoon_restarts')
         return result
 
     @staticmethod
@@ -433,11 +441,6 @@ class ArakoonHealthCheck(object):
         if len(arakoon_clusters.keys()) != 0:
             logger.success("{0} available Arakoons successfully fetched, starting verification of clusters ..."
                            .format(len(arakoon_clusters)), 'arakoon_found')
-
-            ArakoonHealthCheck.check_collapse(logger=logger, arakoon_clusters=arakoon_clusters)
-            ArakoonHealthCheck.verify_integrity(logger=logger, arakoon_clusters=arakoon_clusters)
-            ArakoonHealthCheck.check_restarts(logger=logger, arakoon_clusters=arakoon_clusters)
-
         else:
             logger.skip("No available clusters found", 'arakoon_found')
 
@@ -451,3 +454,6 @@ class ArakoonHealthCheck(object):
         """
         ArakoonHealthCheck.check_required_ports(logger)
         ArakoonHealthCheck.check_arakoons(logger)
+        ArakoonHealthCheck.check_collapse(logger)
+        ArakoonHealthCheck.verify_integrity(logger)
+        ArakoonHealthCheck.check_restarts(logger)
