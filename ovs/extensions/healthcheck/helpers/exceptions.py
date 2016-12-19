@@ -161,7 +161,7 @@ class AlbaException(Exception):
      ]
     # Certain exceptions are unclear.
     EXCEPTION_MAPPING = {
-        '(Unix.Unix_error "Connection refused" connect "")': "Could not connect to to ASD."
+        '(Unix.Unix_error "Connection refused" connect "")': "Could not connect to ASD."
     }
 
     def __init__(self, message, alba_command):

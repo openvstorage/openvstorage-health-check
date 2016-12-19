@@ -349,7 +349,7 @@ class AlbaHealthCheck(object):
         return amount_of_presets_not_working
 
     @staticmethod
-    def check_backend_asds(logger, disks, backend_name):
+    def check_backend_asds(logger, disks, backend_name, config):
         """
         Checks if Alba ASD's work
 
@@ -359,6 +359,8 @@ class AlbaHealthCheck(object):
         :type disks: list
         :param backend_name: name of a existing backend
         :type backend_name: str
+        :param config: path of the configuration file for the abm
+        :type config: str
         :return: returns a tuple that consists of lists: (workingdisks, defectivedisks)
         :rtype: tuple that consists of lists
         """
@@ -370,11 +372,20 @@ class AlbaHealthCheck(object):
 
         # check if disks are working
         if len(disks) != 0:
+            # Map long id to ip
+            osd_mapping = {}
+            try:
+                for osd in AlbaCLI.run(command='list-osds', config=config):
+                    osd_mapping[osd.get('long_id')] = osd.get('ips')[0]
+            except RuntimeError as ex:
+                logger.failure("Could not fetch osd list from Alba. Got {0}".format(str(ex)))
+                return None
             for disk in disks:
                 key = 'ovs-healthcheck-{0}'.format(str(uuid.uuid4()))
                 value = str(time.time())
                 if disk.get('status') != 'error':
-                    ip_address = AlbaNodeHelper.get_albanode_by_node_id(disk.get('node_id')).ip
+                    # Fetch ip of the asd with list-asds
+                    ip_address = osd_mapping.get(disk.get('asd_id'))
                     try:
                         # check if disk is missing
                         if disk.get('port'):
@@ -461,35 +472,40 @@ class AlbaHealthCheck(object):
 
                         # check disks of backend, ignore global backends
                         if backend.get('type') == 'LOCAL':
+                            config = Configuration.get_configuration_path('/ovs/arakoon/{0}-abm/config'.format(backend.get('name')))
                             result_disks = AlbaHealthCheck.check_backend_asds(logger, backend.get('all_disks'),
-                                                                              backend.get('name'))
-                            workingdisks = result_disks[0]
-                            defectivedisks = result_disks[1]
+                                                                              backend.get('name'), config)
+                            if result_disks is not None:
+                                working_disks = result_disks[0]
+                                defective_disks = result_disks[1]
 
-                            # check if backend is available for vPOOL attachment / use
-                            if backend.get('is_available_for_vpool'):
-                                if len(defectivedisks) == 0:
-                                    logger.success("Alba backend '{0}' should be AVAILABLE FOR vPOOL USE,"
-                                                   " ALL asds are working fine!".format(backend.get('name')),
-                                                   'alba_backend_{0}'.format(backend.get('name')))
+                                # check if backend is available for vPOOL attachment / use
+                                if backend.get('is_available_for_vpool'):
+                                    if len(defective_disks) == 0:
+                                        logger.success("Alba backend '{0}' should be AVAILABLE FOR vPOOL USE,"
+                                                       " ALL asds are working fine!".format(backend.get('name')),
+                                                       'alba_backend_{0}'.format(backend.get('name')))
+                                    else:
+                                        logger.warning("Alba backend '{0}' should be "
+                                                       "AVAILABLE FOR vPOOL USE with {1} asds,"
+                                                       " BUT there are {2} defective asds: {3}"
+                                                       .format(backend.get('name'), len(working_disks), len(defective_disks),
+                                                               ', '.join(defective_disks)),
+                                                       'alba_backend_{0}'.format(backend.get('name'), len(defective_disks)))
                                 else:
-                                    logger.warning("Alba backend '{0}' should be "
-                                                   "AVAILABLE FOR vPOOL USE with {1} asds,"
-                                                   " BUT there are {2} defective asds: {3}"
-                                                   .format(backend.get('name'), len(workingdisks), len(defectivedisks),
-                                                           ', '.join(defectivedisks)),
-                                                   'alba_backend_{0}'.format(backend.get('name'), len(defectivedisks)))
+                                    if len(working_disks) == 0 and len(defective_disks) == 0:
+                                        logger.skip("Alba backend '{0}' is NOT available for vPool use, there are no"
+                                                    " asds assigned to this backend!".format(backend.get('name')),
+                                                    'alba_backend_{0}'.format(backend.get('name')))
+                                    else:
+                                        logger.failure("Alba backend '{0}' is NOT available for vPool use, preset"
+                                                       " requirements NOT SATISFIED! There are {1} working asds AND {2}"
+                                                       " defective asds!".format(backend.get('name'), len(working_disks),
+                                                                                 len(defective_disks)),
+                                                       'alba_backend_{0}'.format(backend.get('name')))
                             else:
-                                if len(workingdisks) == 0 and len(defectivedisks) == 0:
-                                    logger.skip("Alba backend '{0}' is NOT available for vPool use, there are no"
-                                                " asds assigned to this backend!".format(backend.get('name')),
-                                                'alba_backend_{0}'.format(backend.get('name')))
-                                else:
-                                    logger.failure("Alba backend '{0}' is NOT available for vPool use, preset"
-                                                   " requirements NOT SATISFIED! There are {1} working asds AND {2}"
-                                                   " defective asds!".format(backend.get('name'), len(workingdisks),
-                                                                             len(defectivedisks)),
-                                                   'alba_backend_{0}'.format(backend.get('name')))
+                                logger.failure('Could not fetch the asd information for alba backend {0}'.format(backend.get('name')),
+                                               'alba_backend_{0}'.format(backend.get('name')))
                         else:
                             logger.skip("ALBA backend '{0}' is a 'global' backend ...".format(backend.get('name')),
                                         'alba_backend_{0}'.format(backend.get('name')))
