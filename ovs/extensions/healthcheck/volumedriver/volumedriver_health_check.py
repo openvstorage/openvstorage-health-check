@@ -253,7 +253,6 @@ class VolumedriverHealthCheck(object):
                     try:
                         voldrv_client = src.LocalStorageRouterClient(config_file)
                         voldrv_volume_list = voldrv_client.list_volumes()
-
                         for volume in voldrv_volume_list:
                             # check if volume is halted, returns: 0 or 1
                             try:
@@ -271,7 +270,9 @@ class VolumedriverHealthCheck(object):
                             except TimeoutError:
                                 # timeout occured
                                 haltedvolumes.append(volume)
-
+                        logger.success(
+                            "Volumedriver {0} is up and running.".format(vp.name),
+                            'halted_volumedriver_{0}'.format(vp.name))
                     except (ClusterNotReachableException, RuntimeError) as ex:
                         logger.failure(
                             "Seems like the Volumedriver {0} is not running.".format(vp.name, ex.message),
