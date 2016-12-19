@@ -22,25 +22,26 @@ Alba Health Check Module
 
 import os
 import re
-import ast
 import uuid
 import time
 import hashlib
 import subprocess
 from ovs.dal.hybrids.servicetype import ServiceType
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
-from ovs.extensions.generic.configuration import Configuration
+from ovs.extensions.generic.configuration import Configuration, NotFoundException
 from ovs.extensions.generic.system import System
+from ovs.extensions.generic.volatilemutex import volatile_mutex
 from ovs.extensions.healthcheck.helpers.cache import CacheHelper
 from ovs.extensions.healthcheck.decorators import ExposeToCli
+from ovs.extensions.healthcheck.helpers.albacli import AlbaCLI
 from ovs.extensions.healthcheck.helpers.alba_node import AlbaNodeHelper
 from ovs.extensions.healthcheck.helpers.backend import BackendHelper
 from ovs.extensions.healthcheck.helpers.configuration import ConfigurationManager, ConfigurationProduct
 from ovs.extensions.healthcheck.helpers.exceptions import ObjectNotFoundException, ConnectionFailedException, \
-    DiskNotFoundException, ConfigNotMatchedException
+    DiskNotFoundException, ConfigNotMatchedException, AlbaException
+from ovs.extensions.healthcheck.helpers.init_manager import InitManager
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
 from ovs.extensions.healthcheck.helpers.storagedriver import StoragedriverHelper
-from ovs.extensions.plugins.albacli import AlbaCLI
 
 
 class AlbaHealthCheck(object):
@@ -95,8 +96,13 @@ class AlbaHealthCheck(object):
                                 try:
                                     asd['port'] = Configuration.get('/ovs/alba/asds/{0}/config|port'.format(asd_id))
                                     disks.append(asd)
+                                except NotFoundException as ex:
+                                    logger.failure("Could not find {0} in Arakoon. Got {1}"
+                                                   .format('/ovs/alba/asds/{0}/config|port'.format(asd_id), str(ex)))
+                                    raise
                                 except Exception as ex:
-                                    raise ConnectionFailedException(ex)
+                                    logger.failure("Could not connect to the Arakoon.")
+                                    raise ConnectionFailedException(str(ex))
                 # create result
                 result.append({
                         'name': abl.name,
@@ -109,16 +115,15 @@ class AlbaHealthCheck(object):
                     })
             except RuntimeError as e:
                 errors_found += 1
-                logger.failure("Error during fetch of alba backend '{0}': {1}".format(abl.name, e), 'check_alba')
-
-        # give a precheck result for fetching the backend data
-        if errors_found == 0:
-            logger.success("No problems occured when fetching alba backends!", 'fetch_alba_backends')
-        else:
-            logger.failure("Error during fetch of alba backend '{0}': {1}".format(abl.name, e), 'fetch_alba_backends')
+                logger.failure("Error during fetch of alba backend '{0}': {1}".format(abl.name, e))
+            # give a precheck result for fetching the backend data
+            if errors_found == 0:
+                logger.success("No problems occured when fetching alba backends!", 'fetch_alba_backends')
+            else:
+                logger.failure("Error during fetch of alba backend '{0}'".format(abl.name), 'fetch_alba_backends')
 
         return result
-    
+
     @staticmethod
     @ExposeToCli('alba', 'proxy-test')
     def check_if_proxies_work(logger):
@@ -128,129 +133,223 @@ class AlbaHealthCheck(object):
         :param logger: logging object
         :type logger: ovs.log.healthcheck_logHandler
         """
+        logger.info("Checking the ALBA proxies ...", 'check_alba_proxies')
 
         amount_of_presets_not_working = []
 
         # ignore possible subprocess output
         fnull = open(os.devnull, 'w')
-
+        proxies_tested = 0
         # try put/get/verify on all available proxies on the local node
         for service in ServiceHelper.get_services():
-            if service.storagerouter_guid == AlbaHealthCheck.MACHINE_DETAILS.guid:
-                if service.type.name == ServiceType.SERVICE_TYPES.ALBA_PROXY:
-                    logger.info("Checking ALBA proxy '{0}': ".format(service.name), 'check_alba')
-                    storagedriver_id = "{0}{1}".format(service.name.split('_')[1], AlbaHealthCheck.MACHINE_ID)
-                    ip = StoragedriverHelper.get_by_storagedriver_id(storagedriver_id).storage_ip
+            if service.storagerouter_guid == AlbaHealthCheck.MACHINE_DETAILS.guid and service.type.name == ServiceType.SERVICE_TYPES.ALBA_PROXY:
+                proxies_tested += 1
+                logger.info("Checking ALBA proxy '{0}': ".format(service.name), 'check_alba')
+                storagedriver_id = "{0}{1}".format(service.name.split('_')[1], AlbaHealthCheck.MACHINE_ID)
+                ip = StoragedriverHelper.get_by_storagedriver_id(storagedriver_id).storage_ip
 
-                    # Encapsulating try to determine test output
-                    try:
-                        # Determine what to what backend the proxy is connected
-                        proxy_client_cfg = AlbaCLI.run('proxy-client-cfg', host=ip, port=service.ports[0])
+                # Encapsulating try to determine test output
+                try:
+                    # Determine what to what backend the proxy is connected
+                    proxy_client_cfg = AlbaCLI.run(command="proxy-client-cfg",
+                                                   named_params={'host': ip, 'port': service.ports[0]})
 
-                        # Check if proxy config is correctly setup
-                        client_config = re.match('^client_cfg:\n{ cluster_id = "(?P<cluster_id>[0-9a-zA-Z_-]+)";.*',
-                                                 proxy_client_cfg)
+                    # Fetch arakoon information
+                    abm_name = proxy_client_cfg.get("cluster_id", None)
+                    abm_config = ConfigurationManager.get_config_file_path(arakoon_name=abm_name,
+                                                                           product=ConfigurationProduct.ARAKOON)
 
-                        if client_config is None:
-                            raise ConfigNotMatchedException('Proxy config does not have ''the correct format on node {0}'
-                                                            ' with port {1}.'.format(ip, service.ports[0]))
+                    # Check if proxy config is correctly setup
+                    if abm_name is None or re.match('^client_cfg:\n{ cluster_id = '
+                                                    '"(?P<cluster_id>[0-9a-zA-Z_-]+)";.*', abm_name) is None:
+                        ConfigNotMatchedException('Proxy config does not have the correct format on node {0}'
+                                                  ' with port {1}.'.format(ip, service.ports[0]))
 
-                        # Fetch arakoon information
-                        abm_name = client_config.groupdict()['cluster_id']
-                        abm_config = ConfigurationManager.get_config_file_path(arakoon_name=abm_name,
-                                                                               product=ConfigurationProduct.ARAKOON)
+                    # Determine presets / backend
+                    presets = AlbaCLI.run(command="list-presets", config=abm_config)
 
-                        # Determine presets / backend
-                        presets = AlbaCLI.run('list-presets', config=abm_config, to_json=True)
-
-                        for preset in presets:
-                            # If preset is not in use, test will fail so add a skip
-                            if preset['in_use'] is False:
-                                logger.skip("Preset '{0}' is not in use and will not be checked".format(preset['name']),
-                                            "proxy_{0}".format(service.name))
-                                continue
-                            # Encapsulation try for cleanup
-                            try:
-                                # Generate new namespace name using the preset
-                                namespace_key = 'ovs-healthcheck-ns-{0}'.format(preset.get('name'))
-                                object_key = 'ovs-healthcheck-obj-{0}'.format(str(uuid.uuid4()))
-
-                                # Create namespace
-                                AlbaCLI.run('proxy-create-namespace', host=ip, port=service.ports[0],
-                                            extra_params=[namespace_key, preset['name']])
-                                # Fetch namespace
-                                AlbaCLI.run('show-namespace', config=abm_config, to_json=True, extra_params=[namespace_key])
-                                logger.success("Namespace successfully created on proxy '{0}' with preset '{1}'!".format(service.name,preset.get('name')),
-                                               '{0}_preset_{1}_create_namespace'.format(service.name, preset.get('name')))
+                    for preset in presets:
+                        # If preset is not in use, test will fail so add a skip
+                        if preset['in_use'] is False:
+                            logger.skip("Preset '{0}' is not in use and will not be checked".format(preset['name']),
+                                        "proxy_{0}_preset_{1}".format(service.name, preset.get("name")))
+                            continue
+                        # Encapsulation try for cleanup
+                        try:
+                            # Generate new namespace name using the preset
+                            namespace_key = 'ovs-healthcheck-ns-{0}'.format(preset.get('name'))
+                            object_key = 'ovs-healthcheck-obj-{0}'.format(str(uuid.uuid4()))
+                            with volatile_mutex('ovs-healthcheck_proxy-test'):
+                                try:
+                                    # Create namespace
+                                    AlbaCLI.run(command="proxy-create-namespace",
+                                                named_params={'host': ip, 'port': service.ports[0]},
+                                                extra_params=[namespace_key, preset['name']])
+                                except RuntimeError as ex:
+                                    # @TODO remove check when the issue has been that blocks uploads
+                                    # after namespaces are created
+                                    # linked ticket: https://github.com/openvstorage/alba/issues/427
+                                    if "Proxy exception: Proxy_protocol.Protocol.Error.NamespaceAlreadyExists" in \
+                                            str(ex):
+                                        logger.skip("Namespace {0} already exists.".format(namespace_key))
+                                    else:
+                                        # pass
+                                        raise AlbaException("Create namespace has failed with {0} on namespace {1} "
+                                                            "with proxy {2} with preset {3}"
+                                                            .format(str(ex), namespace_key, service.name,
+                                                                    preset.get('name')), "proxy-create-namespace")
+                                try:
+                                    # Fetch namespace
+                                    AlbaCLI.run(command="show-namespace", config=abm_config,
+                                                extra_params=[namespace_key])
+                                    logger.success("Namespace successfully fetched on proxy '{0}' "
+                                                   "with preset '{1}'!".format(service.name, preset.get('name')),
+                                                   '{0}_preset_{1}_create_namespace'
+                                                   .format(service.name, preset.get('name')))
+                                except RuntimeError as ex:
+                                    raise AlbaException("Show namespace has failed with {0} on namespace {1} "
+                                                        "with proxy {2} with preset {3}"
+                                                        .format(str(ex), namespace_key, service.name,
+                                                                preset.get('name')), "show-namespace")
 
                                 # Put test object to given dir
                                 with open(AlbaHealthCheck.TEMP_FILE_LOC, 'wb') as fout:
                                     fout.write(os.urandom(AlbaHealthCheck.TEMP_FILE_SIZE))
-
-                                # try to put object
-                                AlbaCLI.run('proxy-upload-object', host=ip, port=service.ports[0],
-                                            extra_params=[namespace_key, AlbaHealthCheck.TEMP_FILE_LOC, object_key])
-                                # download object
-                                AlbaCLI.run('download-object', config=abm_config,
-                                            extra_params=[namespace_key, object_key,AlbaHealthCheck.TEMP_FILE_FETCHED_LOC])
+                                try:
+                                    # try to put object
+                                    AlbaCLI.run(command="proxy-upload-object",
+                                                named_params={'host': ip, 'port': service.ports[0]},
+                                                extra_params=[namespace_key, AlbaHealthCheck.TEMP_FILE_LOC,
+                                                              object_key])
+                                    logger.success("Succesfully uploaded the object to namespace {0}"
+                                                   .format(namespace_key),
+                                                   "{0}_preset_{1}_upload_object"
+                                                   .format(service.name, preset.get('name')))
+                                except RuntimeError as ex:
+                                    raise AlbaException("Uploading the object has failed with {0} on namespace {1} "
+                                                        "with proxy {2} with preset {3}"
+                                                        .format(str(ex), namespace_key, service.name,
+                                                                preset.get('name')), "proxy-upload-object")
+                                try:
+                                    # download object
+                                    AlbaCLI.run(command="proxy-download-object",
+                                                named_params={'host': ip, 'port': service.ports[0]},
+                                                extra_params=[namespace_key, object_key,
+                                                              AlbaHealthCheck.TEMP_FILE_FETCHED_LOC])
+                                    logger.success("Succesfully downloaded the object to namespace {0}"
+                                                   .format(namespace_key),
+                                                   "{0}_preset_{1}_download_object".format(service.name,
+                                                                                           preset.get('name')))
+                                except RuntimeError as ex:
+                                    raise AlbaException("Downloading the object has failed with {0} "
+                                                        "on namespace {1} with proxy {2} with preset {3}"
+                                                        .format(str(ex), namespace_key, service.name,
+                                                                preset.get('name')),
+                                                        "proxy-download-object")
                                 # check if files exists - issue #57
                                 if os.path.isfile(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC) \
                                         and os.path.isfile(AlbaHealthCheck.TEMP_FILE_LOC):
-                                    hash_original = hashlib.md5(open(AlbaHealthCheck.TEMP_FILE_LOC, 'rb').read()).hexdigest()
-                                    hash_fetched = hashlib.md5(open(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC, 'rb').read()).hexdigest()
+                                    hash_original = hashlib.md5(open(AlbaHealthCheck.TEMP_FILE_LOC, 'rb').read())\
+                                        .hexdigest()
+                                    hash_fetched = hashlib.md5(open(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC, 'rb')
+                                                               .read()).hexdigest()
 
                                     if hash_original == hash_fetched:
                                         logger.success("Creation of a object in namespace '{0}' on proxy '{1}' "
-                                                       "with preset '{2}' succeeded!".format(namespace_key,service.name,preset.get('name')),
-                                                       '{0}_preset_{1}_create_object'.format(service.name, preset.get('name')))
+                                                       "with preset '{2}' succeeded!"
+                                                       .format(namespace_key, service.name, preset.get('name')),
+                                                       '{0}_preset_{1}_compare_object'
+                                                       .format(service.name, preset.get('name')))
                                     else:
                                         logger.failure("Creation of a object '{0}' in namespace '{1}' on proxy"
-                                                       " '{2}' with preset '{3}' failed!".format(object_key,namespace_key,service.name,preset.get('name')),
-                                                       '{0}_preset_{1}_create_object'.format(service.name, preset.get('name')))
+                                                       " '{2}' with preset '{3}' failed!"
+                                                       .format(object_key, namespace_key, service.name,
+                                                               preset.get('name')),
+                                                       '{0}_preset_{1}_compare_object'
+                                                       .format(service.name, preset.get('name')))
                                 else:
                                     # creation of object failed
                                     raise ObjectNotFoundException(ValueError('Creation of object has failed'))
 
-                            except RuntimeError as e:
-                                # put was not successfully executed, so get return success = False
-                                logger.failure("Creating/fetching namespace ""'{0}' with preset '{1}' on proxy '{2}' "
-                                               "failed! With error {3}".format(namespace_key, preset.get('name'), service.name, e),
-                                               '{0}_preset_{1}_create_namespace'.format(service.name, preset.get('name')))
-
-                            except ObjectNotFoundException as e:
-                                amount_of_presets_not_working.append(preset.get('name'))
-                                logger.failure("Failed to put object on namespace '{0}' failed on proxy '{1}' "
-                                               "with preset '{2}' With error {3}".format(namespace_key, service.name, preset.get('name'), e),
-                                               '{0}_preset_{1}_create_object'.format(service.name, preset.get('name')))
-                            finally:
-                                # Delete the created namespace and preset
+                        except ObjectNotFoundException as e:
+                            amount_of_presets_not_working.append(preset.get('name'))
+                            logger.failure("Failed to put object on namespace '{0}' failed on proxy '{1}' "
+                                           "with preset '{2}' With error {3}".format(namespace_key, service.name,
+                                                                                     preset.get('name'), e),
+                                           '{0}_preset_{1}_create_object'.format(service.name, preset.get('name')))
+                        except AlbaException as e:
+                            if e.alba_command == "proxy-create-namespace":
+                                # @TODO uncomment when the issue has been that blocks uploads
+                                # after namespaces are created
+                                # linked ticket: https://github.com/openvstorage/alba/issues/427
+                                # Should fail as we do not cleanup
+                                logger.warning(str(e), '{0}_preset_{1}_create_namespace'.format(service.name,
+                                                                                                preset.get('name')))
+                            if e.alba_command == "show-namespace":
+                                logger.failure(str(e), '{0}_preset_{1}_show_namespace'.format(service.name,
+                                                                                              preset.get('name')))
+                            if e.alba_command == "proxy-upload-object":
+                                logger.failure(str(e), "{0}_preset_{1}_create_object".format(service.name,
+                                                                                             preset.get('name')))
+                            if e.alba_command == "download-object":
+                                logger.failure(str(e), "{0}_preset_{1}_download_object".format(service.name,
+                                                                                               preset.get('name')))
+                        finally:
+                            # Delete the created namespace and preset
+                            try:
+                                # Remove object first
+                                logger.info("Deleting created object '{0}' on '{1}'.".format(object_key,
+                                                                                             namespace_key))
                                 try:
-                                    # Remove object first
-                                    logger.info("Deleting created object '{0}' on '{1}'.".format(object_key, namespace_key))
-                                    AlbaCLI.run('proxy-delete-object', host=ip, port=service.ports[0], extra_params=[namespace_key, object_key])
-                                    subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_LOC)], stdout=fnull, stderr=subprocess.STDOUT)
-                                    subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC)], stdout=fnull, stderr=subprocess.STDOUT)
-                                    # @TODO uncomment when the issue has been that blocks uploads after namespaces are created
-                                    # # Remove namespace afterwards
-                                    # logger.info("Deleting namespace '{0}'.".format(namespace_key))
-                                    # AlbaCLI.run('proxy-delete-namespace', host=ip, port=service.ports[0], extra_params=[namespace_key])
-                                except subprocess.CalledProcessError as e:
-                                    raise
+                                    AlbaCLI.run(command="proxy-delete-object",
+                                                named_params={'host': ip, 'port': service.ports[0]},
+                                                extra_params=[namespace_key, object_key])
+                                except RuntimeError as ex:
+                                    # Ignore object not found
+                                    if "Proxy exception: Proxy_protocol.Protocol.Error.ObjectDoesNotExist" \
+                                            in str(ex):
+                                        pass
+                                    else:
+                                        raise AlbaException("Deleting the object has failed with {0}"
+                                                            .format(str(ex)), "proxy-delete-object")
+                                subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_LOC)], stdout=fnull,
+                                                stderr=subprocess.STDOUT)
+                                subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC)], stdout=fnull,
+                                                stderr=subprocess.STDOUT)
 
-                    except subprocess.CalledProcessError as e:
-                        # this should stay for the deletion of the remaining files
-                        amount_of_presets_not_working.append(service.name)
-                        logger.failure("Proxy '{0}' has some problems. Got '{1}' as error".format(service.name, e), 'proxy_{0}'.format(service.name))
+                                # @TODO uncomment when the issue has been that blocks uploads
+                                # after namespaces are created
+                                # linked ticket: https://github.com/openvstorage/alba/issues/427
+                                # # Remove namespace afterwards
+                                # logger.info("Deleting namespace '{0}'.".format(namespace_key))
+                                # try:
+                                #     AlbaCLI.run(command="proxy-delete-namespace",
+                                #                 named_params={'host': ip, 'port': service.ports[0]},
+                                #                 extra_params=[namespace_key])
+                                # except RuntimeError as ex:
+                                #     raise AlbaException("Deleting namespace failed with {0}".format(str(ex)),
+                                # "proxy-delete-namespace")
+                            except subprocess.CalledProcessError:
+                                raise
+                            except AlbaException:
+                                raise
+                except subprocess.CalledProcessError as e:
+                    # this should stay for the deletion of the remaining files
+                    amount_of_presets_not_working.append(service.name)
+                    logger.failure("Proxy '{0}' has some problems. Got '{1}' as error".format(service.name, e),
+                                   'proxy_{0}'.format(service.name))
 
-                    except ConfigNotMatchedException as e:
-                        amount_of_presets_not_working.append(service.name)
-                        logger.failure("Proxy '{0}' has some problems. Got '{1}' as error".format(service.name, e),'proxy_{0}'.format(service.name))
-
+                except ConfigNotMatchedException as e:
+                    amount_of_presets_not_working.append(service.name)
+                    logger.failure("Proxy '{0}' has some problems. Got '{1}' as error".format(service.name, e),
+                                   'proxy_{0}'.format(service.name))
+        if proxies_tested == 0:
+            logger.info("Found no proxies.")
         # for unattended
         return amount_of_presets_not_working
 
     @staticmethod
-    def check_backend_asds(logger, disks, backend_name):
+    def check_backend_asds(logger, disks, backend_name, config):
         """
         Checks if Alba ASD's work
 
@@ -258,6 +357,10 @@ class AlbaHealthCheck(object):
         :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         :param disks: list of alba ASD's
         :type disks: list
+        :param backend_name: name of a existing backend
+        :type backend_name: str
+        :param config: path of the configuration file for the abm
+        :type config: str
         :return: returns a tuple that consists of lists: (workingdisks, defectivedisks)
         :rtype: tuple that consists of lists
         """
@@ -269,25 +372,40 @@ class AlbaHealthCheck(object):
 
         # check if disks are working
         if len(disks) != 0:
+            # Map long id to ip
+            osd_mapping = {}
+            try:
+                for osd in AlbaCLI.run(command='list-osds', config=config):
+                    osd_mapping[osd.get('long_id')] = osd.get('ips')[0]
+            except RuntimeError as ex:
+                logger.failure("Could not fetch osd list from Alba. Got {0}".format(str(ex)))
+                return None
             for disk in disks:
                 key = 'ovs-healthcheck-{0}'.format(str(uuid.uuid4()))
                 value = str(time.time())
-
                 if disk.get('status') != 'error':
-                    ip_address = AlbaNodeHelper.get_albanode_by_node_id(disk.get('node_id')).ip
+                    # Fetch ip of the asd with list-asds
+                    ip_address = osd_mapping.get(disk.get('asd_id'))
                     try:
                         # check if disk is missing
                         if disk.get('port'):
-                            # put object but ignore crap for a moment
-                            AlbaCLI.run('asd-set', host=ip_address, port=str(disk.get('port')),
-                                        long_id=disk.get('asd_id'), extra_params=[key, value])
-
+                            # put object
+                            try:
+                                AlbaCLI.run(command="asd-set",
+                                            named_params={'host': ip_address, 'port': str(disk.get('port')),
+                                                          'long-id': disk.get('asd_id')},
+                                            extra_params=[key, value])
+                            except RuntimeError as ex:
+                                raise AlbaException(str(ex), 'asd-set')
                             # get object
                             try:
-                                g = AlbaCLI.run('asd-multi-get', host=ip_address, port=str(disk.get('port')),
-                                                long_id=disk.get('asd_id'), extra_params=[key])
-                            except Exception:
-                                raise ConnectionFailedException('Connection failed to disk')
+                                g = AlbaCLI.run(command="asd-multi-get",
+                                                named_params={'host': ip_address, 'port': str(disk.get('port')),
+                                                              'long-id': disk.get('asd_id')},
+                                                extra_params=[key],
+                                                to_json=False)
+                            except RuntimeError as ex:
+                                raise AlbaException(str(ex), 'asd-multi-get')
 
                             # check if put/get is successfull
                             if 'None' in g:
@@ -302,10 +420,12 @@ class AlbaHealthCheck(object):
 
                             # delete object
                             try:
-                                AlbaCLI.run('asd-delete', host=ip_address, port=str(disk.get('port')),
-                                            long_id=disk.get('asd_id'), extra_params=[key])
-                            except subprocess.CalledProcessError:
-                                raise ConnectionFailedException('Connection failed to disk when trying to delete!')
+                                AlbaCLI.run(command="asd-delete",
+                                            named_params={'host': ip_address, 'port': str(disk.get('port')),
+                                                          'long-id': disk.get('asd_id')},
+                                            extra_params=[key])
+                            except RuntimeError as ex:
+                                raise AlbaException(str(ex), 'asd-delete')
                         else:
                             # disk is missing
                             raise DiskNotFoundException('Disk is missing')
@@ -315,10 +435,10 @@ class AlbaHealthCheck(object):
                         logger.failure("ASD test with DISK_ID '{0}' failed on NODE '{1}'!"
                                        .format(disk.get('asd_id'), ip_address),
                                        'alba_asd_{0}'.format(disk.get('asd_id')))
-                    except (ConnectionFailedException, DiskNotFoundException) as e:
+                    except (AlbaException, DiskNotFoundException) as e:
                         defectivedisks.append(disk.get('asd_id'))
                         logger.failure("ASD test with DISK_ID '{0}' failed because: {1}"
-                                       .format(disk.get('asd_id'), e),
+                                       .format(disk.get('asd_id'), str(e)),
                                        'alba_asd_{0}'.format(disk.get('asd_id')))
                 else:
                     defectivedisks.append(disk.get('asd_id'))
@@ -330,7 +450,7 @@ class AlbaHealthCheck(object):
 
     @staticmethod
     @ExposeToCli('alba', 'backend-test')
-    def check_alba(logger):
+    def check_backends(logger):
         """
         Checks Alba as a whole
 
@@ -345,9 +465,6 @@ class AlbaHealthCheck(object):
                 logger.success("We found {0} backend(s)!".format(len(alba_backends)),
                                'alba_backends_found'.format(len(alba_backends)))
 
-                logger.info("Checking the ALBA proxies ...", 'check_alba_proxies')
-                AlbaHealthCheck.check_if_proxies_work(logger)
-
                 logger.info("Checking the ALBA ASDs ...", 'check_alba_asds')
                 if System.get_my_storagerouter().node_type != 'EXTRA':
                     logger.success("Start checking all the ASDs!", 'check_alba_asds')
@@ -355,38 +472,40 @@ class AlbaHealthCheck(object):
 
                         # check disks of backend, ignore global backends
                         if backend.get('type') == 'LOCAL':
+                            config = Configuration.get_configuration_path('/ovs/arakoon/{0}-abm/config'.format(backend.get('name')))
                             result_disks = AlbaHealthCheck.check_backend_asds(logger, backend.get('all_disks'),
-                                                                              backend.get('name'))
-                            workingdisks = result_disks[0]
-                            defectivedisks = result_disks[1]
+                                                                              backend.get('name'), config)
+                            if result_disks is not None:
+                                working_disks = result_disks[0]
+                                defective_disks = result_disks[1]
 
-                            # check if backend is available for vPOOL attachment / use
-                            if backend.get('is_available_for_vpool'):
-                                if len(defectivedisks) == 0:
-                                    logger.success("Alba backend '{0}' should be AVAILABLE FOR vPOOL USE,"
-                                                   " ALL asds are working fine!".format(backend.get('name')),
-                                                   'alba_backend_{0}'.format(backend.get('name')))
+                                # check if backend is available for vPOOL attachment / use
+                                if backend.get('is_available_for_vpool'):
+                                    if len(defective_disks) == 0:
+                                        logger.success("Alba backend '{0}' should be AVAILABLE FOR vPOOL USE,"
+                                                       " ALL asds are working fine!".format(backend.get('name')),
+                                                       'alba_backend_{0}'.format(backend.get('name')))
+                                    else:
+                                        logger.warning("Alba backend '{0}' should be "
+                                                       "AVAILABLE FOR vPOOL USE with {1} asds,"
+                                                       " BUT there are {2} defective asds: {3}"
+                                                       .format(backend.get('name'), len(working_disks), len(defective_disks),
+                                                               ', '.join(defective_disks)),
+                                                       'alba_backend_{0}'.format(backend.get('name'), len(defective_disks)))
                                 else:
-                                    logger.warning("Alba backend '{0}' should be "
-                                                   "AVAILABLE FOR vPOOL USE with {1} asds,"
-                                                   " BUT there are {2} defective asds: {3}".format(backend.get('name'),
-                                                                                                    len(workingdisks),
-                                                                                                    len(defectivedisks),
-                                                                                                    ', '
-                                                                                                    .join(defectivedisks
-                                                                                                          )),
-                                                   'alba_backend_{0}'.format(backend.get('name'), len(defectivedisks)))
+                                    if len(working_disks) == 0 and len(defective_disks) == 0:
+                                        logger.skip("Alba backend '{0}' is NOT available for vPool use, there are no"
+                                                    " asds assigned to this backend!".format(backend.get('name')),
+                                                    'alba_backend_{0}'.format(backend.get('name')))
+                                    else:
+                                        logger.failure("Alba backend '{0}' is NOT available for vPool use, preset"
+                                                       " requirements NOT SATISFIED! There are {1} working asds AND {2}"
+                                                       " defective asds!".format(backend.get('name'), len(working_disks),
+                                                                                 len(defective_disks)),
+                                                       'alba_backend_{0}'.format(backend.get('name')))
                             else:
-                                if len(workingdisks) == 0 and len(defectivedisks) == 0:
-                                    logger.skip("Alba backend '{0}' is NOT available for vPool use, there are no"
-                                                " asds assigned to this backend!".format(backend.get('name')),
-                                                'alba_backend_{0}'.format(backend.get('name')))
-                                else:
-                                    logger.failure("Alba backend '{0}' is NOT available for vPool use, preset"
-                                                   " requirements NOT SATISFIED! There are {1} working asds AND {2}"
-                                                   " defective asds!".format(backend.get('name'), len(workingdisks),
-                                                                              len(defectivedisks)),
-                                                   'alba_backend_{0}'.format(backend.get('name')))
+                                logger.failure('Could not fetch the asd information for alba backend {0}'.format(backend.get('name')),
+                                               'alba_backend_{0}'.format(backend.get('name')))
                         else:
                             logger.skip("ALBA backend '{0}' is a 'global' backend ...".format(backend.get('name')),
                                         'alba_backend_{0}'.format(backend.get('name')))
@@ -394,6 +513,8 @@ class AlbaHealthCheck(object):
                     logger.skip("Skipping ASD check because this is a EXTRA node ...", 'check_alba_asds')
             else:
                 logger.skip("No backends found ...", 'alba_backends_found')
+        except NotFoundException as ex:
+            logger.failure("Failed to fetch the object with exception: {0}".format(ex))
         except ConnectionFailedException as ex:
             logger.failure("Failed to connect to configuration master with exception: {0}".format(ex),
                            'configuration_master')
@@ -418,6 +539,7 @@ class AlbaHealthCheck(object):
                 "repair_percentage": None,
                 "lost_disks": None
             }
+
         for service in ServiceHelper.get_services():
             if service.type.name == ServiceType.SERVICE_TYPES.ALBA_MGR and service not in abms:
                 abms.append(service.name)
@@ -429,16 +551,18 @@ class AlbaHealthCheck(object):
             if service_name not in abms:
                 continue
 
-            config = "arakoon://config/ovs/arakoon/{0}/config?ini=%2Fopt%2FOpenvStorage%2Fconfig%2Farakoon_cacc.ini".format(service_name)
-
+            config = Configuration.get_configuration_path('ovs/arakoon/{0}/config'.format(service_name))
             # Fetch alba info
             try:
                 try:
-                    namespaces = AlbaCLI.run('show-namespaces', config=config, to_json=True)[1]
+                    # @TODO add this to extra_params to include errored asds. Currently there is a bug with it
+                    # Ticket: https://github.com/openvstorage/alba/issues/441
+                    # extra_params=["--include-errored-as-dead"]
+                    namespaces = AlbaCLI.run(command="get-disk-safety", config=config)
                 except Exception as ex:
-                    raise SystemError("Could not execute 'alba show-namespaces'. Got {0}".format(ex.message))
+                    raise SystemError("Could not execute 'alba get-disk-safety'. Got {0}".format(ex.message))
                 try:
-                    presets = AlbaCLI.run('list-presets', config=config, to_json=True)
+                    presets = AlbaCLI.run(command="list-presets", config=config)
                 except Exception as ex:
                     raise SystemError("Could not execute 'list-presets'. Got {0}".format(ex.message))
             except SystemError as ex:
@@ -454,38 +578,20 @@ class AlbaHealthCheck(object):
                         max_lost_disks = policy[1]
 
             disk_lost_overview = {}
-            disk_safety_overview = {}
-            bucket_overview = {}
-            max_disk_safety = 0
             total_objects = 0
 
             for namespace in namespaces:
-                statistics = namespace['statistics']
-                bucket_counts = statistics['bucket_count']
-                preset_name = namespace['namespace']['preset_name']
-                for bucket_count in bucket_counts:
-                    bucket, objects = bucket_count
+                for bucket_safety in namespace['bucket_safety']:
+                    bucket = bucket_safety['bucket']
+                    objects = bucket_safety['count']
                     total_objects += objects
+                    applicable_dead_osds = bucket_safety['applicable_dead_osds']
                     # Amount of lost disks at this point
-                    disk_lost = bucket[0] + bucket[1] - bucket[2]
-                    disk_safety = bucket[1] - disk_lost
-                    if disk_safety > max_disk_safety:
-                        max_disk_safety = disk_safety
-
-                    if preset_name not in bucket_overview:
-                        bucket_overview[preset_name] = {}
-
-                    if str(bucket) not in bucket_overview[preset_name]:
-                        bucket_overview[preset_name][str(bucket)] = {'objects': 0, 'disk_safety': 0}
+                    bucket[2] = bucket[2] - applicable_dead_osds
+                    disk_lost = bucket[2] - (bucket[0] + bucket[1])
                     if disk_lost not in disk_lost_overview:
                         disk_lost_overview[disk_lost] = 0
-                    if disk_safety not in disk_safety_overview:
-                        disk_safety_overview[disk_safety] = 0
                     disk_lost_overview[disk_lost] += objects
-                    disk_safety_overview[disk_safety] += objects
-                    bucket_overview[preset_name][str(bucket)]['objects'] += objects
-                    bucket_overview[preset_name][str(bucket)]['disk_safety'] = disk_safety
-
             for disk_lost, objects in disk_lost_overview.iteritems():
                 lost = {
                     'measurement': 'disk_lost',
@@ -498,63 +604,97 @@ class AlbaHealthCheck(object):
                         'objects': objects
                     }
                 }
-
                 points.append(lost)
 
         if len(points) == 0:
             logger.skip('Found no objects present of the system.', test_name)
         else:
-            total_objects = 0
-            object_to_be_repaired = 0
-            current_disks_lost = 0
+            backends_to_be_repaired = {}
             for result in points:
-                total_objects = result["fields"]["total_objects"]
                 # Ignore fully healthy ones
-                if result["tags"]["disk_lost"] != 0:
-                    current_disks_lost = result["tags"]["disk_lost"]
-                    object_to_be_repaired = result["fields"]["objects"]
-            # limit to 4 numbers
-            repair_percentage = float("{0:.4f}".format((float(object_to_be_repaired)/float(total_objects))*100))
-            if current_disks_lost == 0:
-                logger.success("Found no broken asds. All data is safe.")
+                if result["tags"]["disk_lost"] == 0:
+                    continue
+                total_objects = result["fields"]["total_objects"]
+                objects = result["fields"]["objects"]
+
+                backend_name = result["tags"]["backend_name"]
+
+                if backend_name not in backends_to_be_repaired:
+                    backends_to_be_repaired[backend_name] = {"objects": 0, "total_objects": total_objects}
+                backends_to_be_repaired[backend_name]["objects"] += objects
+
+            repair_percentage = 0
+            if len(backends_to_be_repaired) == 0:
+                logger.success("Found no backends with disk lost. All data is safe.")
             else:
-                logger.failure("Currently found {0} asds that are lost.".format(current_disks_lost))
-
-            # display to be repaired amount of objects
-            if object_to_be_repaired != 0:
-                logger.warning("{0} out of {1} have to be repaired.".format(object_to_be_repaired, total_objects))
-                logger.warning('{0}% of the objects have to be repaired'.format(repair_percentage),
-                               'repair_percentage_{0}'.format(repair_percentage))
-            else:
-                logger.success("No objects have to be repaired.", 'repair_percentage_0')
-
-            logger.info("Checking if objects repair queue has changed...")
-
+                logger.failure("Currently found {0} backend(s) with disk lost.".format(len(backends_to_be_repaired)))
+                for backend, disk_lost in backends_to_be_repaired.iteritems():
+                    # limit to 4 numbers
+                    repair_percentage = float("{0:.4f}".format((float(disk_lost['objects']) /
+                                                                float(disk_lost['total_objects'])) * 100))
+                    logger.warning("Backend {0}: {1} out of {2} objects have to be repaired."
+                                   .format(backend, disk_lost['objects'], disk_lost['total_objects']))
+                    logger.warning('Backend {0}: {1}% of the objects have to be repaired'.format(backend,
+                                                                                                 repair_percentage))
             # Log if the amount is rising
             cache = CacheHelper.get()
+            repair_rising = False
             if cache is None:
                 # First run of healthcheck
-                logger.success("Object repair will be monitored on incrementations.", 'repair_OK')
+                logger.success("Object repair will be monitored on incrementations.")
             elif repair_percentage == 0:
                 # Amount of objects to repair are rising
-                logger.success("No objects in objects repair queue", 'repair_OK')
+                logger.success("No objects in objects repair queue")
             elif cache["repair_percentage"] > repair_percentage:
                 # Amount of objects to repair is descending
-                logger.failure("Amount of objects to repair is descending!", 'repair_DESCENDING')
+                logger.failure("Amount of objects to repair is descending!")
             elif cache["repair_percentage"] < repair_percentage:
                 # Amount of objects to repair is rising
-                logger.failure("Amount of objects to repair are rising!", 'repair_RISING')
+                repair_rising = True
+                logger.failure("Amount of objects to repair are rising!")
             elif cache["repair_percentage"] == repair_percentage:
                 # Amount of objects to repair is the same
-                logger.success("Amount of objects to repair are the same!", 'repair_SAME')
+                logger.success("Amount of objects to repair are the same!")
 
+            if logger.print_progress is False:
+                # Custom recap for operations
+                logger.custom(
+                    'Recap of disk-safety: {0}% of the objects have to be repaired. {1} backend(s) with disk lost and number of objects to repair are {2}.'
+                    .format(repair_percentage, len(backends_to_be_repaired),'rising' if repair_rising is True else 'descending or the same'),
+                    test_name,
+                    " ".join([str(repair_percentage), 'SUCCESS' if repair_rising == 0 else 'FAILURE', 'FAILURE' if repair_rising is True else 'SUCCESS']))
             result["repair_percentage"] = repair_percentage
-            result["lost_asds"] = current_disks_lost
+            result["lost_backends"] = backends_to_be_repaired
             CacheHelper.set(result)
         return result
 
     @staticmethod
+    @ExposeToCli('alba', 'processes-test')
+    def check_alba_processes(logger):
+        """
+        Checks the availability of processes for Alba
+
+        :param logger: logging object
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
+        """
+        test_name = 'check_alba_processes'
+        logger.info("Checking LOCAL ALBA services: ", test_name)
+        services = InitManager.get_local_services(prefix='alba', ip=AlbaHealthCheck.MACHINE_DETAILS.ip)
+        if len(services) > 0:
+            for service_name in services:
+                if InitManager.service_running(service_name=service_name, ip=AlbaHealthCheck.MACHINE_DETAILS.ip):
+                    logger.success("Service '{0}' is running!".format(service_name),
+                                   'process_{0}'.format(service_name))
+                else:
+                    logger.failure("Service '{0}' is NOT running, please check this... ".format(service_name),
+                                   'process_{0}'.format(service_name))
+        else:
+            logger.skip("Found no LOCAL ALBA services.", test_name)
+
+    @staticmethod
     @ExposeToCli('alba', 'test')
     def run(logger):
-        AlbaHealthCheck.check_alba(logger)
+        AlbaHealthCheck.check_backends(logger)
+        AlbaHealthCheck.check_if_proxies_work(logger)
         AlbaHealthCheck.get_disk_safety(logger)
+        AlbaHealthCheck.check_alba_processes(logger)
