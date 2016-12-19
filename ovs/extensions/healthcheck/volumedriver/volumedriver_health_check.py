@@ -59,22 +59,39 @@ class VolumedriverHealthCheck(object):
         # Fetch vdisks hosted on this machine
         if len(VolumedriverHealthCheck.MACHINE_DETAILS.vdisks_guids) != 0:
             for vdisk_guid in VolumedriverHealthCheck.MACHINE_DETAILS.vdisks_guids:
-                vdisk = VDiskHelper.get_vdisk_by_guid(vdisk_guid)
-                # Check dtl
-                dtl_status = vdisk.dtl_status
-                if dtl_status == "ok_standalone":
-                    logger.warning("VDisk {0}'s DTL is disabled".format(vdisk.name), test_name)
-                elif dtl_status == "ok_sync":
-                    logger.success("VDisk {0}'s DTL is enabled and running.".format(vdisk.name), test_name)
-                elif dtl_status == "degraded":
-                    logger.failure("VDisk {0}'s DTL is degraded.".format(vdisk.name), test_name)
-                elif dtl_status == "catchup" or dtl_status == "catch_up":
-                    logger.warning("VDisk {0}'s DTL is enabled but still syncing.".format(vdisk.name), test_name)
-                else:
-                    logger.warning("Vdisk {0}'s DTL has an unknown status: {1}.".format(vdisk.name, dtl_status),
+                try:
+                    results = VolumedriverHealthCheck._check_disk_dtl(vdisk_guid=vdisk_guid)
+                    if results[1] == "ok_standalone":
+                        logger.warning("VDisk {0}'s DTL is disabled".format(results[0]), test_name)
+                    elif results[1] == "ok_sync":
+                        logger.success("VDisk {0}'s DTL is enabled and running.".format(results[0]), test_name)
+                    elif results[1] == "degraded":
+                        logger.failure("VDisk {0}'s DTL is degraded.".format(results[0]), test_name)
+                    elif results[1] == "catchup" or results[1] == "catch_up":
+                        logger.warning("VDisk {0}'s DTL is enabled but still syncing.".format(results[0]), test_name)
+                    else:
+                        logger.warning("VDisk {0}'s DTL has an unknown status: {1}.".format(results[0], results[1]),
+                                       test_name)
+                except TimeoutError:
+                    logger.warning("VDisk {0}'s DTL has a timeout status: {1}.".format(results[0], results[1]),
                                    test_name)
+
         else:
             logger.skip("No VDisks present in cluster.", test_name)
+
+    @staticmethod
+    @timeout_decorator.timeout(5)
+    def _check_disk_dtl(vdisk_guid):
+        """
+        Get dtl status by vdisk guid
+
+        :param vdisk_guid: guid of existing vdisk
+        :type vdisk_guid: str
+        :return: tuple
+        :rtype: tuple
+        """
+        vdisk = VDiskHelper.get_vdisk_by_guid(vdisk_guid)
+        return vdisk.name, vdisk.dtl_status
 
     @staticmethod
     @timeout_decorator.timeout(30)
@@ -192,8 +209,8 @@ class VolumedriverHealthCheck(object):
                                            "Got `{1}` while executing.".format(vp.name, ex), 'volumedriver_{0}'
                                            .format(vp.name))
                         except VDiskNotFoundError:
-                            logger.warning("Volume on vPool '{0}' was not found, please retry again", 'volumedriver_{0}'
-                                           .format(vp.name))
+                            logger.warning("Volume on vPool '{0}' was not found, please retry again".format(vp.name),
+                                           'volumedriver_{0}'.format(vp.name))
                         except Exception as ex:
                             logger.failure("Volumedriver of vPool '{0}' seems to have `exception` problems. "
                                            "Got `{1}` while executing.".format(vp.name, ex), 'volumedriver_{0}'
