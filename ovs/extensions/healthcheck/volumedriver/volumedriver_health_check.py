@@ -231,7 +231,7 @@ class VolumedriverHealthCheck(object):
         :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
 
-        logger.info("Checking for halted volumes: ", 'checkHaltedVolumes')
+        logger.info("Checking for halted volumes: ")
 
         vpools = VPoolHelper.get_vpools()
 
@@ -243,7 +243,7 @@ class VolumedriverHealthCheck(object):
 
                     haltedvolumes = []
 
-                    logger.info("Checking vPool '{0}': ".format(vp.name), 'halted_title')
+                    logger.info("Checking vPool '{0}': ".format(vp.name))
 
                     config_file = ConfigurationManager.get_config_file_path(product=ConfigurationProduct.VPOOL,
                                                                             vpool_guid=vp.guid,
@@ -275,19 +275,19 @@ class VolumedriverHealthCheck(object):
                     except (ClusterNotReachableException, RuntimeError) as ex:
                         logger.failure(
                             "Seems like the Volumedriver {0} is not running.".format(vp.name, ex.message),
-                            'halted_{0}'.format(vp.name))
+                            'halted_volumedriver_{0}'.format(vp.name))
                         continue
 
                     # print all results
                     if len(haltedvolumes) > 0:
                         logger.failure("Detected volumes that are HALTED in vPool '{0}': {1}"
-                                       .format(vp.name, ', '.join(haltedvolumes)), 'halted_{0}'.format(vp.name))
+                                       .format(vp.name, ', '.join(haltedvolumes)), 'halted_volumes_{0}'.format(vp.name))
                     else:
                         logger.success("No halted volumes detected in vPool '{0}'"
-                                       .format(vp.name), 'halted_{0}'.format(vp.name))
+                                       .format(vp.name), 'halted_volumes_{0}'.format(vp.name))
                 else:
                     logger.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name),
-                                'halted_{0}'.format(vp.name))
+                                'halted_volumedriver_{0}'.format(vp.name))
 
         else:
             logger.skip("No vPools found!".format(len(vpools)), 'halted_nofound')
