@@ -645,7 +645,7 @@ class AlbaHealthCheck(object):
                 logger.success("No objects in objects repair queue")
             elif cache["repair_percentage"] > repair_percentage:
                 # Amount of objects to repair is descending
-                logger.failure("Amount of objects to repair is descending!")
+                logger.success("Amount of objects to repair is descending!")
             elif cache["repair_percentage"] < repair_percentage:
                 # Amount of objects to repair is rising
                 repair_rising = True
