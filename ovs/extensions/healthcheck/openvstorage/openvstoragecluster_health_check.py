@@ -28,7 +28,7 @@ from subprocess import CalledProcessError
 from timeout_decorator.timeout_decorator import TimeoutError
 from ovs.extensions.generic.configuration import NotFoundException
 from ovs.extensions.generic.system import System
-from ovs.extensions.healthcheck.decorators import ExposeToCli
+from ovs.extensions.healthcheck.decorators import exposetocli
 from ovs.extensions.healthcheck.helpers.configuration import ConfigurationManager, ConfigurationProduct
 from ovs.extensions.healthcheck.helpers.helper import Helper
 from ovs.extensions.healthcheck.helpers.init_manager import InitManager
@@ -51,7 +51,7 @@ class OpenvStorageHealthCheck(object):
     MACHINE_ID = System.get_my_machine_id()
 
     @staticmethod
-    @ExposeToCli('ovs', 'local-settings-test')
+    @exposetocli('ovs', 'local-settings-test')
     def get_local_settings(logger):
         """
         Fetch settings of the local Open vStorage node
@@ -76,7 +76,7 @@ class OpenvStorageHealthCheck(object):
             logger.failure('Could not fetch local-settings. Got {0}'.format(ex.message), 'local-settings')
 
     @staticmethod
-    @ExposeToCli('ovs', 'log-files-test')
+    @exposetocli('ovs', 'log-files-test')
     def check_size_of_log_files(logger):
         """
         Checks the size of the initialized log files
@@ -194,7 +194,7 @@ class OpenvStorageHealthCheck(object):
                            'port_{0}_{1}'.format(process_name, port))
 
     @staticmethod
-    @ExposeToCli('ovs', 'required-ports-test')
+    @exposetocli('ovs', 'required-ports-test')
     def check_required_ports(logger):
         """
         Checks all ports of Open vStorage components (framework, memcached, nginx, rabbitMQ and celery)
@@ -238,7 +238,7 @@ class OpenvStorageHealthCheck(object):
             logger.skip("RabbitMQ is not running/active on this server!", 'port_celery')
 
     @staticmethod
-    @ExposeToCli('ovs', 'packages-test')
+    @exposetocli('ovs', 'packages-test')
     def check_ovs_packages(logger):
         """
         Checks the availability of packages for Open vStorage
@@ -260,7 +260,7 @@ class OpenvStorageHealthCheck(object):
                             'package_{0}'.format(package))
 
     @staticmethod
-    @ExposeToCli('ovs', 'processes-test')
+    @exposetocli('ovs', 'processes-test')
     def check_ovs_processes(logger):
         """
         Checks the availability of processes for Open vStorage
@@ -304,7 +304,7 @@ class OpenvStorageHealthCheck(object):
             return False
 
     @staticmethod
-    @ExposeToCli('ovs', 'ovs-workers-test')
+    @exposetocli('ovs', 'ovs-workers-test')
     def check_ovs_workers(logger):
         """
         Extended check of the Open vStorage workers; When the simple check fails, it will execute a full/deep check.
@@ -325,7 +325,7 @@ class OpenvStorageHealthCheck(object):
             logger.failure("Error during check of celery! Is RabbitMQ and ovs-workers running?", 'process_celery')
 
     @staticmethod
-    @ExposeToCli('ovs', 'directories-test')
+    @exposetocli('ovs', 'directories-test')
     def check_required_dirs(logger):
         """
         Checks the directories their rights and owners for mistakes
@@ -408,7 +408,7 @@ class OpenvStorageHealthCheck(object):
         return oct(st.st_mode)[-3:] == str(rights)
 
     @staticmethod
-    @ExposeToCli('ovs', 'dns-test')
+    @exposetocli('ovs', 'dns-test')
     def check_if_dns_resolves(logger, fqdn="google.com"):
         """
         Checks if DNS resolving works on a local machine
@@ -433,7 +433,7 @@ class OpenvStorageHealthCheck(object):
             return False
 
     @staticmethod
-    @ExposeToCli('ovs', 'zombie-processes-test')
+    @exposetocli('ovs', 'zombie-processes-test')
     def get_zombied_and_dead_processes(logger):
         """
         Finds zombied or dead processes on a local machine
@@ -475,7 +475,7 @@ class OpenvStorageHealthCheck(object):
                            'process_dead')
 
     @staticmethod
-    @ExposeToCli('ovs', 'model-test')
+    @exposetocli('ovs', 'model-test')
     def check_model_consistency(logger):
         """
         Checks if the model consistency of OVSDB vs. VOLUMEDRIVER and does a preliminary check on RABBITMQ
@@ -567,7 +567,7 @@ class OpenvStorageHealthCheck(object):
                             'discrepancies_voldrv_{0}'.format(vp.name))
 
     @staticmethod
-    @ExposeToCli('ovs', 'test')
+    @exposetocli('ovs', 'test')
     def run(logger):
         OpenvStorageHealthCheck.get_local_settings(logger)
         OpenvStorageHealthCheck.check_ovs_processes(logger)

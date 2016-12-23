@@ -27,7 +27,7 @@ import ConfigParser
 from StringIO import StringIO
 from datetime import date, timedelta, datetime
 from ovs.extensions.generic.system import System
-from ovs.extensions.healthcheck.decorators import ExposeToCli
+from ovs.extensions.healthcheck.decorators import exposetocli
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.storage.persistent.pyrakoonstore import PyrakoonStore
 from ovs.extensions.db.arakoon.ArakoonInstaller import ArakoonClusterConfig
@@ -130,7 +130,7 @@ class ArakoonHealthCheck(object):
         return result, missing_nodes
 
     @staticmethod
-    @ExposeToCli('arakoon', 'required-ports-test')
+    @exposetocli('arakoon', 'required-ports-test')
     def check_required_ports(logger):
         """
         Checks all ports of Arakoon nodes (client & server)
@@ -157,7 +157,7 @@ class ArakoonHealthCheck(object):
                                                               ArakoonHealthCheck.MACHINE_DETAILS.ip)
 
     @staticmethod
-    @ExposeToCli('arakoon', 'restart-test')
+    @exposetocli('arakoon', 'restart-test')
     def check_restarts(logger, arakoon_clusters=None, last_minutes=LAST_MINUTES,
                        max_amount_node_restarted=MAX_AMOUNT_NODE_RESTARTED):
         """
@@ -213,7 +213,7 @@ class ArakoonHealthCheck(object):
         return result
 
     @staticmethod
-    @ExposeToCli('arakoon', 'collapse-test')
+    @exposetocli('arakoon', 'collapse-test')
     def check_collapse(logger, arakoon_clusters=None, max_collapse_age=MAX_COLLAPSE_AGE):
         """
         Check collapsing of arakoon
@@ -311,7 +311,7 @@ class ArakoonHealthCheck(object):
         return result
 
     @staticmethod
-    @ExposeToCli('arakoon', 'integrity-test')
+    @exposetocli('arakoon', 'integrity-test')
     def verify_integrity(logger, arakoon_clusters=None):
         """
         Verifies the integrity of a list of arakoons
@@ -422,7 +422,7 @@ class ArakoonHealthCheck(object):
             return working_arakoon_list, no_master_arakoon_list, down_arakoon_list, unkown_arakoon_list
 
     @staticmethod
-    @ExposeToCli('arakoon', 'check-arakoons')
+    @exposetocli('arakoon', 'check-arakoons')
     def check_arakoons(logger):
         """
         Verifies/validates the integrity of all available arakoons
@@ -446,7 +446,7 @@ class ArakoonHealthCheck(object):
             logger.skip("No available clusters found", 'arakoon_found')
 
     @staticmethod
-    @ExposeToCli('arakoon', 'test')
+    @exposetocli('arakoon', 'test')
     def run(logger):
         """
         Method to run the full Arakoon Healthcheck sequence

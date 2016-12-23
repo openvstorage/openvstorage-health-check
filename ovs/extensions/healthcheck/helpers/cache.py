@@ -21,29 +21,48 @@ from ovs.extensions.storage.persistentfactory import PersistentFactory
 class CacheHelper(object):
 
     client = PersistentFactory.get_client()
-    prefix = 'ovs-health-check'
+    prefix = 'health-check_'
 
     @staticmethod
-    def set(info):
+    def set(item, key=None):
         """
         Store the information to the config management
-        :param info:
+        :param item:
         :return:
         """
-
-        if isinstance(info, type(dict)):
-            info = CacheHelper._parse_data(info)
-        CacheHelper.client.set(CacheHelper.prefix, info)
+        key = CacheHelper._generate_key(key=key)
+        return CacheHelper.client.set(key=key, value=item)
 
     @staticmethod
-    def get(key=prefix):
+    def append(item, key=None):
+        """
+        Appends the information to the value
+        Supports dicts, lists and sets
+        :param item:
+        :return:
+        """
+        supported_types = [dict, list]
+        retrieved_value = CacheHelper.get(key=key)
+        for item_type in supported_types:
+            if isinstance(item, item_type) and isinstance(retrieved_value, item_type):
+                if item_type == list:
+                    return CacheHelper.set(retrieved_value + item)
+                if item_type == dict:
+                    item.update(retrieved_value)
+                    return CacheHelper.set(key=key, item=item)
+        raise TypeError("{0} is not supported for appending to type {1}.".format(type(item), type(retrieved_value)))
+
+    @staticmethod
+    def get(key=None):
+        key = CacheHelper._generate_key(key=key)
         try:
-            return CacheHelper._parse_data(CacheHelper.client.get(key))
+            return CacheHelper.client.get(key)
         except KeyNotFoundException:
             return None
 
     @staticmethod
-    def delete(key=prefix):
+    def delete(key=None):
+        key = CacheHelper._generate_key(key=key)
         try:
             CacheHelper.client.delete(key)
             return True
@@ -51,24 +70,12 @@ class CacheHelper(object):
             return False
 
     @staticmethod
-    def _parse_data(data):
-        """
-        Could data so it can be stored in PersistentFactory
-
-        :param data: any value
-        :type data: object
-        :return: parsed data - either the same type or dicts converted to json
-        :rtype: object
-        """
-        try:
-            parsed_data = json.loads(data)
-        except ValueError:
-            # Not a good formatted dict
-            return json.dumps(data)
-        except TypeError:
-            # Not a dict
-            return data
-        return parsed_data
+    def _generate_key(key=None):
+        if key is None:
+            key = "{0}generic".format(CacheHelper.prefix)
+        else:
+            key = "{0}{1}".format(CacheHelper.prefix, key)
+        return key
 
     @staticmethod
     def _test_type_handling():
@@ -92,9 +99,13 @@ class CacheHelper(object):
             except Exception as e:
                 print "Could not set {0} type. Got {1}".format(key, e.message)
             try:
+                CacheHelper.append(value)
+                print "Appended {0}".format(key)
+            except Exception as e:
+                print "Could not append {0} type. Got {1}".format(key, e.message)
+            try:
                 data = CacheHelper.get()
-                print key
-                print type(data)
+                print data
             except Exception as e:
                 print "Could not get {0} type. Got {1}".format(key, e.message)
         CacheHelper.delete()

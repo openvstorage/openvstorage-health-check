@@ -32,9 +32,8 @@ from ovs.extensions.generic.configuration import Configuration, NotFoundExceptio
 from ovs.extensions.generic.system import System
 from ovs.extensions.generic.volatilemutex import volatile_mutex
 from ovs.extensions.healthcheck.helpers.cache import CacheHelper
-from ovs.extensions.healthcheck.decorators import ExposeToCli
+from ovs.extensions.healthcheck.decorators import exposetocli
 from ovs.extensions.healthcheck.helpers.albacli import AlbaCLI
-from ovs.extensions.healthcheck.helpers.alba_node import AlbaNodeHelper
 from ovs.extensions.healthcheck.helpers.backend import BackendHelper
 from ovs.extensions.healthcheck.helpers.configuration import ConfigurationManager, ConfigurationProduct
 from ovs.extensions.healthcheck.helpers.exceptions import ObjectNotFoundException, ConnectionFailedException, \
@@ -125,7 +124,7 @@ class AlbaHealthCheck(object):
         return result
 
     @staticmethod
-    @ExposeToCli('alba', 'proxy-test')
+    @exposetocli('alba', 'proxy-test')
     def check_if_proxies_work(logger):
         """
         Checks if all Alba Proxies work on a local machine, it creates a namespace and tries to put and object
@@ -449,7 +448,7 @@ class AlbaHealthCheck(object):
         return workingdisks, defectivedisks
 
     @staticmethod
-    @ExposeToCli('alba', 'backend-test')
+    @exposetocli('alba', 'backend-test')
     def check_backends(logger):
         """
         Checks Alba as a whole
@@ -523,7 +522,7 @@ class AlbaHealthCheck(object):
                            'arakoon_connected')
 
     @staticmethod
-    @ExposeToCli('alba', 'disk-safety')
+    @exposetocli('alba', 'disk-safety')
     def get_disk_safety(logger):
         """
         Send disk safety for each vpool and the amount of namespaces with the lowest disk safety to DB
@@ -534,22 +533,14 @@ class AlbaHealthCheck(object):
         points = []
 
         test_name = 'disk-safety'
-        result = {
-                "repair_percentage": None,
-                "lost_disks": None
-            }
 
-        abms = set(service.name.replace('arakoon-', '') for service in ServiceHelper.get_services()
-                   if service.type.name == ServiceType.SERVICE_TYPES.ALBA_MGR)
+        abm_services = set(service for service in ServiceHelper.get_services() if
+                           service.type.name == ServiceType.SERVICE_TYPES.ALBA_MGR)
 
-        abl = BackendHelper.get_albabackends()
-        for ab in abl:
+        for abm_service in abm_services:
+            alba_backend = BackendHelper.get_albabackend_by_guid(abm_service.abm_service.alba_backend_guid)
             # Determine if services are from ab instance
-            service_name = ServiceHelper.get_service(ab.abm_services[0].service_guid).name
-            if service_name not in abms:
-                continue
-
-            config = Configuration.get_configuration_path('ovs/arakoon/{0}/config'.format(service_name))
+            config = Configuration.get_configuration_path('ovs/arakoon/{0}-abm/config'.format(alba_backend.name))
             # Fetch alba info
             try:
                 try:
@@ -586,16 +577,16 @@ class AlbaHealthCheck(object):
                     applicable_dead_osds = bucket_safety['applicable_dead_osds']
                     # Amount of lost disks at this point
                     bucket[2] = bucket[2] - applicable_dead_osds
-                    disk_lost = bucket[2] - (bucket[0] + bucket[1])
-                    if disk_lost not in disk_lost_overview:
-                        disk_lost_overview[disk_lost] = 0
-                    disk_lost_overview[disk_lost] += objects
-            for disk_lost, objects in disk_lost_overview.iteritems():
+                    backend_overview = bucket[2] - (bucket[0] + bucket[1])
+                    if backend_overview not in disk_lost_overview:
+                        disk_lost_overview[backend_overview] = 0
+                    disk_lost_overview[backend_overview] += objects
+            for backend_overview, objects in disk_lost_overview.iteritems():
                 lost = {
                     'measurement': 'disk_lost',
                     'tags': {
-                        'backend_name': ab.name,
-                        'disk_lost': disk_lost
+                        'backend_name': alba_backend.name,
+                        'disk_lost': backend_overview
                     },
                     'fields': {
                         'total_objects': total_objects,
@@ -603,71 +594,91 @@ class AlbaHealthCheck(object):
                     }
                 }
                 points.append(lost)
-
         if len(points) == 0:
             logger.skip('Found no objects present of the system.', test_name)
         else:
-            backends_to_be_repaired = {}
-            for result in points:
+            checked_backends = {
+                "healthy": {},
+                "faulty": {}
+            }
+            for point in points:
+                backend_name = point["tags"]["backend_name"]
+                objects = point["fields"]["objects"]
+                total_objects = point["fields"]["total_objects"]
                 # Ignore fully healthy ones
-                if result["tags"]["disk_lost"] == 0:
-                    continue
-                total_objects = result["fields"]["total_objects"]
-                objects = result["fields"]["objects"]
+                if point["tags"]["disk_lost"] == 0:
+                    # if they are not fully healty, the objects for the bucket dont match the total objects
+                    if objects == total_objects:
+                        checked_backends["healthy"][backend_name] = {"objects": 0,
+                                                                     "total_objects": total_objects,
+                                                                     "lost_disks": point["tags"]["disk_lost"]}
+                else:
+                    if checked_backends["faulty"].get(backend_name, None) is None:
+                        checked_backends["faulty"][backend_name] = {"objects": 0,
+                                                                    "total_objects": total_objects,
+                                                                    "lost_disks": point["tags"]["disk_lost"]}
+                    checked_backends["faulty"][backend_name]["objects"] += objects
 
-                backend_name = result["tags"]["backend_name"]
-
-                if backend_name not in backends_to_be_repaired:
-                    backends_to_be_repaired[backend_name] = {"objects": 0, "total_objects": total_objects}
-                backends_to_be_repaired[backend_name]["objects"] += objects
-
-            repair_percentage = 0
-            if len(backends_to_be_repaired) == 0:
-                logger.success("Found no backends with disk lost. All data is safe.")
-            else:
-                logger.failure("Currently found {0} backend(s) with disk lost.".format(len(backends_to_be_repaired)))
-                for backend, disk_lost in backends_to_be_repaired.iteritems():
+            for backend_status, backend_details in checked_backends.iteritems():
+                for backend, backend_overview in backend_details.iteritems():
                     # limit to 4 numbers
-                    repair_percentage = float("{0:.4f}".format((float(disk_lost['objects']) /
-                                                                float(disk_lost['total_objects'])) * 100))
-                    logger.warning("Backend {0}: {1} out of {2} objects have to be repaired."
-                                   .format(backend, disk_lost['objects'], disk_lost['total_objects']))
-                    logger.warning('Backend {0}: {1}% of the objects have to be repaired'.format(backend,
-                                                                                                 repair_percentage))
-            # Log if the amount is rising
-            cache = CacheHelper.get()
-            repair_rising = False
-            if cache is None:
-                # First run of healthcheck
-                logger.success("Object repair will be monitored on incrementations.")
-            elif repair_percentage == 0:
-                # Amount of objects to repair are rising
-                logger.success("No objects in objects repair queue")
-            elif cache["repair_percentage"] > repair_percentage:
-                # Amount of objects to repair is descending
-                logger.success("Amount of objects to repair is descending!")
-            elif cache["repair_percentage"] < repair_percentage:
-                # Amount of objects to repair is rising
-                repair_rising = True
-                logger.failure("Amount of objects to repair are rising!")
-            elif cache["repair_percentage"] == repair_percentage:
-                # Amount of objects to repair is the same
-                logger.success("Amount of objects to repair are the same!")
+                    repair_percentage = float("{0:.4f}".format((float(backend_overview['objects']) /
+                                                                float(backend_overview['total_objects'])) * 100))
+                    if backend_overview.get("lost_disks") == 0:
+                        logger.success("Backend {0} has no disks that are lost.".format(backend))
+                    else:
+                        logger.failure("Backend {0} has lost {1} disk(s)."
+                                       .format(backend, abs(backend_overview.get("lost_disks"))))
+                    if backend_overview.get('objects') == 0:
+                        logger.success("Backend {0}: {1} out of {2} objects have to be repaired."
+                                       .format(backend, backend_overview['objects'], backend_overview['total_objects']))
+                    else:
+                        logger.warning("Backend {0}: {1} out of {2} objects have to be repaired."
+                                       .format(backend, backend_overview['objects'], backend_overview['total_objects']))
+                    # logger.warning('Backend {0}: {1}% of the objects have to be repaired'.format(backend,
+                    #                                                                              repair_percentage))
+                    # Log if the amount is rising
+                    cache = CacheHelper.get()
+                    repair_rising = False
+                    if cache is None or cache.get(backend, None) is None:
+                        # First run of healthcheck
+                        logger.success("Object repair for backend {0} will be monitored on incrementations.".format(backend))
+                    elif repair_percentage == 0:
+                        # Amount of objects to repair are rising
+                        logger.success("No objects in objects repair queue for backend {0}.".format(backend))
+                    elif cache[backend]["object_to_repair"] > repair_percentage:
+                        # Amount of objects to repair is descending
+                        logger.success("Amount of objects to repair is descending for backend {0}.".format(backend))
+                    elif cache[backend]["object_to_repair"] < repair_percentage:
+                        # Amount of objects to repair is rising
+                        repair_rising = True
+                        logger.failure("Amount of objects to repair are rising for backend {0}.".format(backend))
+                    elif cache[backend]["object_to_repair"] == repair_percentage:
+                        # Amount of objects to repair is the same
+                        logger.success("Amount of objects to repair are the same for backend {0}.".format(backend))
 
-            if logger.print_progress is False:
-                # Custom recap for operations
-                logger.custom(
-                    'Recap of disk-safety: {0}% of the objects have to be repaired. {1} backend(s) with disk lost and number of objects to repair are {2}.'
-                    .format(repair_percentage, len(backends_to_be_repaired),'rising' if repair_rising is True else 'descending or the same'),
-                    test_name,
-                    " ".join([str(repair_percentage), 'SUCCESS' if repair_rising == 0 else 'FAILURE', 'FAILURE' if repair_rising is True else 'SUCCESS']))
-            result["repair_percentage"] = repair_percentage
-            result["lost_backends"] = backends_to_be_repaired
-            CacheHelper.set(result)
-        return result
+                    if logger.print_progress is False:
+                        # Custom recap for operations
+                        logger.custom(
+                            'Recap of disk-safety: {0}% of the objects have to be repaired. {1} backend(s) with disk lost and number of objects to repair are {2}.'
+                            .format(repair_percentage, len(checked_backends), 'rising' if repair_rising is True else 'descending or the same'),
+                            "{0}_{1}".format(test_name, backend),
+                            " ".join([str(repair_percentage), 'SUCCESS' if backend_overview['objects'] == 0 else 'FAILURE', 'FAILURE' if repair_rising is True else 'SUCCESS']))
+                    result = {
+                        backend: {
+                            "object_to_repair": backend_overview['objects'],
+                            "total_objects": backend_overview['total_objects']
+                        }
+                    }
+                    if cache is None:
+                        CacheHelper.set(result)
+                    else:
+                        # Update will overwrite current values in case of a dict
+                        CacheHelper.append(result)
+        return CacheHelper.get()
 
     @staticmethod
-    @ExposeToCli('alba', 'processes-test')
+    @exposetocli('alba', 'processes-test')
     def check_alba_processes(logger):
         """
         Checks the availability of processes for Alba
@@ -690,7 +701,7 @@ class AlbaHealthCheck(object):
             logger.skip("Found no LOCAL ALBA services.", test_name)
 
     @staticmethod
-    @ExposeToCli('alba', 'test')
+    @exposetocli('alba', 'test')
     def run(logger):
         AlbaHealthCheck.check_backends(logger)
         AlbaHealthCheck.check_if_proxies_work(logger)

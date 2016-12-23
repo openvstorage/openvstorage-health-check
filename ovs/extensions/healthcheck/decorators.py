@@ -15,8 +15,8 @@
 # but WITHOUT ANY WARRANTY of any kind.
 import inspect
 
-
-class ExposeToCli(object):
+# class decorator
+class exposetocli(object):
     def __init__(self, module_name=None, method_name=None):
         if module_name and method_name:
             self.module_name = module_name
