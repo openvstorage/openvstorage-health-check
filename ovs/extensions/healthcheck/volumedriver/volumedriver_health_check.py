@@ -13,7 +13,6 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
-
 import os
 import subprocess
 import time
@@ -40,8 +39,8 @@ class VolumedriverHealthCheck(object):
     """
 
     MODULE = "volumedriver"
-    MACHINE_DETAILS = System.get_my_storagerouter()
-    MACHINE_ID = System.get_my_machine_id()
+    LOCAL_SR = System.get_my_storagerouter()
+    LOCAL_ID = System.get_my_machine_id()
     VDISK_CHECK_SIZE = 1073741824  # 1GB in bytes
     VDISK_TIMEOUT_BEFORE_DELETE = 0.5
 
@@ -52,46 +51,28 @@ class VolumedriverHealthCheck(object):
         Checks the dtl for all vdisks
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCResults
         """
         test_name = "check_dtl"
-        test_output = {
-            "failure": [],
-            "warning": [],
-            "success": []
-        }
-        vdisk_name = None
-        vdisk_dtl = None
-        # Fetch vdisks hosted on this machine
-        if len(VolumedriverHealthCheck.MACHINE_DETAILS.vdisks_guids) != 0:
-            # Force refresh the cache
-            VolumedriverHealthCheck.MACHINE_DETAILS.invalidate_dynamics("vdisks_guids")
-            for vdisk_guid in VolumedriverHealthCheck.MACHINE_DETAILS.vdisks_guids:
-                try:
-                    vdisk_name, vdisk_dtl = VolumedriverHealthCheck._check_disk_dtl(vdisk_guid=vdisk_guid)
-                    if vdisk_dtl == "ok_standalone":
-                        test_output["warning"].append((vdisk_name, "VDisk {0}'s DTL is disabled".format(vdisk_name)))
-                        logger.warning("VDisk {0}'s DTL is disabled".format(vdisk_name))
-                    elif vdisk_dtl == "ok_sync":
-                        test_output["success"].append((vdisk_name, "VDisk {0}'s DTL is enabled and running.".format(vdisk_name)))
-                        logger.success("VDisk {0}'s DTL is enabled and running.".format(vdisk_name))
-                    elif vdisk_dtl == "degraded":
-                        test_output["failure"].append((vdisk_name, "VDisk {0}'s DTL is degraded.".format(vdisk_name)))
-                        logger.failure("VDisk {0}'s DTL is degraded.".format(vdisk_name))
-                    elif vdisk_dtl == "catchup" or vdisk_dtl == "catch_up":
-                        test_output["warning"].append((vdisk_name, "VDisk {0}'s DTL is enabled but still syncing.".format(vdisk_name)))
-                        logger.warning("VDisk {0}'s DTL is enabled but still syncing.".format(vdisk_name))
-                    else:
-                        test_output["warning"].append((vdisk_name, "VDisk {0}'s DTL has an unknown status: {1}.".format(vdisk_name, vdisk_dtl)))
-                        logger.warning("VDisk {0}'s DTL has an unknown status: {1}.".format(vdisk_name, vdisk_dtl))
-                except ObjectNotFoundException:
-                    logger.failure('Unable to fetch vdisk information for vdisk {0}.'.format(vdisk_guid))
-                except TimeoutError:
-                    if vdisk_name and vdisk_dtl is not None:
-                        logger.warning("Fetching vdisk {0} information has timed out.".format(vdisk_guid))
 
-        else:
-            logger.skip("No VDisks present on this node.", test_name)
+        # Fetch vdisks hosted on this machine
+        if len(VolumedriverHealthCheck.LOCAL_SR.vdisks_guids) == 0:
+            return logger.skip("No VDisks present in cluster.", test_name)
+        for vdisk_guid in VolumedriverHealthCheck.LOCAL_SR.vdisks_guids:
+            try:
+                results = VolumedriverHealthCheck._check_disk_dtl(vdisk_guid=vdisk_guid)
+            except TimeoutError:
+                logger.warning("VDisk {0}'s DTL has a timeout status: {1}.".format(results[0], results[1]), test_name)
+            if results[1] == "ok_standalone":
+                logger.warning("VDisk {0}'s DTL is disabled".format(results[0]), test_name)
+            elif results[1] == "ok_sync":
+                logger.success("VDisk {0}'s DTL is enabled and running.".format(results[0]), test_name)
+            elif results[1] == "degraded":
+                logger.failure("VDisk {0}'s DTL is degraded.".format(results[0]), test_name)
+            elif results[1] == "catch_up":
+                logger.warning("VDisk {0}'s DTL is enabled but still syncing.".format(results[0]), test_name)
+            else:
+                logger.warning("VDisk {0}'s DTL has an unknown status: {1}.".format(results[0], results[1]), test_name)
 
     @staticmethod
     @timeout_decorator.timeout(5)
@@ -109,7 +90,7 @@ class VolumedriverHealthCheck(object):
 
     @staticmethod
     @timeout_decorator.timeout(30)
-    def _check_volumedriver(vdisk_name, storagedriver_guid, vdisk_size=VDISK_CHECK_SIZE):
+    def _check_volumedriver(vdisk_name, storagedriver_guid, vpool_name, vdisk_size=VDISK_CHECK_SIZE):
         """
         Checks if the volumedriver can create a new vdisk
 
@@ -161,75 +142,74 @@ class VolumedriverHealthCheck(object):
         Checks if the VOLUMEDRIVERS work on a local machine (compatible with multiple vPools)
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCResults
         """
 
         logger.info("Checking volumedrivers: ", 'check_volumedrivers')
 
         vpools = VPoolHelper.get_vpools()
 
-        if len(vpools) != 0:
-            for vp in vpools:
-                name = "ovs-healthcheck-test-{0}.raw".format(VolumedriverHealthCheck.MACHINE_ID)
-                with file_mutex('ovs-healthcheck_check-volumedrivers'):
-                    if vp.guid in VolumedriverHealthCheck.MACHINE_DETAILS.vpools_guids:
+        if len(vpools) == 0:
+            return logger.skip("No vPools found!", 'volumedrivers_nofound')
+        for vp in vpools:
+            name = "ovs-healthcheck-test-{0}.raw".format(VolumedriverHealthCheck.LOCAL_ID)
+            with file_mutex('ovs-healthcheck_check-volumedrivers'):
+                if vp.guid not in VolumedriverHealthCheck.LOCAL_SR.vpools_guids:
+                    logger.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name),
+                                        'volumedriver_{0}'.format(vp.name))
+                    continue
+                try:
+                    # delete if previous vdisk with this name exists
+                    if VolumedriverHealthCheck._check_volumedriver_remove(vpool_name=vp.name, vdisk_name=name,
+                                                                          present=False):
+                        storagedriver_guid = next((storagedriver.guid for storagedriver in vp.storagedrivers
+                                                   if storagedriver.storagerouter == VolumedriverHealthCheck.LOCAL_SR))
+                        # create a new one
                         try:
-                            # delete if previous vdisk with this name exists
-                            storagedriver_guid = next((storagedriver.guid for storagedriver in vp.storagedrivers
-                                                       if storagedriver.storagedriver_id == vp.name +
-                                                       VolumedriverHealthCheck.MACHINE_ID))
-                            # create a new one
-                            try:
-                                volume = VolumedriverHealthCheck._check_volumedriver(name, storagedriver_guid)
-                            except FileExistsException:
-                                # can be ignored until fixed in framework
-                                # https://github.com/openvstorage/framework/issues/1247
-                                volume = True
+                            volume = VolumedriverHealthCheck._check_volumedriver(name, storagedriver_guid,
+                                                                                 vp.name)
+                        except FileExistsException:
+                            # can be ignored until fixed in framework
+                            # https://github.com/openvstorage/framework/issues/1247
+                            volume = True
 
-                            if volume is True:
-                                # delete the recently created
-                                try:
-                                    VolumedriverHealthCheck._check_volumedriver_remove(vpool_name=vp.name, vdisk_name=name)
-                                except Exception as ex:
-                                    raise RuntimeError("Could not delete the created volume. Got {0}".format(str(ex)))
-                                # Working at this point
+                        if volume:
+                            # delete the recently created
+                            time.sleep(3)
+                            if VolumedriverHealthCheck._check_volumedriver_remove(vpool_name=vp.name,
+                                                                                  vdisk_name=name):
+                                # working
                                 logger.success("Volumedriver of vPool '{0}' is working fine!".format(vp.name),
-                                               'volumedriver_{0}'.format(vp.name))
+                                                       'volumedriver_{0}'.format(vp.name))
                             else:
                                 # not working
-                                logger.failure("Something went wrong during vdisk creation on vpool '{0}' ..."
+                                logger.failure("Volumedriver of vPool '{0}' seems to have problems"
+                                                       .format(vp.name), 'volumedriver_{0}'.format(vp.name))
+                        else:
+                            # not working
+                            logger.failure("Something went wrong during vdisk creation on vpool '{0}' ..."
+                                                   .format(vp.name), 'volumedriver_{0}'.format(vp.name))
+                    else:
+                        logger.failure("Volumedriver of vPool '{0}' seems to have problems if vdisk already exists"
                                                .format(vp.name), 'volumedriver_{0}'.format(vp.name))
 
-                        except TimeoutError:
-                            # timeout occured, action took too long
-                            logger.failure("Volumedriver of vPool '{0}' seems to timeout."
+                except TimeoutError:
+                    # timeout occured, action took too long
+                    logger.failure("Volumedriver of vPool '{0}' seems to have `timeout` problems"
                                            .format(vp.name), 'volumedriver_{0}'.format(vp.name))
-                        except IOError as ex:
-                            # can be input/output error by volumedriver
-                            logger.failure("Volumedriver of vPool '{0}' seems to have IO problems. "
+                except IOError as ex:
+                    # can be input/output error by volumedriver
+                    logger.failure("Volumedriver of vPool '{0}' seems to have `input/output` problems. "
                                            "Got `{1}` while executing.".format(vp.name, ex.message),
                                            'volumedriver_{0}'.format(vp.name))
-                        except RuntimeError as ex:
-                            logger.failure("Volumedriver of vPool '{0}' seems to have problems. "
-                                           "Got `{1}` while executing.".format(vp.name, ex), 'volumedriver_{0}'
-                                           .format(vp.name))
-                        except VDiskNotFoundError:
-                            logger.warning("Volume on vPool '{0}' was not found, please retry again".format(vp.name),
-                                           'volumedriver_{0}'.format(vp.name))
-                        except Exception as ex:
-                            logger.failure("Uncaught exception for Volumedriver of vPool '{0}'.Got `{1}` while executing."
-                                           .format(vp.name, ex), 'volumedriver_{0}'.format(vp.name))
-                        finally:
-                            # Attempt to delete the created vdisk
-                            try:
-                                VolumedriverHealthCheck._check_volumedriver_remove(vpool_name=vp.name, vdisk_name=name, present=False)
-                            except:
-                                pass
-                    else:
-                        logger.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name),
-                                    'volumedriver_{0}'.format(vp.name))
-        else:
-            logger.skip("No vPools found!", 'volumedrivers_nofound')
+                except RuntimeError as ex:
+                    logger.failure("Volumedriver of vPool '{0}' seems to have `runtime` problems. "
+                                           "Got `{1}` while executing.".format(vp.name, ex), 'volumedriver_{0}'.format(vp.name))
+                except VDiskNotFoundError:
+                    logger.warning("Volume on vPool '{0}' was not found, please retry again".format(vp.name), 'volumedriver_{0}'.format(vp.name))
+                except Exception as ex:
+                    logger.failure("Volumedriver of vPool '{0}' seems to have `exception` problems. "
+                                   "Got `{1}` while executing.".format(vp.name, ex), 'volumedriver_{0}'.format(vp.name))
 
     @staticmethod
     @ExposeToCli('ovs', 'halted-volumes-test')
@@ -238,7 +218,7 @@ class VolumedriverHealthCheck(object):
         Checks for halted volumes on a single or multiple vPools
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCResults
         """
 
         logger.info("Checking for halted volumes: ")
@@ -249,7 +229,7 @@ class VolumedriverHealthCheck(object):
 
             for vp in vpools:
 
-                if vp.guid in VolumedriverHealthCheck.MACHINE_DETAILS.vpools_guids:
+                if vp.guid in VolumedriverHealthCheck.LOCAL_SR.vpools_guids:
 
                     haltedvolumes = []
 
@@ -258,7 +238,7 @@ class VolumedriverHealthCheck(object):
                     config_file = ConfigurationManager.get_config_file_path(product=ConfigurationProduct.VPOOL,
                                                                             vpool_guid=vp.guid,
                                                                             vpool_name=vp.name,
-                                                                            node_id=VolumedriverHealthCheck.MACHINE_ID)
+                                                                            node_id=VolumedriverHealthCheck.LOCAL_ID)
 
                     try:
                         voldrv_client = src.LocalStorageRouterClient(config_file)
@@ -327,7 +307,7 @@ class VolumedriverHealthCheck(object):
 
         :param vp_name: name of the vpool
         :type vp_name: str
-        :param test_name: name of the test file (e.g. `ovs-healthcheck-MACHINE_ID`)
+        :param test_name: name of the test file (e.g. `ovs-healthcheck-LOCAL_ID`)
         :type test_name: str
         :return: True if succeeded, False if failed
         :rtype: bool
@@ -359,7 +339,7 @@ class VolumedriverHealthCheck(object):
         Checks if the FILEDRIVERS work on a local machine (compatible with multiple vPools)
 
         :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
+        :type logger: ovs.log.healthcheck_logHandler.HCResults
         """
 
         logger.info("Checking filedrivers: ", 'filedriver')
@@ -369,9 +349,9 @@ class VolumedriverHealthCheck(object):
         # perform tests
         if len(vpools) != 0:
             for vp in vpools:
-                name = "ovs-healthcheck-test-{0}".format(VolumedriverHealthCheck.MACHINE_ID)
+                name = "ovs-healthcheck-test-{0}".format(VolumedriverHealthCheck.LOCAL_ID)
                 with file_mutex('ovs-healthcheck_filedrivers-test'):
-                    if vp.guid in VolumedriverHealthCheck.MACHINE_DETAILS.vpools_guids:
+                    if vp.guid in VolumedriverHealthCheck.LOCAL_SR.vpools_guids:
                         try:
                             VolumedriverHealthCheck._check_filedriver(vp.name, name)
                             if os.path.exists("/mnt/{0}/{1}.xml".format(vp.name, name)):
