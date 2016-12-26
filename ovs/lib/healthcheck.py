@@ -22,178 +22,28 @@ import ast
 import imp
 import os
 import inspect
-from ovs.celery_run import celery
 from datetime import datetime, timedelta
-from ovs.log.healthcheck_logHandler import HCLogHandler
-from ovs.extensions.healthcheck.alba.alba_health_check import AlbaHealthCheck
-from ovs.extensions.healthcheck.helpers.exceptions import PlatformNotSupportedException
-from ovs.extensions.healthcheck.arakoon.arakooncluster_health_check import ArakoonHealthCheck
-from ovs.extensions.healthcheck.volumedriver.volumedriver_health_check import VolumedriverHealthCheck
-from ovs.extensions.healthcheck.openvstorage.openvstoragecluster_health_check import OpenvStorageHealthCheck
+from ovs.extensions.healthcheck.result import HCResults
+from ovs.log.log_handler import LogHandler
 
 
 class HealthCheckController(object):
     
-    MODULE = "healthcheck"
+    logger = LogHandler.get("health_check", "controller")
     PLATFORM = 0
+    OPTIONAL_ARGUMENTS = ["--to-json", "--unattended", "--help"]
 
     @staticmethod
-    @celery.task(name='ovs.healthcheck.check_self.unattended')
-    def check_unattended():
-        """
-        Executes the healthcheck in UNATTENDED mode for e.g. Check_MK
-
-        :return: results of the healthcheck
-        :rtype: dict
-        """
-
-        unattended = True
-        silent_mode = False
-
-        # execute the check
-        return HealthCheckController.execute_check(unattended, silent_mode)
-
-    @staticmethod
-    @celery.task(name='ovs.healthcheck.check_attended')
-    def check_attended():
-        """
-        Executes the healthcheck in ATTENDED mode
-
-        :return: results of the healthcheck
-        :rtype: dict
-        """
-
-        unattended = False
-        silent_mode = False
-
-        # execute the check
-        return HealthCheckController.execute_check(unattended, silent_mode)
-
-    @staticmethod
-    @celery.task(name='ovs.healthcheck.check_silent')
-    def check_silent():
-        """
-        Executes the healthcheck in SILENT mode
-
-        :return: results of the healthcheck
-        :rtype: dict
-        """
-
-        unattended = False
-        silent_mode = True
-
-        # execute the check
-        return HealthCheckController.execute_check(unattended, silent_mode)
-
-    @staticmethod
-    @celery.task(name='ovs.healthcheck.check')
-    def execute_check(unattended=False, silent_mode=False, logger=None):
-        """
-        Executes all available checks
-
-        :param unattended: unattendend mode?
-        :type unattended: bool
-        :param silent_mode: silent mode?
-        :type silent_mode: bool
-        :return: results of the healthcheck
-        :param logger: logging object or none
-        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler or bool
-        :rtype: dict
-        """
-        if logger is None:
-            logger = HCLogHandler(not silent_mode and not unattended)
-
-        if HealthCheckController.PLATFORM == 0:
-            try:
-                HealthCheckController._check_openvstorage(logger)
-                HealthCheckController._check_volumedriver(logger)
-                HealthCheckController._check_arakoon(logger)
-                HealthCheckController._check_alba(logger)
-            except:
-                logger.exception('Error during execution of the healthcheck')
-                raise
-        else:
-            raise PlatformNotSupportedException("Platform '{0}' is currently NOT supported"
-                                                .format(HealthCheckController.PLATFORM))
-
-        return HealthCheckController.get_results(logger, unattended, silent_mode)
-
-    @staticmethod
-    @celery.task(name='ovs.healthcheck.check_openvstorage')
-    def _check_openvstorage(logger):
-        """
-        Checks all critical components of Open vStorage
-
-        :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
-        :returns
-        """
-
-        logger.info("Starting Open vStorage Health Check!", 'starting_ovs_hc')
-        logger.info("====================================", 'starting_ovs_hc_ul')
-
-        OpenvStorageHealthCheck.run(logger)
-
-    @staticmethod
-    @celery.task(name='ovs.healthcheck.check_arakoon')
-    def _check_arakoon(logger):
-        """
-        Checks all critical components of Arakoon
-
-        :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
-        :returns
-        """
-
-        logger.info("Starting Arakoon Health Check!", 'starting_arakoon_hc')
-        logger.info("==============================", 'starting_arakoon_hc_ul')
-
-        ArakoonHealthCheck.run(logger)
-
-    @staticmethod
-    @celery.task(name='ovs.healthcheck.check_alba')
-    def _check_alba(logger):
-        """
-        Checks all critical components of Alba
-
-        :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
-        :returns
-        """
-
-        logger.info("Starting Alba Health Check!", 'starting_alba_hc')
-        logger.info("===========================", 'starting_alba_hc_ul')
-
-        AlbaHealthCheck.run(logger)
-
-    @staticmethod
-    @celery.task(name='ovs.healthcheck.check_volumedriver')
-    def _check_volumedriver(logger):
-        """
-        Checks all critical components of Alba
-
-        :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
-        :returns
-        """
-
-        logger.info("Starting Volumedriver Health Check!", 'starting_volumedriver_hc')
-        logger.info("===================================", 'starting_volumedriver_hc_ul')
-
-        VolumedriverHealthCheck.run(logger)
-
-    @staticmethod
-    @celery.task(name='ovs.healthcheck.get_results')
-    def get_results(logger, unattended, silent_mode, module_name=None, method_name=None):
+    def get_results(result_handler, unattended, to_json, module_name=None, method_name=None):
         """
         Gets the result of the Open vStorage healthcheck
 
         :param unattended: unattendend mode?
         :type unattended: bool
-        :param silent_mode: silent mode?
-        :type silent_mode: bool
-        :param logger: logging object
-        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
+        :param to_json: silent mode?
+        :type to_json: bool
+        :param result_handler: result parser
+        :type result_handler: ovs.extensions.healthcheck.result.HCResults
         :return: results & recap
         :rtype: dict
         """
@@ -201,26 +51,26 @@ class HealthCheckController(object):
         if (module_name and method_name) is not None:
             recap_executer = '{0} {1}'.format(module_name, method_name)
 
-        logger.info("Recap of {0}!".format(recap_executer), 'starting_recap_hc')
-        logger.info("======================", 'starting_recap_hc_ul')
+        result_handler.info("Recap of {0}!".format(recap_executer), 'starting_recap_hc')
+        result_handler.info("======================", 'starting_recap_hc_ul')
 
-        logger.info("SUCCESS={0} FAILED={1} SKIPPED={2} WARNING={3} EXCEPTION={4}"
-                       .format(logger.counters['SUCCESS'], logger.counters['FAILED'],
-                               logger.counters['SKIPPED'], logger.counters['WARNING'],
-                               logger.counters['EXCEPTION']))
+        result_handler.info("SUCCESS={0} FAILED={1} SKIPPED={2} WARNING={3} EXCEPTION={4}"
+                            .format(result_handler.counters['SUCCESS'], result_handler.counters['FAILED'],
+                                    result_handler.counters['SKIPPED'], result_handler.counters['WARNING'],
+                                    result_handler.counters['EXCEPTION']))
 
-        if silent_mode:
-            result = logger.get_results(False)
+        if to_json:
+            result = result_handler.get_results(False)
         elif unattended:
-            result = logger.get_results(True)
+            result = result_handler.get_results(True)
         # returns dict with minimal and detailed information
         else:
             return None
-        return {'result': result, 'recap': {'SUCCESS': logger.counters['SUCCESS'],
-                                            'FAILED': logger.counters['FAILED'],
-                                            'SKIPPED': logger.counters['SKIPPED'],
-                                            'WARNING': logger.counters['WARNING'],
-                                            'EXCEPTION': logger.counters['EXCEPTION']}}
+        return {'result': result, 'recap': {'SUCCESS': result_handler.counters['SUCCESS'],
+                                            'FAILED': result_handler.counters['FAILED'],
+                                            'SKIPPED': result_handler.counters['SKIPPED'],
+                                            'WARNING': result_handler.counters['WARNING'],
+                                            'EXCEPTION': result_handler.counters['EXCEPTION']}}
 
     @staticmethod
     def _discover_methods(module_name=None, method_name=None):
@@ -321,94 +171,86 @@ class HealthCheckController(object):
         return result
 
     @staticmethod
-    def print_methods(mod=None, method=None):
+    def print_help(module=None, method=None):
         """
         Prints the possible methods that are exposed to the CLI
-        :param mod: module name specified with the cli
-        :type mod: str
+        :param module: module name specified with the cli
+        :type module: str
         :param method: method name specified with the cli
         :type method: str
         :return: found cache
         :rtype: dict
         """
-        cache = HealthCheckController._discover_methods(mod, method)
-        if mod:
+        print "Possible optional arguments are:"
+        for arg in HealthCheckController.OPTIONAL_ARGUMENTS:
+            print "ovs healthcheck [module] [method] {0}".format(arg)
+        cache = HealthCheckController._discover_methods(module, method)
+        if module:
             if cache is None:
-                print "Found no methods for module {0}".format(mod)
-                return HealthCheckController.print_methods()
+                print "Found no methods for module {0}".format(module)
+                return HealthCheckController.print_help()
             else:
-                print "Possible options for '{0}' are: ".format(mod)
+                print "Possible options for '{0}' are: ".format(module)
         else:
             print "Possible options are: "
-        for mod in cache:
-            for option in cache[mod]:
-                print "ovs healthcheck {0} {1}".format(mod, option['method_name'])
+        for module in cache:
+            for option in cache[module]:
+                print "ovs healthcheck {0} {1}".format(module, option['method_name'])
         return cache
 
     @staticmethod
-    def run_method(module_name=None, method_name=None, *args):
+    def run_method(*args):
         """
         Executes the given method
-        :param module_name:  module name specified with the cli
-        :type module_name: str
-        :param method_name: method name specified with the cli
-        :type method_name: str
         :return:
         """
-
-        # Special cases
-        if module_name == 'help':
-            return HealthCheckController.print_methods()
-        elif module_name == 'unattended':
-            return HealthCheckController.check_unattended()
-        elif module_name == 'silent':
-            return HealthCheckController.check_silent()
-        elif not module_name and not method_name or module_name == 'attended':
-            return HealthCheckController.check_attended()
+        module_name = None
+        method_name = None
+        # Extract option arguments
+        optional_arguments = [arg for arg in HealthCheckController.OPTIONAL_ARGUMENTS if arg in args]
+        args = [arg for arg in args if arg not in optional_arguments]
+        # Check for remaining arguments
+        if len(args) >= 1:
+            module_name = args[0]
+        if len(args) >= 2:
+            method_name = args[1]
         # Determine method to execute
-        if not method_name or not module_name:
+        if (method_name is not None and module_name is None) or "--help" in optional_arguments:
             print "Both the module name and the method name must be specified.".format(method_name, module_name)
-            return HealthCheckController.print_methods(module_name, method_name)
-
-        # If help was added to a module name, print all possible options
-        if method_name == 'help':
-            return HealthCheckController.print_methods(module_name)
-
+            return HealthCheckController.print_help(module_name, method_name)
+        # Find the required method and execute it
         obj = HealthCheckController._discover_methods(module_name, method_name)
         if obj is None:
             print "Found no method {0} for module {1}".format(method_name, module_name)
-            return HealthCheckController.print_methods(module_name)
-        # Find the required method and execute it
-        for option in obj[module_name]:
-            if option['method_name'] == method_name:
-                mod = imp.load_source(option['module_name'], option['location'])
-                cl = getattr(mod, option['class'])()
-                if len(args) > 0 and args[0] == 'help':
-                    print getattr(cl, option['function']).__doc__
-                    return
-                # Add a valid logger based on the optional arguments (unattended, silent) that could be present in args
-                # Determine type of execution - default to attended
-                unattended = False
-                silent_mode = False
-                if 'unattended' in args:
-                    unattended = True
-                    silent_mode = False
-                elif 'silent' in args:
-                    unattended = False
-                    silent_mode = True
-
-                logger = HCLogHandler(not silent_mode and not unattended)
-                # Execute method
-                try:
-                    getattr(cl, option['function'])(logger)
-                except:
-                    logger.exception('Error during execution of {0}.{1}'.format(cl, option['function']))
-                    raise
-                # Get results
-                HealthCheckController.get_results(logger, unattended, silent_mode, module_name, method_name)
-                return
-        print "Found no methods for module {0}".format(module_name)
-        return HealthCheckController.print_methods()
+            return HealthCheckController.print_help(module_name)
+        to_json = "--to-json" in optional_arguments
+        unattended = "--unattended" in optional_arguments
+        result_handler = HCResults(not (unattended and to_json))
+        executed = False
+        for mod_name, options in obj.iteritems():
+            if not (module_name is None or mod_name == module_name):
+                continue
+            for option in options:
+                # Exclude combined tests: exposed via method_name = test
+                if method_name is None or option['method_name'] == method_name:
+                    mod = imp.load_source(option['module_name'], option['location'])
+                    cl = getattr(mod, option['class'])()
+                    if '--help' in optional_arguments:
+                        print getattr(cl, option['function']).__doc__
+                        return
+                    # Execute method
+                    try:
+                        getattr(cl, option['function'])(result_handler)
+                        executed = True
+                    except:
+                        HealthCheckController.logger.exception('Error during execution of {0}.{1}'.format(cl, option['function']))
+                        raise
+        # Get results
+        if executed is True:
+            return HealthCheckController.get_results(result_handler, unattended, to_json, module_name, method_name)
+        else:
+            print "Found no methods for module {0}".format(module_name)
+            return HealthCheckController.print_help()
 
     if __name__ == '__main__':
         import sys

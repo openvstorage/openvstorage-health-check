@@ -17,11 +17,9 @@
 # but WITHOUT ANY WARRANTY of any kind.
 
 """
-LogHandler module for OVS health check
+Result processing module for the health check
 """
-
 from ovs.extensions.healthcheck.helpers.helper import Helper
-from ovs.log.log_handler import LogHandler
 
 
 class _Colors(object):
@@ -43,7 +41,7 @@ class _Colors(object):
         return getattr(self, item)
 
 
-class HCLogHandler(object):
+class HCResults(object):
     """
     Open vStorage Log Handler
     """
@@ -70,7 +68,7 @@ class HCLogHandler(object):
 
     def __init__(self, print_progress=True):
         """
-        Init method for the HealthCheck Log handler
+        Init method
 
         :param print_progress: print the progress yes or no
         :type print_progress: bool
@@ -87,11 +85,9 @@ class HCLogHandler(object):
         # Result of healthcheck in dict form
         self.result_dict = {}
 
-        self._logger = LogHandler.get("healthcheck")
-
-    def _log(self, msg, test_name, error_message=None, custom_value=None):
+    def _call(self, msg, test_name, error_message=None, custom_value=None):
         """
-        Log a message with a certain short test_name and type error message
+        Process a message with a certain short test_name and type error message
 
         :param msg: Log message for attended run
         :type msg: str
@@ -114,13 +110,8 @@ class HCLogHandler(object):
             error_type = self.MESSAGES[error_message]
             if not error_type or error_type not in self.SUPPORTED_TYPES:
                 raise ValueError('Found no error_type')
-            # Log to file - success and skip should go back to info
-            if error_message in HCLogHandler.LOG_CHANGING:
-                getattr(self._logger, HCLogHandler.LOG_CHANGING[error_message])("Test: {0} - {1}".format(test_name, msg))
-            else:
-                getattr(self._logger, error_message)("Test: {0} - {1}".format(test_name, msg))
             if test_name is not None:
-                if error_type not in HCLogHandler.EXCLUDED_MESSAGES:
+                if error_type not in HCResults.EXCLUDED_MESSAGES:
                     # Enable custom error type:
                     if error_type == 'CUSTOM':
                         self.result_dict[test_name] = custom_value
@@ -158,7 +149,7 @@ class HCLogHandler(object):
         :type test_name: str
         :return:
         """
-        self._log(msg, test_name, 'error')
+        self._call(msg, test_name, 'error')
 
     def success(self, msg, test_name=None):
         """
@@ -170,7 +161,7 @@ class HCLogHandler(object):
         :type test_name: str
         :return:
         """
-        self._log(msg, test_name, 'success')
+        self._call(msg, test_name, 'success')
 
     def warning(self, msg, test_name=None):
         """
@@ -182,7 +173,7 @@ class HCLogHandler(object):
         :type test_name: str
         :return:
         """
-        self._log(msg, test_name, 'warning')
+        self._call(msg, test_name, 'warning')
 
     def info(self, msg, test_name=None):
         """
@@ -194,7 +185,7 @@ class HCLogHandler(object):
         :type test_name: str
         :return:
         """
-        self._log(msg, test_name, 'info')
+        self._call(msg, test_name, 'info')
 
     def exception(self, msg, test_name=None):
         """
@@ -206,7 +197,7 @@ class HCLogHandler(object):
         :type test_name: str
         :return:
         """
-        self._log(msg, test_name, 'exception')
+        self._call(msg, test_name, 'exception')
 
     def skip(self, msg, test_name=None):
         """
@@ -218,7 +209,7 @@ class HCLogHandler(object):
         :type test_name: str
         :return:
         """
-        self._log(msg, test_name, 'skip')
+        self._call(msg, test_name, 'skip')
 
     def debug(self, msg, test_name=None):
         """
@@ -230,7 +221,7 @@ class HCLogHandler(object):
         :type test_name: str
         :return:
         """
-        self._log(msg, test_name, 'debug')
+        self._call(msg, test_name, 'debug')
 
     def custom(self, msg, test_name=None, value=None):
         """
@@ -245,4 +236,4 @@ class HCLogHandler(object):
         :return:
         """
 
-        self._log(msg, test_name, 'custom', value)
+        self._call(msg, test_name, 'custom', value)
