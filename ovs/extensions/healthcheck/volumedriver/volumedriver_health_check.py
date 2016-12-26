@@ -48,10 +48,12 @@ class VolumedriverHealthCheck(object):
     @ExposeToCli('volumedriver', 'check-dtl')
     def check_dtl(logger):
         """
-        Checks the dtl for all vdisks
+        Checks the dtl for all vdisks on the local node
 
         :param logger: logging object
         :type logger: ovs.log.healthcheck_logHandler.HCResults
+        :return: nothing
+        :rtype: None
         """
         test_name = "check_dtl"
 
