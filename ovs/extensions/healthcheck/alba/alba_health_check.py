@@ -541,7 +541,7 @@ class AlbaHealthCheck(object):
         abm_services = set(service for service in ServiceHelper.get_services() if service.type.name == ServiceType.SERVICE_TYPES.ALBA_MGR)
 
         for abm_service in abm_services:
-            alba_backend = BackendHelper.get_albabackend_by_guid(abm_service.abm_service.alba_backend_guid)
+            alba_backend = abm_service.abm_service.alba_backend
             # Determine if services are from ab instance
             config = Configuration.get_configuration_path('ovs/arakoon/{0}-abm/config'.format(alba_backend.name))
             # Fetch alba info
