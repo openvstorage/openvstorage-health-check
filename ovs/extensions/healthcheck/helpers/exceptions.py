@@ -157,7 +157,9 @@ class AlbaException(Exception):
         "proxy-delete-object",
         "asd-delete",
         "asd-multi-get",
-        "asd-set"
+        "asd-set",
+        "get-disk-safety",
+        "list-presets"
      ]
     # Certain exceptions are unclear.
     EXCEPTION_MAPPING = {
