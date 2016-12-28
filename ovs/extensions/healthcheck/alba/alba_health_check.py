@@ -34,7 +34,6 @@ from ovs.extensions.generic.volatilemutex import volatile_mutex
 from ovs.extensions.healthcheck.helpers.cache import CacheHelper
 from ovs.extensions.healthcheck.decorators import ExposeToCli
 from ovs.extensions.healthcheck.helpers.albacli import AlbaCLI
-from ovs.extensions.healthcheck.helpers.alba_node import AlbaNodeHelper
 from ovs.extensions.healthcheck.helpers.backend import BackendHelper
 from ovs.extensions.healthcheck.helpers.configuration import ConfigurationManager, ConfigurationProduct
 from ovs.extensions.healthcheck.helpers.exceptions import ObjectNotFoundException, ConnectionFailedException, \
@@ -532,26 +531,19 @@ class AlbaHealthCheck(object):
         logger.info("Checking if objects need to be repaired...")
 
         points = []
-        abms = []
 
         test_name = 'disk-safety'
         result = {
                 "repair_percentage": None,
                 "lost_disks": None
             }
+        # This a cluster-wide check!
+        abm_services = set(service.abm_service for service in ServiceHelper.get_services() if service.type.name == ServiceType.SERVICE_TYPES.ALBA_MGR)
 
-        for service in ServiceHelper.get_services():
-            if service.type.name == ServiceType.SERVICE_TYPES.ALBA_MGR and service not in abms:
-                abms.append(service.name)
-
-        abl = BackendHelper.get_albabackends()
-        for ab in abl:
+        for abm_service in abm_services:
+            alba_backend = abm_service.alba_backend
             # Determine if services are from ab instance
-            service_name = ServiceHelper.get_service(ab.abm_services[0].service_guid).name
-            if service_name not in abms:
-                continue
-
-            config = Configuration.get_configuration_path('ovs/arakoon/{0}/config'.format(service_name))
+            config = Configuration.get_configuration_path('ovs/arakoon/{0}-abm/config'.format(alba_backend.name))
             # Fetch alba info
             try:
                 try:
@@ -596,7 +588,7 @@ class AlbaHealthCheck(object):
                 lost = {
                     'measurement': 'disk_lost',
                     'tags': {
-                        'backend_name': ab.name,
+                        'backend_name': alba_backend.name,
                         'disk_lost': disk_lost
                     },
                     'fields': {
