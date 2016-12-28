@@ -537,11 +537,11 @@ class AlbaHealthCheck(object):
                 "repair_percentage": None,
                 "lost_disks": None
             }
-
-        abm_services = set(service for service in ServiceHelper.get_services() if service.type.name == ServiceType.SERVICE_TYPES.ALBA_MGR)
+        # This a cluster-wide check!
+        abm_services = set(service.abm_service for service in ServiceHelper.get_services() if service.type.name == ServiceType.SERVICE_TYPES.ALBA_MGR)
 
         for abm_service in abm_services:
-            alba_backend = abm_service.abm_service.alba_backend
+            alba_backend = abm_service.alba_backend
             # Determine if services are from ab instance
             config = Configuration.get_configuration_path('ovs/arakoon/{0}-abm/config'.format(alba_backend.name))
             # Fetch alba info
