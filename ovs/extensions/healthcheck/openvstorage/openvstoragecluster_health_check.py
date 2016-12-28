@@ -38,8 +38,7 @@ from ovs.extensions.healthcheck.helpers.storagedriver import StoragedriverHelper
 from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
 from ovs.lib.storagerouter import StorageRouterController
 from volumedriver.storagerouter import storagerouterclient as src
-from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, ObjectNotFoundException, \
-    MaxRedirectsExceededException
+from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException
 
 
 class OpenvStorageHealthCheck(object):
@@ -89,45 +88,48 @@ class OpenvStorageHealthCheck(object):
         good_size = []
         too_big = []
 
-        logger.info("Checking if logfiles their size is not bigger than {0} MB: ".format(Helper.max_log_size),
+        logger.info("Checking if log files their size is not bigger than {0} MB: ".format(Helper.max_log_size),
                     'checkLogfilesSize')
 
         # collect log files
         for log, settings in Helper.check_logs.iteritems():
-            if settings.get('type') == 'dir':
-                # check if dirname exists
-                if os.path.isdir(log):
-                    # check if dirname contains files
-                    files = OpenvStorageHealthCheck._list_logs_in_directory(log)
-                    # check if given dirname has files
-                    if len(files) != 0:
-                        # check size of log files
-                        for filename in files:
-                            if settings.get('prefix'):
-                                for prefix in list(settings.get('prefix')):
-                                    if prefix in filename:
-                                        collection.append(filename)
-                            else:
-                                collection.append(filename)
-
-                    # check if has nested_dirs and nested_files
-                    if settings.get('contains_nested'):
-                        nested_dirs = OpenvStorageHealthCheck._list_dirs_in_directory(log)
-                        for dirname in nested_dirs:
-                            nested_files = OpenvStorageHealthCheck._list_logs_in_directory(log+"/"+dirname)
-                            if len(nested_files) != 0:
-                                # check size of log files
-                                for nested_file in nested_files:
-                                    if settings.get('prefix'):
-                                        for prefix in list(settings.get('prefix')):
-                                            if prefix in filename:
-                                                collection.append(nested_file)
-                                    else:
-                                        collection.append(nested_file)
-            else:
+            if settings.get('type') != 'dir':
                 # check if filename exists
                 if os.path.exists(log):
                     collection.append(log)
+                continue
+            # check if dirname exists
+            if os.path.isdir(log) is False:
+                continue
+            # check if dirname contains files
+            files = OpenvStorageHealthCheck._list_logs_in_directory(log)
+            # check if given dirname has files
+            if len(files) != 0:
+                # check size of log files
+                for filename in files:
+                    if settings.get('prefix'):
+                        for prefix in list(settings.get('prefix')):
+                            if prefix in filename:
+                                collection.append(filename)
+                    else:
+                        collection.append(filename)
+
+            # check if has nested_dirs and nested_files
+            if settings.get('contains_nested') is False:
+                continue
+            nested_dirs = OpenvStorageHealthCheck._list_dirs_in_directory(log)
+            for dirname in nested_dirs:
+                nested_files = OpenvStorageHealthCheck._list_logs_in_directory(log+"/"+dirname)
+                if len(nested_files) == 0:
+                    continue
+                # check size of log files
+                for nested_file in nested_files:
+                    if settings.get('prefix'):
+                        for prefix in list(settings.get('prefix')):
+                            if prefix in nested_file:
+                                collection.append(nested_file)
+                    else:
+                        collection.append(nested_file)
 
         # process log files
         for c_files in collection:
@@ -140,7 +142,7 @@ class OpenvStorageHealthCheck(object):
                 logger.failure("Logfile '{0}' is a BIG logfile!".format(c_files))
 
         if len(too_big) != 0:
-            logger.failure("Some logfiles are TOO BIG, please check these files {0}!".format(', '.join(too_big)),
+            logger.failure("Some log files are TOO BIG, please check these files {0}!".format(', '.join(too_big)),
                            'log_size')
         else:
             logger.success("ALL log files are ok!", 'log_size')
@@ -427,8 +429,7 @@ class OpenvStorageHealthCheck(object):
             logger.success("DNS resolving works!", 'dns_resolving')
             return True
         except Exception:
-            logger.failure("DNS resolving doesn't work, please check /etc/resolv.conf or add correct",
-                           "DNS server and make it immutable: 'sudo chattr +i /etc/resolv.conf'!",
+            logger.failure("DNS resolving doesn't work, please check /etc/resolv.conf or add correct DNS server and make it immutable: 'sudo chattr +i /etc/resolv.conf'!",
                            'dns_resolving')
             return False
 
@@ -436,7 +437,7 @@ class OpenvStorageHealthCheck(object):
     @exposetocli('ovs', 'zombie-processes-test')
     def get_zombied_and_dead_processes(logger):
         """
-        Finds zombied or dead processes on a local machine
+        Finds zombie or dead processes on a local machine
 
         :param logger: logging object
         :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
@@ -487,7 +488,7 @@ class OpenvStorageHealthCheck(object):
         logger.info("Checking model consistency: ", 'check_model_consistency')
 
         # RabbitMQ check: cluster verification
-        logger.info("Precheck: verification of RabbitMQ cluster: ", 'checkRabbitMQcluster')
+        logger.info("Pre-check: verification of RabbitMQ cluster: ", 'checkRabbitMQcluster')
         if Helper.get_ovs_type() == "MASTER":
             r = RabbitMQ(ip=OpenvStorageHealthCheck.MACHINE_DETAILS.ip)
             partitions = r.partition_status()
@@ -524,6 +525,7 @@ class OpenvStorageHealthCheck(object):
                 # collect data from volumedriver
                 try:
                     voldrv_client = src.LocalStorageRouterClient(config_file)
+                    # noinspection PyArgumentList
                     voldrv_volume_list = voldrv_client.list_volumes()
                 except (ClusterNotReachableException, RuntimeError) as ex:
                     logger.failure("Seems like the volumedriver '{0}' is not running: {1}".format(vp.name, ex.message),
@@ -532,12 +534,12 @@ class OpenvStorageHealthCheck(object):
 
                 vdisk_volume_ids = [vdisk.volume_id for vdisk in vp.vdisks]
 
-                # crossreference model vs. volumedriver
+                # cross-reference model vs. volumedriver
                 for vdisk in vp.vdisks:
                     if vdisk.volume_id not in voldrv_volume_list:
                         missing_in_volumedriver.append(vdisk.guid)
 
-                # crossreference volumedriver vs. model
+                # cross-reference volumedriver vs. model
                 for voldrv_id in voldrv_volume_list:
                     if voldrv_id not in vdisk_volume_ids:
                         missing_in_model.append(voldrv_id)

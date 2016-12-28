@@ -13,7 +13,7 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
-import json
+
 from ovs.extensions.storage.exceptions import KeyNotFoundException
 from ovs.extensions.storage.persistentfactory import PersistentFactory
 
@@ -27,8 +27,9 @@ class CacheHelper(object):
     def set(item, key=None):
         """
         Store the information to the config management
-        :param item:
-        :return:
+        :param item: item to set
+        :param key: key to use
+        :return: True if successful, False if not
         """
         key = CacheHelper._generate_key(key=key)
         return CacheHelper.client.set(key=key, value=item)
@@ -37,16 +38,17 @@ class CacheHelper(object):
     def append(item, key=None):
         """
         Appends the information to the value
-        Supports dicts, lists and sets
-        :param item:
-        :return:
+        Supports dicts, lists
+        :param item: item to set
+        :param key: key to use
+        :return: True if successful, False if not
         """
         supported_types = [dict, list]
         retrieved_value = CacheHelper.get(key=key)
         for item_type in supported_types:
             if isinstance(item, item_type) and isinstance(retrieved_value, item_type):
                 if item_type == list:
-                    return CacheHelper.set(retrieved_value + item)
+                    return CacheHelper.set(key=key, item=retrieved_value + item)
                 if item_type == dict:
                     item.update(retrieved_value)
                     return CacheHelper.set(key=key, item=item)
@@ -54,6 +56,11 @@ class CacheHelper(object):
 
     @staticmethod
     def get(key=None):
+        """
+        Gets a value from a specified key
+        :param key: key to use
+        :return: the value in case it was found else None
+        """
         key = CacheHelper._generate_key(key=key)
         try:
             return CacheHelper.client.get(key)
@@ -62,6 +69,11 @@ class CacheHelper(object):
 
     @staticmethod
     def delete(key=None):
+        """
+        Deletes the value from a specified key
+        :param key: key to use
+        :return: True if successful, False if not
+        """
         key = CacheHelper._generate_key(key=key)
         try:
             CacheHelper.client.delete(key)
@@ -71,6 +83,11 @@ class CacheHelper(object):
 
     @staticmethod
     def _generate_key(key=None):
+        """
+        Internal method to append the prefix to the key
+        :param key: key to use
+        :return: the generated key
+        """
         if key is None:
             key = "{0}generic".format(CacheHelper.prefix)
         else:
@@ -89,8 +106,8 @@ class CacheHelper(object):
             'string': "test",
             'literal': 'test',
             'dict': {"test": "test"},
-            'list': [1,2],
-            'set': set([1,2])
+            'list': [1, 2],
+            'set': {1, 2}
         }
 
         for key, value in testers.iteritems():

@@ -13,9 +13,10 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
-import inspect
+
 
 # class decorator
+# noinspection PyPep8Naming
 class exposetocli(object):
     def __init__(self, module_name=None, method_name=None):
         if module_name and method_name:
@@ -23,11 +24,6 @@ class exposetocli(object):
             self.method_name = method_name
 
     def __call__(self, func):
-        def get_path_info():
-            for item in inspect.stack():
-                if item and __file__ not in item:
-                    return item[1]
-            return __file__
         self.function = func
         func.module_name = self.module_name
         func.method_name = self.method_name

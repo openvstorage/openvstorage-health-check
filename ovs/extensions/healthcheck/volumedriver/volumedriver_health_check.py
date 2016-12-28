@@ -33,7 +33,6 @@ from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableEx
 from volumedriver.storagerouter.storagerouterclient import FileExistsException
 
 
-
 class VolumedriverHealthCheck(object):
     """
     A healthcheck for the volumedriver components
@@ -95,7 +94,7 @@ class VolumedriverHealthCheck(object):
 
     @staticmethod
     @timeout_decorator.timeout(30)
-    def _check_volumedriver(vdisk_name, storagedriver_guid, vpool_name, vdisk_size=VDISK_CHECK_SIZE):
+    def _check_volumedriver(vdisk_name, storagedriver_guid, vdisk_size=VDISK_CHECK_SIZE):
         """
         Checks if the volumedriver can create a new vdisk
 
@@ -168,8 +167,7 @@ class VolumedriverHealthCheck(object):
                                                            VolumedriverHealthCheck.MACHINE_ID))
                                 # create a new one
                                 try:
-                                    volume = VolumedriverHealthCheck._check_volumedriver(name, storagedriver_guid,
-                                                                                         vp.name)
+                                    volume = VolumedriverHealthCheck._check_volumedriver(name, storagedriver_guid)
                                 except FileExistsException:
                                     # can be ignored until fixed in framework
                                     # https://github.com/openvstorage/framework/issues/1247
@@ -252,10 +250,12 @@ class VolumedriverHealthCheck(object):
 
                     try:
                         voldrv_client = src.LocalStorageRouterClient(config_file)
+                        # noinspection PyArgumentList
                         voldrv_volume_list = voldrv_client.list_volumes()
                         for volume in voldrv_volume_list:
                             # check if volume is halted, returns: 0 or 1
                             try:
+                                # noinspection PyTypeChecker
                                 if int(VolumedriverHealthCheck._info_volume(voldrv_client, volume).halted):
                                     haltedvolumes.append(volume)
                             except ObjectNotFoundException:
@@ -306,6 +306,7 @@ class VolumedriverHealthCheck(object):
         :return: volumedriver volume object
         """
 
+        # noinspection PyUnresolvedReferences
         return voldrv_client.info_volume(volume_name)
 
     @staticmethod

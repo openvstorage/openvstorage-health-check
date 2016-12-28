@@ -187,7 +187,7 @@ class ArakoonHealthCheck(object):
                 command = 'grep "NODE STARTED" {0} | awk -v d1="$(date --date="-{1} min" +"%F %R")" ' \
                           '-v d2="$(date +"%F %R")" \'$0 > d1 && $0 < d2 || $0 ~ d2\''\
                           .format(arakoon_log, last_minutes)
-            elif Helper.RAW_INIT_MANAGER == InitManagerSupported.SYSTEMD:
+            else:
                 arakoon_log = "journalctl -u ovs-arakoon-{0}.service".format(cluster_name)
                 command = '{0} | grep "NODE STARTED" | awk -v d1="$(date --date="-{1} min" +"%F %R")" ' \
                           '-v d2="$(date +"%F %R")" \'$0 > d1 && $0 < d2 || $0 ~ d2\''\
