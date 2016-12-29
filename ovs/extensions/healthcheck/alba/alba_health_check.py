@@ -566,8 +566,8 @@ class AlbaHealthCheck(object):
             if cache is None or cache.get(backend_name, None) is None:
                 # First run of healthcheck
                 logger.success('Object repair for backend_name {0} will be monitored on increments.'.format(backend_name))
+            # If there are no objects to repair, do not show if increasing or decreasing
             elif objects_to_repair > 0:
-                # If there are no objects to repair, do not show if increasing or decreasing
                 if cache[backend_name]['object_to_repair'] > objects_to_repair:
                     # Amount of objects to repair is descending
                     logger.success('Amount of objects to repair is decreasing for backend_name {0}.'.format(backend_name))
