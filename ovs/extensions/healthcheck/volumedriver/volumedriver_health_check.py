@@ -88,7 +88,7 @@ class VolumedriverHealthCheck(object):
 
     @staticmethod
     @timeout_decorator.timeout(30)
-    def _check_volumedriver(vdisk_name, storagedriver_guid, vdisk_size=VDISK_CHECK_SIZE):
+    def _check_volumedriver(vdisk_name, storagedriver_guid, logger, vdisk_size=VDISK_CHECK_SIZE):
         """
         Checks if the volumedriver can create a new vdisk
 
@@ -108,7 +108,8 @@ class VolumedriverHealthCheck(object):
             # https://github.com/openvstorage/framework/issues/1247
             return True
         except Exception as ex:
-            raise RuntimeError('Creation of vdisk {0} has failed. Got {1}'.format(vdisk_name, str(ex)))
+            logger.failure("Creation of the vdisk failed. Got {0}".format(str(ex)))
+            return False
         return True
 
     @staticmethod
@@ -130,7 +131,6 @@ class VolumedriverHealthCheck(object):
         try:
             vdisk = VDiskHelper.get_vdisk_by_name(vdisk_name=vdisk_name, vpool_name=vpool_name)
             VDiskController.delete(vdisk.guid)
-
             return True
         except VDiskNotFoundError:
             # not found, if it should be present, reraise the exception
@@ -168,12 +168,7 @@ class VolumedriverHealthCheck(object):
                                                if storagedriver.storagedriver_id == vp.name +
                                                VolumedriverHealthCheck.LOCAL_ID))
                     # create a new one
-                    try:
-                        volume = VolumedriverHealthCheck._check_volumedriver(name, storagedriver_guid)
-                    except FileExistsException:
-                        # can be ignored until fixed in framework
-                        # https://github.com/openvstorage/framework/issues/1247
-                        volume = True
+                    volume = VolumedriverHealthCheck._check_volumedriver(name, storagedriver_guid, logger)
 
                     if volume is True:
                         # delete the recently created
