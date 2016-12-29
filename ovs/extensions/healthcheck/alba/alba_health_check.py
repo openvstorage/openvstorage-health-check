@@ -488,7 +488,7 @@ class AlbaHealthCheck(object):
 
         disk_lost_overview = {}
         for abm_service in abm_services:
-            alba_backend = abm_service.abm_service.alba_backend
+            alba_backend = abm_service.alba_backend
             if alba_backend.name in disk_lost_overview:
                 continue
             # Determine if services are from ab instance
