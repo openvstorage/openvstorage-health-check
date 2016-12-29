@@ -522,17 +522,19 @@ class AlbaHealthCheck(object):
                     bucket = bucket_safety['bucket']
                     disk_lost = abs(bucket[2] - bucket_safety['applicable_dead_osds'] - (bucket[0] + bucket[1]))
                     remaining_safety = bucket_safety['remaining_safety']
+                    objects = bucket_safety['count']
                     if remaining_safety not in lost_disks:
-                        lost_disks[remaining_safety] = bucket_safety['count']
-                    details['total_objects'] += bucket_safety['count']
+                        lost_disks[remaining_safety] = 0
+                    lost_disks[remaining_safety] += objects
+                    details['total_objects'] += objects
                     if remaining_safety < 0:
-                        details['lost_objects'] += bucket_safety['count']
+                        details['lost_objects'] += objects
+                    elif disk_lost > 0:
+                        details['objects_to_repair'] += objects
                     if remaining_safety < details['lowest_safety']:
                         details['lowest_safety'] = remaining_safety
                     if disk_lost > details['most_disks_lost']:
                         details['most_disks_lost'] = disk_lost
-                    if disk_lost > 0:
-                        details['objects_to_repair'] += bucket_safety['count']
 
         for backend_name, disk_safety_info in disk_lost_overview.iteritems():
             # Get worst values first to see if the environment is in a critical state
@@ -542,7 +544,7 @@ class AlbaHealthCheck(object):
             objects_to_repair = disk_safety_info['objects_to_repair']
             disk_lost = disk_safety_info['most_disks_lost']
             total_objects = disk_safety_info['total_objects']
-            # limit to 4 numbers
+            # Limit to 4 numbers
             repair_percentage = float('{0:.4f}'.format((float(objects_to_repair) / total_objects) * 100)) if total_objects != 0 else 0
             if disk_lost == 0:
                 logger.success('Backend {0} has no disks that are lost.'.format(backend_name))
@@ -550,46 +552,40 @@ class AlbaHealthCheck(object):
                 msg = "Another {0} disks can be lost." if lowest_safety > 0 else "Losing more disks will cause data loss!"
                 logger.failure('Backend {0} has lost {1} disk(s). {2}'.format(backend_name, disk_lost, msg))
 
-            msg = 'Backend {0}: {1} out of {2} objects have to be repaired.'.format(backend_name, objects_to_repair, total_objects)
-            if objects_to_repair == 0:
-                logger.success(msg)
-            else:
-                logger.warning(msg)
-            if objects_no_safety > 0:
-                logger.failure('Backend {0}: {1} out of {2} objects will be beyond repair if another disk fails.'.format(backend_name, objects_no_safety, total_objects))
-            if lost_objects > 0:
-                logger.failure('Backend {0}: {1} out of {2} objects are beyond repair.'.format(backend_name, lost_objects, total_objects))
+                added_msg = ' and will be beyond repair if another disk fails' if objects_no_safety > 0 else ''
+                msg = 'Backend {0}: {1} out of {2} objects have to be repaired{3}.'.format(backend_name, objects_to_repair, total_objects, added_msg)
+                if lost_objects > 0:
+                    logger.failure('Backend {0}: {1} out of {2} objects are beyond repair.'.format(backend_name, lost_objects, total_objects))
+                elif objects_to_repair > 0:
+                    logger.warning(msg)
+                else:
+                    logger.success(msg)
             # Log if the amount is rising
             cache = CacheHelper.get()
-            repair_rising = False
+            repair_increasing = False
             if cache is None or cache.get(backend_name, None) is None:
                 # First run of healthcheck
                 logger.success('Object repair for backend_name {0} will be monitored on increments.'.format(backend_name))
-            elif objects_to_repair == 0:
-                # Amount of objects to repair are rising
-                logger.success('No objects in objects repair queue for backend_name {0}.'.format(backend_name))
-            elif cache[backend_name]['object_to_repair'] > objects_to_repair:
-                # Amount of objects to repair is descending
-                logger.success('Amount of objects to repair is descending for backend_name {0}.'.format(backend_name))
-            elif cache[backend_name]['object_to_repair'] < objects_to_repair:
-                # Amount of objects to repair is rising
-                repair_rising = True
-                logger.failure('Amount of objects to repair is rising for backend_name {0}.'.format(backend_name))
-            elif cache[backend_name]['object_to_repair'] == objects_to_repair:
-                # Amount of objects to repair is the same
-                logger.success('Amount of objects to repair is the same for backend_name {0}.'.format(backend_name))
+            elif objects_to_repair > 0:
+                # If there are no objects to repair, do not show if increasing or decreasing
+                if cache[backend_name]['object_to_repair'] > objects_to_repair:
+                    # Amount of objects to repair is descending
+                    logger.success('Amount of objects to repair is decreasing for backend_name {0}.'.format(backend_name))
+                elif cache[backend_name]['object_to_repair'] < objects_to_repair:
+                    # Amount of objects to repair is rising
+                    repair_increasing = True
+                    logger.failure('Amount of objects to repair is increasing for backend_name {0}.'.format(backend_name))
 
             if logger.print_progress is False:
                 # Custom recap for operations
                 logger.custom(
-                    msg='Recap of disk-safety: {0}% of the objects have to be repaired. Backend has lost {1} and number of objects to repair is {2}.'.format(repair_percentage, disk_lost, 'rising' if repair_rising is True else 'descending or the same'),
+                    msg='Recap of disk-safety: {0}% of the objects have to be repaired. Backend has lost {1} and number of objects to repair is {2}.'.format(repair_percentage, disk_lost, 'rising' if repair_increasing is True else 'descending or the same'),
                     test_name='{0}_{1}'.format(test_name, backend_name),
-                    value=' '.join([str(repair_percentage), 'SUCCESS' if disk_lost == 0 else 'FAILURE', 'FAILURE' if repair_rising is True else 'SUCCESS']))
+                    value=' '.join([str(repair_percentage), 'SUCCESS' if disk_lost == 0 else 'FAILURE', 'FAILURE' if repair_increasing is True else 'SUCCESS']))
             if cache is None:
                 cache = {}
             cache[backend_name] = {
                     'object_to_repair': objects_to_repair,
-                    'total_objects': total_objects
             }
             CacheHelper.set(cache)
         return CacheHelper.get()
