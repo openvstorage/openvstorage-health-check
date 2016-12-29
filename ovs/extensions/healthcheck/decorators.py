@@ -17,7 +17,7 @@
 
 # class decorator
 # noinspection PyPep8Naming
-class exposetocli(object):
+class expose_to_cli(object):
     def __init__(self, module_name=None, method_name=None):
         if module_name and method_name:
             self.module_name = module_name

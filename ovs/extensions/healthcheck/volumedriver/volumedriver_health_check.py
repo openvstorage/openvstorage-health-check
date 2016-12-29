@@ -22,7 +22,7 @@ from ovs.extensions.generic.system import System
 from ovs.extensions.generic.filemutex import file_mutex
 from timeout_decorator.timeout_decorator import TimeoutError
 from ovs.extensions.healthcheck.helpers.configuration import ConfigurationManager, ConfigurationProduct
-from ovs.extensions.healthcheck.decorators import exposetocli
+from ovs.extensions.healthcheck.decorators import expose_to_cli
 from ovs.extensions.healthcheck.helpers.vdisk import VDiskHelper
 from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
 from ovs.extensions.healthcheck.helpers.exceptions import VDiskNotFoundError
@@ -45,7 +45,7 @@ class VolumedriverHealthCheck(object):
     VDISK_TIMEOUT_BEFORE_DELETE = 0.5
 
     @staticmethod
-    @exposetocli('volumedriver', 'check_dtl')
+    @expose_to_cli('volumedriver', 'check_dtl')
     def check_dtl(logger):
         """
         Checks the dtl for all vdisks
@@ -140,7 +140,7 @@ class VolumedriverHealthCheck(object):
                 return True
 
     @staticmethod
-    @exposetocli('volumedriver', 'check-volumedrivers')
+    @expose_to_cli('volumedriver', 'check-volumedrivers')
     def check_volumedrivers(logger):
         """
         Checks if the VOLUMEDRIVERS work on a local machine (compatible with multiple vPools)
@@ -220,7 +220,7 @@ class VolumedriverHealthCheck(object):
             logger.skip("No vPools found!", 'volumedrivers_nofound')
 
     @staticmethod
-    @exposetocli('ovs', 'halted-volumes-test')
+    @expose_to_cli('ovs', 'halted-volumes-test')
     def check_for_halted_volumes(logger):
         """
         Checks for halted volumes on a single or multiple vPools
@@ -344,7 +344,7 @@ class VolumedriverHealthCheck(object):
                                        stderr=subprocess.STDOUT, shell=True)
 
     @staticmethod
-    @exposetocli('ovs', 'filedrivers-test')
+    @expose_to_cli('ovs', 'filedrivers-test')
     def check_filedrivers(logger):
         """
         Checks if the FILEDRIVERS work on a local machine (compatible with multiple vPools)
@@ -389,7 +389,7 @@ class VolumedriverHealthCheck(object):
             logger.skip("No vPools found!", 'filedrivers_nofound')
 
     @staticmethod
-    @exposetocli('volumedriver', 'test')
+    @expose_to_cli('volumedriver', 'test')
     def run(logger):
         """
         Testing suite for volumedriver
