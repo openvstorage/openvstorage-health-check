@@ -484,7 +484,7 @@ class AlbaHealthCheck(object):
 
         logger.info('Checking if objects need to be repaired...')
         test_name = 'disk-safety'
-        abm_services = set(service for service in ServiceHelper.get_services() if service.type.name == ServiceType.SERVICE_TYPES.ALBA_MGR)
+        abm_services = set(service.abm_service for service in ServiceHelper.get_services() if service.type.name == ServiceType.SERVICE_TYPES.ALBA_MGR)
 
         disk_lost_overview = {}
         for abm_service in abm_services:
@@ -554,9 +554,9 @@ class AlbaHealthCheck(object):
             else:
                 logger.warning(msg)
             if objects_no_safety > 0:
-                logger.failure('Backend {0}: {1} out of {2} objects will be beyond repair if another disk fails.')
+                logger.failure('Backend {0}: {1} out of {2} objects will be beyond repair if another disk fails.'.format(backend_name, objects_no_safety, total_objects))
             if lost_objects > 0:
-                logger.failure('Backend {0}: {1} out of {2} objects is beyond repair.')
+                logger.failure('Backend {0}: {1} out of {2} objects are beyond repair.'.format(backend_name, lost_objects, total_objects))
             # Log if the amount is rising
             cache = CacheHelper.get()
             repair_rising = False
