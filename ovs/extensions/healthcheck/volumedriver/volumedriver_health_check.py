@@ -60,6 +60,7 @@ class VolumedriverHealthCheck(object):
         for vdisk_guid in VolumedriverHealthCheck.LOCAL_SR.vdisks_guids:
             try:
                 vdisk = VDiskHelper.get_vdisk_by_guid(vdisk_guid)
+                vdisk.invalidate_dynamics('dtl_status')
             except TimeoutError:
                 logger.warning('VDisk {0}s DTL has a timeout status: {1}.'.format(vdisk.name, vdisk.dtl_status), test_name)
             if vdisk.dtl_status == 'ok_standalone':
@@ -226,7 +227,11 @@ class VolumedriverHealthCheck(object):
 
             haltedvolumes = []
             logger.info('Checking vPool {0}: '.format(vp.name))
-            config_file = Configuration.get_configuration_path("/ovs/vpools/{0}/hosts/{1}/config".format(vp.guid, vp.storagedrivers[0].name))
+            if len(vp.storagedrivers) > 0:
+                config_file = Configuration.get_configuration_path("/ovs/vpools/{0}/hosts/{1}/config".format(vp.guid, vp.storagedrivers[0].name))
+            else:
+                logger.failure('The vpool {0} does not have any storagedrivers associated to it!'.format(vp.name))
+                continue
 
             try:
                 voldrv_client = src.LocalStorageRouterClient(config_file)
