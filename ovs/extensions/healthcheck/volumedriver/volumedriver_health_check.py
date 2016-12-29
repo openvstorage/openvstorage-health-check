@@ -218,64 +218,64 @@ class VolumedriverHealthCheck(object):
 
         :param logger: logging object
         :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
+        :return: None
+        :rtype: NoneType
         """
 
         logger.info('Checking for halted volumes: ')
 
         vpools = VPoolHelper.get_vpools()
 
-        if len(vpools) != 0:
-
-            for vp in vpools:
-
-                if vp.guid not in VolumedriverHealthCheck.LOCAL_SR.vpools_guids:
-                    logger.skip('Skipping vPool {0} because it is not living here.'.format(vp.name), 'halted_volumedriver_{0}'.format(vp.name))
-                    continue
-
-                haltedvolumes = []
-                logger.info('Checking vPool {0}: '.format(vp.name))
-                config_file = Configuration.get_configuration_path("/ovs/vpools/{0}/hosts/{1}{2}/config".format(vp.guid, vp.name, VolumedriverHealthCheck.LOCAL_ID))
-
-                try:
-                    voldrv_client = src.LocalStorageRouterClient(config_file)
-                    # noinspection PyArgumentList
-                    voldrv_volume_list = voldrv_client.list_volumes()
-                    for volume in voldrv_volume_list:
-                        # check if volume is halted, returns: 0 or 1
-                        try:
-                            # noinspection PyTypeChecker
-                            if int(VolumedriverHealthCheck._info_volume(voldrv_client, volume).halted):
-                                haltedvolumes.append(volume)
-                        except ObjectNotFoundException:
-                            # ignore ovsdb invalid entrees
-                            # model consistency will handle it.
-                            continue
-                        except MaxRedirectsExceededException:
-                            # this means the volume is not halted but detached or unreachable for the volumedriver
-                            haltedvolumes.append(volume)
-                        except RuntimeError:
-                            haltedvolumes.append(volume)
-                        except TimeoutError:
-                            # timeout occurred
-                            haltedvolumes.append(volume)
-                    logger.success(
-                        'Volumedriver {0} is up and running.'.format(vp.name),
-                        'halted_volumedriver_{0}'.format(vp.name))
-                except (ClusterNotReachableException, RuntimeError) as ex:
-                    logger.failure(
-                        'Seems like the Volumedriver {0} is not running.'.format(vp.name, ex.message),
-                        'halted_volumedriver_{0}'.format(vp.name))
-                    continue
-
-                # print all results
-                if len(haltedvolumes) > 0:
-                    logger.failure('Detected volumes that are HALTED in vPool {0}: {1}'.format(vp.name, ', '.join(haltedvolumes)),
-                                   'halted_volumes_{0}'.format(vp.name))
-                else:
-                    logger.success('No halted volumes detected in vPool {0}'.format(vp.name), 'halted_volumes_{0}'.format(vp.name))
-
-        else:
+        if len(vpools) == 0:
             logger.skip('No vPools found!'.format(len(vpools)), 'halted_nofound')
+            return
+
+        for vp in vpools:
+            if vp.guid not in VolumedriverHealthCheck.LOCAL_SR.vpools_guids:
+                logger.skip('Skipping vPool {0} because it is not living here.'.format(vp.name), 'halted_volumedriver_{0}'.format(vp.name))
+                continue
+
+            haltedvolumes = []
+            logger.info('Checking vPool {0}: '.format(vp.name))
+            config_file = Configuration.get_configuration_path("/ovs/vpools/{0}/hosts/{1}{2}/config".format(vp.guid, vp.name, VolumedriverHealthCheck.LOCAL_ID))
+
+            try:
+                voldrv_client = src.LocalStorageRouterClient(config_file)
+                # noinspection PyArgumentList
+                voldrv_volume_list = voldrv_client.list_volumes()
+                for volume in voldrv_volume_list:
+                    # check if volume is halted, returns: 0 or 1
+                    try:
+                        # noinspection PyTypeChecker
+                        if int(VolumedriverHealthCheck._info_volume(voldrv_client, volume).halted):
+                            haltedvolumes.append(volume)
+                    except ObjectNotFoundException:
+                        # ignore ovsdb invalid entrees
+                        # model consistency will handle it.
+                        continue
+                    except MaxRedirectsExceededException:
+                        # this means the volume is not halted but detached or unreachable for the volumedriver
+                        haltedvolumes.append(volume)
+                    except RuntimeError:
+                        haltedvolumes.append(volume)
+                    except TimeoutError:
+                        # timeout occurred
+                        haltedvolumes.append(volume)
+                logger.success(
+                    'Volumedriver {0} is up and running.'.format(vp.name),
+                    'halted_volumedriver_{0}'.format(vp.name))
+            except (ClusterNotReachableException, RuntimeError) as ex:
+                logger.failure(
+                    'Seems like the Volumedriver {0} is not running.'.format(vp.name, ex.message),
+                    'halted_volumedriver_{0}'.format(vp.name))
+                continue
+
+            # print all results
+            if len(haltedvolumes) > 0:
+                logger.failure('Detected volumes that are HALTED in vPool {0}: {1}'.format(vp.name, ', '.join(haltedvolumes)),
+                               'halted_volumes_{0}'.format(vp.name))
+            else:
+                logger.success('No halted volumes detected in vPool {0}'.format(vp.name), 'halted_volumes_{0}'.format(vp.name))
 
     @staticmethod
     @timeout_decorator.timeout(5)
