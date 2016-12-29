@@ -205,15 +205,14 @@ class OpenvStorageHealthCheck(object):
 
         # check ports for OVS services
         logger.info("Checking OVS ports", '')
-        for sr in ServiceHelper.get_services():
-            if sr.storagerouter_guid == OpenvStorageHealthCheck.MACHINE_DETAILS.guid:
-                for port in sr.ports:
-                    if sr.name.split('_')[0] == 'albaproxy':
-                        storagedriver_id = "{0}{1}".format(sr.name.split('_')[1], OpenvStorageHealthCheck.MACHINE_ID)
-                        ip = StoragedriverHelper.get_by_storagedriver_id(storagedriver_id).storage_ip
-                        OpenvStorageHealthCheck._is_port_listening(logger, sr.name, port, ip)
-                    else:
-                        OpenvStorageHealthCheck._is_port_listening(logger, sr.name, port)
+        for sr in ServiceHelper.get_local_services():
+            for port in sr.ports:
+                if sr.name.split('_')[0] == 'albaproxy':
+                    storagedriver_id = "{0}{1}".format(sr.name.split('_')[1], OpenvStorageHealthCheck.MACHINE_ID)
+                    ip = StoragedriverHelper.get_by_storagedriver_id(storagedriver_id).storage_ip
+                    OpenvStorageHealthCheck._is_port_listening(logger, sr.name, port, ip)
+                else:
+                    OpenvStorageHealthCheck._is_port_listening(logger, sr.name, port)
 
         # check NGINX and memcached
         logger.info("Checking EXTRA ports", '')
@@ -224,14 +223,12 @@ class OpenvStorageHealthCheck(object):
         # Check Celery and RabbitMQ
         logger.info("Checking RabbitMQ/Celery ...", '')
         if Helper.get_ovs_type() == "MASTER":
-            pcommand = "celery inspect ping -b amqp://ovs:0penv5tor4ge@{0}//"\
-                .format(OpenvStorageHealthCheck.MACHINE_DETAILS.ip)
+            pcommand = "celery inspect ping -b amqp://ovs:0penv5tor4ge@{0}//".format(OpenvStorageHealthCheck.MACHINE_DETAILS.ip)
             pcel = commands.getoutput(pcommand.format(pcommand)).split("\n")
             if len(pcel) != 1 and 'pong' in pcel[1].strip():
                 logger.success("Connection successfully established!", 'port_celery')
             else:
-                logger.failure("Connection FAILED to service Celery, please check 'RabbitMQ' and 'ovs-workers'?",
-                               'port_celery')
+                logger.failure("Connection FAILED to service Celery, please check 'RabbitMQ' and 'ovs-workers'?", 'port_celery')
         else:
             logger.skip("RabbitMQ is not running/active on this server!", 'port_celery')
 
@@ -472,6 +469,22 @@ class OpenvStorageHealthCheck(object):
                            'process_dead')
 
     @staticmethod
+    @expose_to_cli('ovs', 'rabbitmq-test')
+    def check_rabbit_mq(logger):
+        # RabbitMQ check: cluster verification
+        logger.info("Verifying  of RabbitMQ cluster: ", 'checkRabbitMQcluster')
+        if Helper.get_ovs_type() == "MASTER":
+            r = RabbitMQ(ip=OpenvStorageHealthCheck.MACHINE_DETAILS.ip)
+            partitions = r.partition_status()
+            if len(partitions) == 0:
+                logger.success("RabbitMQ has no partition issues!", 'process_rabbitmq')
+            else:
+                logger.failure("RabbitMQ has partition issues: {0}".format(', '.join(partitions)), 'process_rabbitmq')
+        else:
+            logger.skip("RabbitMQ is not running/active on this server!", 'process_rabbitmq')
+        raise NotImplementedError
+
+    @staticmethod
     @expose_to_cli('ovs', 'model-test')
     def check_model_consistency(logger):
         """
@@ -480,89 +493,69 @@ class OpenvStorageHealthCheck(object):
         :param logger: logging object
         :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         """
-
         logger.info("Checking model consistency: ", 'check_model_consistency')
-
-        # RabbitMQ check: cluster verification
-        logger.info("Pre-check: verification of RabbitMQ cluster: ", 'checkRabbitMQcluster')
-        if Helper.get_ovs_type() == "MASTER":
-            r = RabbitMQ(ip=OpenvStorageHealthCheck.MACHINE_DETAILS.ip)
-            partitions = r.partition_status()
-            if len(partitions) == 0:
-                logger.success("RabbitMQ has no partition issues!",
-                               'process_rabbitmq')
-            else:
-                logger.failure("RabbitMQ has partition issues: {0}".format(', '.join(partitions)),
-                               'process_rabbitmq')
-        else:
-            logger.skip("RabbitMQ is not running/active on this server!",
-                        'process_rabbitmq')
-
-        #
         # Checking consistency of volumedriver vs. ovsdb and backwards
-        #
-
         for vp in VPoolHelper.get_vpools():
-            if vp.guid in OpenvStorageHealthCheck.MACHINE_DETAILS.vpools_guids:
-                logger.info("Checking consistency of volumedriver vs. ovsdb for vPool '{0}': ".format(vp.name))
-
-                # list of vdisks that are in model but are not in volumedriver
-                missing_in_volumedriver = []
-
-                # list of volumes that are in volumedriver but are not in model
-                missing_in_model = []
-
-                # fetch configfile of vpool for the volumedriver
-                config_file = ConfigurationManager.get_config_file_path(product=ConfigurationProduct.VPOOL,
-                                                                        vpool_guid=vp.guid,
-                                                                        vpool_name=vp.name,
-                                                                        node_id=OpenvStorageHealthCheck.MACHINE_ID)
-
-                # collect data from volumedriver
-                try:
-                    voldrv_client = src.LocalStorageRouterClient(config_file)
-                    # noinspection PyArgumentList
-                    voldrv_volume_list = voldrv_client.list_volumes()
-                except (ClusterNotReachableException, RuntimeError) as ex:
-                    logger.failure("Seems like the volumedriver '{0}' is not running: {1}".format(vp.name, ex.message),
-                                   'discrepancies_ovsdb_{0}'.format(vp.name))
-                    continue
-
-                vdisk_volume_ids = [vdisk.volume_id for vdisk in vp.vdisks]
-
-                # cross-reference model vs. volumedriver
-                for vdisk in vp.vdisks:
-                    if vdisk.volume_id not in voldrv_volume_list:
-                        missing_in_volumedriver.append(vdisk.guid)
-
-                # cross-reference volumedriver vs. model
-                for voldrv_id in voldrv_volume_list:
-                    if voldrv_id not in vdisk_volume_ids:
-                        missing_in_model.append(voldrv_id)
-
-                # display discrepancies for vPool
-                if len(missing_in_volumedriver) != 0:
-                    logger.warning("Detected volumes that are MISSING in volumedriver but ARE in ovsdb in vPool"
-                                   "vpool name: {0} - vdisk guid(s):{1} "
-                                   .format(vp.name, ' '.join(missing_in_volumedriver)),
-                                   'discrepancies_ovsdb_{0}'.format(vp.name))
-
-                else:
-                    logger.success("NO discrepancies found for ovsdb in vPool '{0}'".format(vp.name),
-                                   'discrepancies_ovsdb_{0}'.format(vp.name))
-
-                if len(missing_in_model) != 0:
-                    logger.warning("Detected volumes that are AVAILABLE in volumedriver "
-                                   "but ARE NOT in ovsdb in vPool "
-                                   "vpool name: {0} - vdisk volume id(s):{1}"
-                                   .format(vp.name, ' '.join(missing_in_model)),
-                                   'discrepancies_voldrv_{0}'.format(vp.name))
-                else:
-                    logger.success("NO discrepancies found for voldrv in vPool '{0}'".format(vp.name),
-                                   'discrepancies_voldrv_{0}'.format(vp.name))
-            else:
+            if vp.guid not in OpenvStorageHealthCheck.MACHINE_DETAILS.vpools_guids:
                 logger.skip("Skipping vPool '{0}' because it is not living here ...".format(vp.name),
                             'discrepancies_voldrv_{0}'.format(vp.name))
+                continue
+            logger.info("Checking consistency of volumedriver vs. ovsdb for vPool '{0}': ".format(vp.name))
+
+            # list of vdisks that are in model but are not in volumedriver
+            missing_in_volumedriver = []
+
+            # list of volumes that are in volumedriver but are not in model
+            missing_in_model = []
+
+            # fetch configfile of vpool for the volumedriver
+            config_file = ConfigurationManager.get_config_file_path(product=ConfigurationProduct.VPOOL,
+                                                                    vpool_guid=vp.guid,
+                                                                    vpool_name=vp.name,
+                                                                    node_id=OpenvStorageHealthCheck.MACHINE_ID)
+
+            # collect data from volumedriver
+            try:
+                voldrv_client = src.LocalStorageRouterClient(config_file)
+                # noinspection PyArgumentList
+                voldrv_volume_list = voldrv_client.list_volumes()
+            except (ClusterNotReachableException, RuntimeError) as ex:
+                logger.failure("Seems like the volumedriver '{0}' is not running: {1}".format(vp.name, ex.message),
+                               'discrepancies_ovsdb_{0}'.format(vp.name))
+                continue
+
+            vdisk_volume_ids = [vdisk.volume_id for vdisk in vp.vdisks]
+
+            # cross-reference model vs. volumedriver
+            for vdisk in vp.vdisks:
+                if vdisk.volume_id not in voldrv_volume_list:
+                    missing_in_volumedriver.append(vdisk.guid)
+
+            # cross-reference volumedriver vs. model
+            for voldrv_id in voldrv_volume_list:
+                if voldrv_id not in vdisk_volume_ids:
+                    missing_in_model.append(voldrv_id)
+
+            # display discrepancies for vPool
+            if len(missing_in_volumedriver) != 0:
+                logger.warning("Detected volumes that are MISSING in volumedriver but ARE in ovsdb in vPool"
+                               "vpool name: {0} - vdisk guid(s):{1} "
+                               .format(vp.name, ' '.join(missing_in_volumedriver)),
+                               'discrepancies_ovsdb_{0}'.format(vp.name))
+
+            else:
+                logger.success("NO discrepancies found for ovsdb in vPool '{0}'".format(vp.name),
+                               'discrepancies_ovsdb_{0}'.format(vp.name))
+
+            if len(missing_in_model) != 0:
+                logger.warning("Detected volumes that are AVAILABLE in volumedriver "
+                               "but ARE NOT in ovsdb in vPool "
+                               "vpool name: {0} - vdisk volume id(s):{1}"
+                               .format(vp.name, ' '.join(missing_in_model)),
+                               'discrepancies_voldrv_{0}'.format(vp.name))
+            else:
+                logger.success("NO discrepancies found for voldrv in vPool '{0}'".format(vp.name),
+                               'discrepancies_voldrv_{0}'.format(vp.name))
 
     @staticmethod
     @expose_to_cli('ovs', 'test')
