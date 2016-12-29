@@ -39,7 +39,7 @@ class VDiskHelper(object):
         :param vpool_name: name of a existing vpool
         :type vpool_name: str
         :return: a vdisk object
-        :rtype: ovs.dal.hybrids.vdisk
+        :rtype: ovs.dal.hybrids.vdisk.VDisk
         """
 
         vpool = VPoolList.get_vpool_by_name(vpool_name)
@@ -60,7 +60,7 @@ class VDiskHelper(object):
         :param vdisk_guid: guid of a existing vdisk
         :type vdisk_guid: str
         :return: a vdisk object
-        :rtype: ovs.dal.hybrids.vdisk
+        :rtype: ovs.dal.hybrids.vdisk.VDisk
         """
 
         return VDisk(vdisk_guid)
@@ -71,6 +71,6 @@ class VDiskHelper(object):
         Fetch all vdisks
 
         :return: List of vdisks
-        :rtype: ovs.dal.lists.vdisklist
+        :rtype: ovs.dal.lists.vdisklist.VDiskList
         """
         return VDiskList.get_vdisks()

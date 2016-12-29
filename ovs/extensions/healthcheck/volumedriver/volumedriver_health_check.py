@@ -22,7 +22,7 @@ from ovs.extensions.generic.system import System
 from ovs.extensions.generic.filemutex import file_mutex
 from timeout_decorator.timeout_decorator import TimeoutError
 from ovs.extensions.healthcheck.helpers.configuration import ConfigurationManager, ConfigurationProduct
-from ovs.extensions.healthcheck.decorators import ExposeToCli
+from ovs.extensions.healthcheck.decorators import expose_to_cli
 from ovs.extensions.healthcheck.helpers.vdisk import VDiskHelper
 from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
 from ovs.extensions.healthcheck.helpers.exceptions import VDiskNotFoundError
@@ -31,7 +31,6 @@ from volumedriver.storagerouter import storagerouterclient as src
 from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, ObjectNotFoundException, \
     MaxRedirectsExceededException
 from volumedriver.storagerouter.storagerouterclient import FileExistsException
-
 
 
 class VolumedriverHealthCheck(object):
@@ -46,7 +45,7 @@ class VolumedriverHealthCheck(object):
     VDISK_TIMEOUT_BEFORE_DELETE = 0.5
 
     @staticmethod
-    @ExposeToCli('volumedriver', 'check_dtl')
+    @expose_to_cli('volumedriver', 'check_dtl')
     def check_dtl(logger):
         """
         Checks the dtl for all vdisks
@@ -95,7 +94,7 @@ class VolumedriverHealthCheck(object):
 
     @staticmethod
     @timeout_decorator.timeout(30)
-    def _check_volumedriver(vdisk_name, storagedriver_guid, vpool_name, vdisk_size=VDISK_CHECK_SIZE):
+    def _check_volumedriver(vdisk_name, storagedriver_guid, vdisk_size=VDISK_CHECK_SIZE):
         """
         Checks if the volumedriver can create a new vdisk
 
@@ -141,7 +140,7 @@ class VolumedriverHealthCheck(object):
                 return True
 
     @staticmethod
-    @ExposeToCli('volumedriver', 'check-volumedrivers')
+    @expose_to_cli('volumedriver', 'check-volumedrivers')
     def check_volumedrivers(logger):
         """
         Checks if the VOLUMEDRIVERS work on a local machine (compatible with multiple vPools)
@@ -168,8 +167,7 @@ class VolumedriverHealthCheck(object):
                                                            VolumedriverHealthCheck.MACHINE_ID))
                                 # create a new one
                                 try:
-                                    volume = VolumedriverHealthCheck._check_volumedriver(name, storagedriver_guid,
-                                                                                         vp.name)
+                                    volume = VolumedriverHealthCheck._check_volumedriver(name, storagedriver_guid)
                                 except FileExistsException:
                                     # can be ignored until fixed in framework
                                     # https://github.com/openvstorage/framework/issues/1247
@@ -222,7 +220,7 @@ class VolumedriverHealthCheck(object):
             logger.skip("No vPools found!", 'volumedrivers_nofound')
 
     @staticmethod
-    @ExposeToCli('ovs', 'halted-volumes-test')
+    @expose_to_cli('ovs', 'halted-volumes-test')
     def check_for_halted_volumes(logger):
         """
         Checks for halted volumes on a single or multiple vPools
@@ -252,10 +250,12 @@ class VolumedriverHealthCheck(object):
 
                     try:
                         voldrv_client = src.LocalStorageRouterClient(config_file)
+                        # noinspection PyArgumentList
                         voldrv_volume_list = voldrv_client.list_volumes()
                         for volume in voldrv_volume_list:
                             # check if volume is halted, returns: 0 or 1
                             try:
+                                # noinspection PyTypeChecker
                                 if int(VolumedriverHealthCheck._info_volume(voldrv_client, volume).halted):
                                     haltedvolumes.append(volume)
                             except ObjectNotFoundException:
@@ -306,6 +306,7 @@ class VolumedriverHealthCheck(object):
         :return: volumedriver volume object
         """
 
+        # noinspection PyUnresolvedReferences
         return voldrv_client.info_volume(volume_name)
 
     @staticmethod
@@ -343,7 +344,7 @@ class VolumedriverHealthCheck(object):
                                        stderr=subprocess.STDOUT, shell=True)
 
     @staticmethod
-    @ExposeToCli('ovs', 'filedrivers-test')
+    @expose_to_cli('ovs', 'filedrivers-test')
     def check_filedrivers(logger):
         """
         Checks if the FILEDRIVERS work on a local machine (compatible with multiple vPools)
@@ -388,7 +389,7 @@ class VolumedriverHealthCheck(object):
             logger.skip("No vPools found!", 'filedrivers_nofound')
 
     @staticmethod
-    @ExposeToCli('volumedriver', 'test')
+    @expose_to_cli('volumedriver', 'test')
     def run(logger):
         """
         Testing suite for volumedriver

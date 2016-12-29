@@ -141,8 +141,8 @@ class Helper(object):
         return subprocess.check_output("cat /etc/lsb-release | grep DISTRIB_DESCRIPTION | "
                                        "cut -d '=' -f 2 | sed 's/\"//g'", shell=True).strip()
 
+
 class InitManagerSupported(object):
 
     INIT = "init"
     SYSTEMD = "systemd"
-
