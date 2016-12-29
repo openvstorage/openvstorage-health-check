@@ -16,16 +16,16 @@
 import os
 import subprocess
 import timeout_decorator
-from ovs.extensions.generic.system import System
-from ovs.extensions.generic.filemutex import file_mutex
-from timeout_decorator.timeout_decorator import TimeoutError
 from ovs.dal.exceptions import ObjectNotFoundException
 from ovs.extensions.generic.configuration import Configuration
+from ovs.extensions.generic.filemutex import file_mutex
+from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.decorators import expose_to_cli
+from ovs.extensions.healthcheck.helpers.exceptions import VDiskNotFoundError
 from ovs.extensions.healthcheck.helpers.vdisk import VDiskHelper
 from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
-from ovs.extensions.healthcheck.helpers.exceptions import VDiskNotFoundError
 from ovs.lib.vdisk import VDiskController
+from timeout_decorator.timeout_decorator import TimeoutError
 from volumedriver.storagerouter import storagerouterclient as src
 from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, ObjectNotFoundException, MaxRedirectsExceededException, FileExistsException
 
@@ -38,7 +38,7 @@ class VolumedriverHealthCheck(object):
     MODULE = 'volumedriver'
     LOCAL_SR = System.get_my_storagerouter()
     LOCAL_ID = System.get_my_machine_id()
-    VDISK_CHECK_SIZE = 1073741824  # 1GB in bytes
+    VDISK_CHECK_SIZE = 1024 ** 3  # 1GB in bytes
     VDISK_TIMEOUT_BEFORE_DELETE = 0.5
 
     @staticmethod
@@ -54,37 +54,24 @@ class VolumedriverHealthCheck(object):
         """
         test_name = 'check_dtl'
         # Fetch vdisks hosted on this machine
+        VolumedriverHealthCheck.LOCAL_SR.invalidate_dynamics('vdisks_guids')
         if len(VolumedriverHealthCheck.LOCAL_SR.vdisks_guids) == 0:
             return logger.skip('No VDisks present in cluster.', test_name)
         for vdisk_guid in VolumedriverHealthCheck.LOCAL_SR.vdisks_guids:
             try:
-                results = VolumedriverHealthCheck._check_disk_dtl(vdisk_guid=vdisk_guid)
+                vdisk = VDiskHelper.get_vdisk_by_guid(vdisk_guid)
             except TimeoutError:
-                logger.warning('VDisk {0}s DTL has a timeout status: {1}.'.format(results[0], results[1]), test_name)
-            if results[1] == 'ok_standalone':
-                logger.warning('VDisk {0}s DTL is disabled'.format(results[0]), test_name)
-            elif results[1] == 'ok_sync':
-                logger.success('VDisk {0}s DTL is enabled and running.'.format(results[0]), test_name)
-            elif results[1] == 'degraded':
-                logger.failure('VDisk {0}s DTL is degraded.'.format(results[0]), test_name)
-            elif results[1] == 'catch_up':
-                logger.warning('VDisk {0}s DTL is enabled but still syncing.'.format(results[0]), test_name)
+                logger.warning('VDisk {0}s DTL has a timeout status: {1}.'.format(vdisk.name, vdisk.dtl_status), test_name)
+            if vdisk.dtl_status == 'ok_standalone':
+                logger.warning('VDisk {0}s DTL is disabled'.format(vdisk.name), test_name)
+            elif vdisk.dtl_status == 'ok_sync':
+                logger.success('VDisk {0}s DTL is enabled and running.'.format(vdisk.name), test_name)
+            elif vdisk.dtl_status == 'degraded':
+                logger.failure('VDisk {0}s DTL is degraded.'.format(vdisk.name), test_name)
+            elif vdisk.dtl_status == 'catch_up':
+                logger.warning('VDisk {0}s DTL is enabled but still syncing.'.format(vdisk.name), test_name)
             else:
-                logger.warning('VDisk {0}s DTL has an unknown status: {1}.'.format(results[0], results[1]), test_name)
-
-    @staticmethod
-    @timeout_decorator.timeout(5)
-    def _check_disk_dtl(vdisk_guid):
-        """
-        Get dtl status by vdisk guid
-
-        :param vdisk_guid: guid of existing vdisk
-        :type vdisk_guid: str
-        :return: tuple
-        :rtype: tuple(str, str)
-        """
-        vdisk = VDiskHelper.get_vdisk_by_guid(vdisk_guid)
-        return vdisk.name, vdisk.dtl_status
+                logger.warning('VDisk {0}s DTL has an unknown status: {1}.'.format(vdisk.name, vdisk.dtl_status), test_name)
 
     @staticmethod
     @timeout_decorator.timeout(30)
@@ -94,10 +81,12 @@ class VolumedriverHealthCheck(object):
 
         :param vdisk_name: name of a vdisk (e.g. test.raw)
         :type vdisk_name: str
-        :param vdisk_size: size of the volume in bytes (e.g. 10737418240 is 10GB in bytes)
-        :type vdisk_size: int
         :param storagedriver_guid: guid of a storagedriver
         :type storagedriver_guid: str
+        :param vdisk_size: size of the volume in bytes (e.g. 10737418240 is 10GB in bytes)
+        :type vdisk_size: int
+        :param logger: logger instance
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
         :return: True if succeeds
         :rtype: bool
         """
@@ -237,7 +226,7 @@ class VolumedriverHealthCheck(object):
 
             haltedvolumes = []
             logger.info('Checking vPool {0}: '.format(vp.name))
-            config_file = Configuration.get_configuration_path("/ovs/vpools/{0}/hosts/{1}{2}/config".format(vp.guid, vp.name, VolumedriverHealthCheck.LOCAL_ID))
+            config_file = Configuration.get_configuration_path("/ovs/vpools/{0}/hosts/{1}/config".format(vp.guid, vp.storagedrivers[0].name))
 
             try:
                 voldrv_client = src.LocalStorageRouterClient(config_file)
