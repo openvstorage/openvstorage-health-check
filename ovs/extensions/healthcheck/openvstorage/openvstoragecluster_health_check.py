@@ -28,7 +28,7 @@ from subprocess import CalledProcessError
 from timeout_decorator.timeout_decorator import TimeoutError
 from ovs.extensions.generic.configuration import NotFoundException
 from ovs.extensions.generic.system import System
-from ovs.extensions.healthcheck.decorators import ExposeToCli
+from ovs.extensions.healthcheck.decorators import expose_to_cli
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.healthcheck.helpers.helper import Helper
 from ovs.extensions.healthcheck.helpers.init_manager import InitManager
@@ -50,7 +50,7 @@ class OpenvStorageHealthCheck(object):
     LOCAL_ID = System.get_my_machine_id()
 
     @staticmethod
-    @ExposeToCli('ovs', 'local-settings-test')
+    @expose_to_cli('ovs', 'local-settings-test')
     def get_local_settings(logger):
         """
         Fetch settings of the local Open vStorage node
@@ -75,7 +75,7 @@ class OpenvStorageHealthCheck(object):
             logger.failure('Could not fetch local-settings. Got {0}'.format(ex.message), 'local-settings')
 
     @staticmethod
-    @ExposeToCli('ovs', 'log-files-test')
+    @expose_to_cli('ovs', 'log-files-test')
     def check_size_of_log_files(logger):
         """
         Checks the size of the initialized log files
@@ -88,45 +88,44 @@ class OpenvStorageHealthCheck(object):
         good_size = []
         too_big = []
 
-        logger.info('Checking if logfiles their size is not bigger than {0} MB: '.format(Helper.max_log_size),
+        logger.info('Checking if log files their size is not bigger than {0} MB: '.format(Helper.max_log_size),
                     'checkLogfilesSize')
 
         # collect log files
         for log, settings in Helper.check_logs.iteritems():
-            if settings.get('type') == 'dir':
-                # check if dirname exists
-                if os.path.isdir(log):
-                    # check if dirname contains files
-                    files = OpenvStorageHealthCheck._list_logs_in_directory(log)
-                    # check if given dirname has files
-                    if len(files) != 0:
-                        # check size of log files
-                        for filename in files:
-                            if settings.get('prefix'):
-                                for prefix in list(settings.get('prefix')):
-                                    if prefix in filename:
-                                        collection.append(filename)
-                            else:
-                                collection.append(filename)
-
-                    # check if has nested_dirs and nested_files
-                    if settings.get('contains_nested'):
-                        nested_dirs = OpenvStorageHealthCheck._list_dirs_in_directory(log)
-                        for dirname in nested_dirs:
-                            nested_files = OpenvStorageHealthCheck._list_logs_in_directory(log+'/'+dirname)
-                            if len(nested_files) != 0:
-                                # check size of log files
-                                for nested_file in nested_files:
-                                    if settings.get('prefix'):
-                                        for prefix in list(settings.get('prefix')):
-                                            if prefix in nested_file:
-                                                collection.append(nested_file)
-                                    else:
-                                        collection.append(nested_file)
-            else:
+            if settings.get('type') != 'dir':
                 # check if filename exists
                 if os.path.exists(log):
                     collection.append(log)
+                continue
+            # check if dirname exists
+            if os.path.isdir(log) is False:
+                continue
+            # check if dirname contains files
+            files = OpenvStorageHealthCheck._list_logs_in_directory(log)
+            # check if given dirname has files
+            for filename in files:
+                if settings.get('prefix'):
+                    for prefix in list(settings.get('prefix')):
+                        if prefix in filename:
+                            collection.append(filename)
+                else:
+                    collection.append(filename)
+
+            # check if has nested_dirs and nested_files
+            if not settings.get('contains_nested'):
+                continue
+            nested_dirs = OpenvStorageHealthCheck._list_dirs_in_directory(log)
+            for dirname in nested_dirs:
+                nested_files = OpenvStorageHealthCheck._list_logs_in_directory(log+"/"+dirname)
+                # check size of log files
+                for nested_file in nested_files:
+                    if settings.get('prefix'):
+                        for prefix in list(settings.get('prefix')):
+                            if prefix in nested_file:
+                                collection.append(nested_file)
+                    else:
+                        collection.append(nested_file)
 
         # process log files
         for c_files in collection:
@@ -139,7 +138,7 @@ class OpenvStorageHealthCheck(object):
                 logger.failure('Logfile {0} is a BIG logfile!'.format(c_files))
 
         if len(too_big) != 0:
-            logger.failure('Some logfiles are TOO BIG, please check these files {0}!'.format(', '.join(too_big)),
+            logger.failure('Some log files are TOO BIG, please check these files {0}!'.format(', '.join(too_big)),
                            'log_size')
         else:
             logger.success('ALL log files are ok!', 'log_size')
@@ -193,7 +192,7 @@ class OpenvStorageHealthCheck(object):
                            'port_{0}_{1}'.format(process_name, port))
 
     @staticmethod
-    @ExposeToCli('ovs', 'required-ports-test')
+    @expose_to_cli('ovs', 'required-ports-test')
     def check_required_ports(logger):
         """
         Checks all ports of Open vStorage components (framework, memcached, nginx, rabbitMQ and celery)
@@ -237,7 +236,7 @@ class OpenvStorageHealthCheck(object):
             logger.skip('RabbitMQ is not running/active on this server!', 'port_celery')
 
     @staticmethod
-    @ExposeToCli('ovs', 'packages-test')
+    @expose_to_cli('ovs', 'packages-test')
     def check_ovs_packages(logger):
         """
         Checks the availability of packages for Open vStorage
@@ -259,7 +258,7 @@ class OpenvStorageHealthCheck(object):
                             'package_{0}'.format(package))
 
     @staticmethod
-    @ExposeToCli('ovs', 'processes-test')
+    @expose_to_cli('ovs', 'processes-test')
     def check_ovs_processes(logger):
         """
         Checks the availability of processes for Open vStorage
@@ -303,7 +302,7 @@ class OpenvStorageHealthCheck(object):
             return False
 
     @staticmethod
-    @ExposeToCli('ovs', 'ovs-workers-test')
+    @expose_to_cli('ovs', 'ovs-workers-test')
     def check_ovs_workers(logger):
         """
         Extended check of the Open vStorage workers; When the simple check fails, it will execute a full/deep check.
@@ -324,7 +323,7 @@ class OpenvStorageHealthCheck(object):
             logger.failure('Error during check of celery! Is RabbitMQ and ovs-workers running?', 'process_celery')
 
     @staticmethod
-    @ExposeToCli('ovs', 'directories-test')
+    @expose_to_cli('ovs', 'directories-test')
     def check_required_dirs(logger):
         """
         Checks the directories their rights and owners for mistakes
@@ -407,8 +406,8 @@ class OpenvStorageHealthCheck(object):
         return oct(st.st_mode)[-3:] == str(rights)
 
     @staticmethod
-    @ExposeToCli('ovs', 'dns-test')
-    def check_if_dns_resolves(logger, fqdn='google.com'):
+    @expose_to_cli('ovs', 'dns-test')
+    def check_if_dns_resolves(logger, fqdn="google.com"):
         """
         Checks if DNS resolving works on a local machine
 
@@ -431,10 +430,10 @@ class OpenvStorageHealthCheck(object):
             return False
 
     @staticmethod
-    @ExposeToCli('ovs', 'zombie-processes-test')
+    @expose_to_cli('ovs', 'zombie-processes-test')
     def get_zombied_and_dead_processes(logger):
         """
-        Finds zombied or dead processes on a local machine
+        Finds zombie or dead processes on a local machine
 
         :param logger: logging object
         :type logger: ovs.log.healthcheck_logHandler.HCLogHandler
@@ -473,7 +472,7 @@ class OpenvStorageHealthCheck(object):
                            'process_dead')
 
     @staticmethod
-    @ExposeToCli('ovs', 'model-test')
+    @expose_to_cli('ovs', 'model-test')
     def check_model_consistency(logger):
         """
         Checks if the model consistency of OVSDB vs. VOLUMEDRIVER and does a preliminary check on RABBITMQ
@@ -485,7 +484,7 @@ class OpenvStorageHealthCheck(object):
         logger.info('Checking model consistency: ', 'check_model_consistency')
 
         # RabbitMQ check: cluster verification
-        logger.info('Precheck: verification of RabbitMQ cluster: ', 'checkRabbitMQcluster')
+        logger.info('Pre-check: verification of RabbitMQ cluster: ', 'checkRabbitMQcluster')
         if Helper.get_ovs_type() == 'MASTER':
             r = RabbitMQ(ip=OpenvStorageHealthCheck.LOCAL_SR.ip)
             partitions = r.partition_status()
@@ -528,12 +527,12 @@ class OpenvStorageHealthCheck(object):
 
                 vdisk_volume_ids = [vdisk.volume_id for vdisk in vp.vdisks]
 
-                # crossreference model vs. volumedriver
+                # cross-reference model vs. volumedriver
                 for vdisk in vp.vdisks:
                     if vdisk.volume_id not in voldrv_volume_list:
                         missing_in_volumedriver.append(vdisk.guid)
 
-                # crossreference volumedriver vs. model
+                # cross-reference volumedriver vs. model
                 for voldrv_id in voldrv_volume_list:
                     if voldrv_id not in vdisk_volume_ids:
                         missing_in_model.append(voldrv_id)
@@ -563,7 +562,7 @@ class OpenvStorageHealthCheck(object):
                             'discrepancies_voldrv_{0}'.format(vp.name))
 
     @staticmethod
-    @ExposeToCli('ovs', 'test')
+    @expose_to_cli('ovs', 'test')
     def run(logger):
         OpenvStorageHealthCheck.get_local_settings(logger)
         OpenvStorageHealthCheck.check_ovs_processes(logger)

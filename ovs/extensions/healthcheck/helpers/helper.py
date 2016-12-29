@@ -146,4 +146,3 @@ class InitManagerSupported(object):
 
     INIT = "init"
     SYSTEMD = "systemd"
-

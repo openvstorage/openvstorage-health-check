@@ -44,6 +44,7 @@ import time
 import select
 from subprocess import Popen, PIPE, CalledProcessError
 from ovs.log.log_handler import LogHandler
+from ovs.extensions.healthcheck.helpers.exceptions import AlbaException
 
 
 class AlbaCLI(object):
@@ -160,4 +161,4 @@ class AlbaCLI(object):
             # In case there's an exception, we always log
             for debug_line in debug_log:
                 logger.debug(debug_line)
-            raise
+            raise AlbaException(str(ex), command)

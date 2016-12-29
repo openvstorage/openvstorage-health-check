@@ -21,7 +21,7 @@ from ovs.extensions.generic.filemutex import file_mutex
 from timeout_decorator.timeout_decorator import TimeoutError
 from ovs.dal.exceptions import ObjectNotFoundException
 from ovs.extensions.generic.configuration import Configuration
-from ovs.extensions.healthcheck.decorators import ExposeToCli
+from ovs.extensions.healthcheck.decorators import expose_to_cli
 from ovs.extensions.healthcheck.helpers.vdisk import VDiskHelper
 from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
 from ovs.extensions.healthcheck.helpers.exceptions import VDiskNotFoundError
@@ -42,7 +42,7 @@ class VolumedriverHealthCheck(object):
     VDISK_TIMEOUT_BEFORE_DELETE = 0.5
 
     @staticmethod
-    @ExposeToCli('volumedriver', 'check-dtl')
+    @expose_to_cli('volumedriver', 'check_dtl')
     def check_dtl(logger):
         """
         Checks the dtl for all vdisks on the local node
@@ -93,7 +93,7 @@ class VolumedriverHealthCheck(object):
 
     @staticmethod
     @timeout_decorator.timeout(30)
-    def _check_volumedriver(vdisk_name, storagedriver_guid, logger, vdisk_size=VDISK_CHECK_SIZE):
+    def _check_volumedriver(vdisk_name, storagedriver_guid, vdisk_size=VDISK_CHECK_SIZE):
         """
         Checks if the volumedriver can create a new vdisk
 
@@ -145,7 +145,7 @@ class VolumedriverHealthCheck(object):
                 return True
 
     @staticmethod
-    @ExposeToCli('volumedriver', 'check-volumedrivers')
+    @expose_to_cli('volumedriver', 'check-volumedrivers')
     def check_volumedrivers(logger):
         """
         Checks if the VOLUMEDRIVERS work on a local machine (compatible with multiple vPools)
@@ -221,7 +221,7 @@ class VolumedriverHealthCheck(object):
                         pass
 
     @staticmethod
-    @ExposeToCli('volumedriver', 'halted-volumes-test')
+    @expose_to_cli('volumedriver', 'halted-volumes-test')
     def check_for_halted_volumes(logger):
         """
         Checks for halted volumes on a single or multiple vPools
@@ -300,6 +300,7 @@ class VolumedriverHealthCheck(object):
         :return: volumedriver volume object
         """
 
+        # noinspection PyUnresolvedReferences
         return voldrv_client.info_volume(volume_name)
 
     @staticmethod
@@ -336,7 +337,7 @@ class VolumedriverHealthCheck(object):
         return not os.path.exists('/mnt/{0}/ovs-healthcheck-test-*.xml'.format(vp_name))
 
     @staticmethod
-    @ExposeToCli('ovs', 'filedrivers-test')
+    @expose_to_cli('ovs', 'filedrivers-test')
     def check_filedrivers(logger):
         """
         Checks if the FILEDRIVERS work on a local machine (compatible with multiple vPools)
@@ -381,7 +382,7 @@ class VolumedriverHealthCheck(object):
                                    .format(vp.name), 'filedriver_{0}'.format(vp.name))
 
     @staticmethod
-    @ExposeToCli('volumedriver', 'test')
+    @expose_to_cli('volumedriver', 'test')
     def run(logger):
         """
         Testing suite for volumedriver
