@@ -53,11 +53,6 @@ class VolumedriverHealthCheck(object):
         :rtype: None
         """
         test_name = 'check_dtl'
-        test_output = {
-            'failure': [],
-            'warning': [],
-            'success': []
-        }
         # Fetch vdisks hosted on this machine
         if len(VolumedriverHealthCheck.LOCAL_SR.vdisks_guids) == 0:
             return logger.skip('No VDisks present in cluster.', test_name)
