@@ -60,7 +60,7 @@ class VolumedriverHealthCheck(object):
         for vdisk_guid in VolumedriverHealthCheck.LOCAL_SR.vdisks_guids:
             try:
                 vdisk = VDiskHelper.get_vdisk_by_guid(vdisk_guid)
-                vdisk.invalidate_dynamics('dtl_status')
+                vdisk.invalidate_dynamics(['dtl_status', 'info'])
             except TimeoutError:
                 logger.warning('VDisk {0}s DTL has a timeout status: {1}.'.format(vdisk.name, vdisk.dtl_status), test_name)
             if vdisk.dtl_status == 'ok_standalone':
