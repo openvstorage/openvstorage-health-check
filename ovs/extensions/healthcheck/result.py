@@ -66,29 +66,29 @@ class HCResults(object):
         "custom": "info"
     }
 
-    def __init__(self, print_progress=True):
+    def __init__(self, unattended=False, to_json=False):
         """
         Init method
-
-        :param print_progress: print the progress yes or no
-        :type print_progress: bool
+        :param unattended: unattended output
+        :type unattended: bool
+        :param to_json: json output
+        :type to_json: bool
         """
-        self.print_progress = print_progress
-        # Setup supported types
-        self.SUPPORTED_TYPES = list(self.MESSAGES.values())
+        self.unattended = unattended
+        self.to_json = to_json
 
+        self.print_progress = not(to_json and unattended)
         # Setup HC counters
         self.counters = {}
-        for stype in self.SUPPORTED_TYPES:
+        for stype in self.MESSAGES.values():
             self.counters[stype] = 0
 
         # Result of healthcheck in dict form
         self.result_dict = {}
 
-    def _call(self, msg, test_name, error_message=None, custom_value=None):
+    def _call(self, msg, test_name, error_message=None, custom_value=None, code=''):
         """
         Process a message with a certain short test_name and type error message
-
         :param msg: Log message for attended run
         :type msg: str
         :param test_name: name for monitoring output
@@ -108,41 +108,38 @@ class HCResults(object):
         """
         if Helper.enable_logging:
             error_type = self.MESSAGES[error_message]
-            if not error_type or error_type not in self.SUPPORTED_TYPES:
-                raise ValueError('Found no error_type')
             if test_name is not None:
                 if error_type not in HCResults.EXCLUDED_MESSAGES:
                     # Enable custom error type:
                     if error_type == 'CUSTOM':
-                        self.result_dict[test_name] = custom_value
+                        self.result_dict[test_name] = {"messages": custom_value, "code": code, "state": error_type}
                     else:
-                        self.result_dict[test_name] = error_type
+                        self.result_dict[test_name] = {"messages": msg, "code": code, "state": error_type}
             self.counters[error_type] += 1
 
             if self.print_progress:
                 print "{0}[{1}] {2}{3}".format(_Colors()[error_type], error_type, _Colors.ENDC, str(msg))
 
-    def get_results(self, print_progress=False):
+    def get_results(self):
         """
         Prints the result for check_mk
-
-        :param print_progress: print the progress yes or no
-        :type print_progress: bool
         :return: results
         :rtype: dict
         """
         # Checked with Jeroen Maelbrancke for this
         excluded_messages = ['INFO', 'DEBUG']
-        if print_progress:
-            for key, value in sorted(self.result_dict.items(), key=lambda x: x[0]):
-                if value not in excluded_messages:
-                    print "{0} {1}".format(key, value)
+        if self.unattended:
+                for key, value in sorted(self.result_dict.items(), key=lambda x: x[0]):
+                    if value not in excluded_messages:
+                            print "{0} {1}".format(key, value["state"])
+        if self.to_json:
+            import json
+            print json.dumps(self.result_dict, indent=4)
         return self.result_dict
 
     def failure(self, msg, test_name=None):
         """
         Report a failure log
-
         :param msg: Log message for attended run
         :type msg: str
         :param test_name: name for monitoring output
@@ -154,7 +151,6 @@ class HCResults(object):
     def success(self, msg, test_name=None):
         """
         Report a success log
-
         :param msg: Log message for attended run
         :type msg: str
         :param test_name: name for monitoring output
@@ -166,7 +162,6 @@ class HCResults(object):
     def warning(self, msg, test_name=None):
         """
         Report a warning log
-
         :param msg: Log message for attended run
         :type msg: str
         :param test_name: name for monitoring output
@@ -178,7 +173,6 @@ class HCResults(object):
     def info(self, msg, test_name=None):
         """
         Report a info log
-
         :param msg: Log message for attended run
         :type msg: str
         :param test_name: name for monitoring output
@@ -190,7 +184,6 @@ class HCResults(object):
     def exception(self, msg, test_name=None):
         """
         Report a exception log
-
         :param msg: Log message for attended run
         :type msg: str
         :param test_name: name for monitoring output
@@ -202,7 +195,6 @@ class HCResults(object):
     def skip(self, msg, test_name=None):
         """
         Report a skipped log
-
         :param msg: Log message for attended run
         :type msg: str
         :param test_name: name for monitoring output
@@ -214,7 +206,6 @@ class HCResults(object):
     def debug(self, msg, test_name=None):
         """
         Report a debug log
-
         :param msg: Log message for attended run
         :type msg: str
         :param test_name: name for monitoring output
@@ -226,13 +217,12 @@ class HCResults(object):
     def custom(self, msg, test_name=None, value=None):
         """
         Report a custom log. The value will determine the tag
-
         :param msg: Log message for attended run
         :type msg: str
         :param test_name: name for monitoring output
         :type test_name: str
         :param value: Value added to the log
-        :type value: object
+        :type value: str
         :return:
         """
 

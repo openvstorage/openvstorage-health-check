@@ -44,6 +44,10 @@ class HealthCheckController(object):
         :type to_json: bool
         :param result_handler: result parser
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :param module_name:  module name specified with the cli
+        :type module_name: str
+        :param method_name: method name specified with the cli
+        :type method_name: str
         :return: results & recap
         :rtype: dict
         """
@@ -51,21 +55,16 @@ class HealthCheckController(object):
         if (module_name and method_name) is not None:
             recap_executer = '{0} {1}'.format(module_name, method_name)
 
-        result_handler.info("Recap of {0}!".format(recap_executer), 'starting_recap_hc')
-        result_handler.info("======================", 'starting_recap_hc_ul')
+        result = result_handler.get_results()
+
+        result_handler.info("Recap of {0}!".format(recap_executer))
+        result_handler.info("======================")
 
         result_handler.info("SUCCESS={0} FAILED={1} SKIPPED={2} WARNING={3} EXCEPTION={4}"
                             .format(result_handler.counters['SUCCESS'], result_handler.counters['FAILED'],
                                     result_handler.counters['SKIPPED'], result_handler.counters['WARNING'],
                                     result_handler.counters['EXCEPTION']))
-
-        if to_json:
-            result = result_handler.get_results(False)
-        elif unattended:
-            result = result_handler.get_results(True)
         # returns dict with minimal and detailed information
-        else:
-            return None
         return {'result': result, 'recap': {'SUCCESS': result_handler.counters['SUCCESS'],
                                             'FAILED': result_handler.counters['FAILED'],
                                             'SKIPPED': result_handler.counters['SKIPPED'],
@@ -73,9 +72,9 @@ class HealthCheckController(object):
                                             'EXCEPTION': result_handler.counters['EXCEPTION']}}
 
     @staticmethod
-    def _discover_methods(module_name=None, method_name=None):
+    def _discover_methods(module_name='', method_name=''):
         """
-        Discovers all methods with the exposecli decorator
+        Discovers all methods with the expose_to_cli decorator
 
         :param module_name:  module name specified with the cli
         :type module_name: str
@@ -84,9 +83,9 @@ class HealthCheckController(object):
         :return: dict that contains the required info based on module_name and method_name
         :rtype: dict
         """
-        TEMP_FILE_PATH = '/tmp/_discover_methods'
-        TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
-        VERSION_ID = 1
+        temp_file_path = '/tmp/_discover_methods'
+        time_format = "%Y-%m-%d %H:%M:%S"
+        version_id = 1
 
         def search_dict(data):
             """
@@ -121,7 +120,7 @@ class HealthCheckController(object):
             """
             # Build cache
             # Executed from lib, want to go to extensions/healthcheck
-            found_items = {'expires': (datetime.now() + timedelta(hours=2)).strftime(TIME_FORMAT)}
+            found_items = {'expires': (datetime.now() + timedelta(hours=2)).strftime(time_format)}
             path = ''.join(
                 [os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir)), '/extensions/healthcheck'])
             for root, dirnames, filenames in os.walk(path):
@@ -136,8 +135,7 @@ class HealthCheckController(object):
                                     and member[1].__module__ == name \
                                     and 'object' in [base.__name__ for base in member[1].__bases__]:
                                 for submember in inspect.getmembers(member[1]):
-                                    if hasattr(submember[1], 'module_name') and hasattr(submember[1],
-                                                                                        'method_name'):
+                                    if hasattr(submember[1], 'module_name') and hasattr(submember[1], 'method_name'):
                                         if not submember[1].module_name in found_items:
                                             found_items[submember[1].module_name] = []
                                         found_items[submember[1].module_name].append(
@@ -146,15 +144,15 @@ class HealthCheckController(object):
                                              'function': submember[1].__name__,
                                              'class': member[1].__name__,
                                              'location': file_path,
-                                             'version': VERSION_ID
+                                             'version': version_id
                                              })
             # Write the dict to a temp file
-            with open(TEMP_FILE_PATH, 'w') as f2:
+            with open(temp_file_path, 'w') as f2:
                 f2.write(str(found_items))
             return found_items
 
         try:
-            with open(TEMP_FILE_PATH, 'r') as f:
+            with open(temp_file_path, 'r') as f:
                 exposed_methods = ast.literal_eval(f.read())
         except IOError:
             # If file doesn't exist
@@ -163,7 +161,7 @@ class HealthCheckController(object):
         result = None
         # Search first to use old cache
         if exposed_methods:
-            if not datetime.strptime(exposed_methods['expires'], TIME_FORMAT) > datetime.now() + timedelta(hours=2):
+            if not datetime.strptime(exposed_methods['expires'], time_format) > datetime.now() + timedelta(hours=2):
                 result = search_dict(exposed_methods)
         if not result:
             exposed_methods = build_cache()
@@ -171,7 +169,7 @@ class HealthCheckController(object):
         return result
 
     @staticmethod
-    def print_help(module=None, method=None):
+    def print_help(module='', method=''):
         """
         Prints the possible methods that are exposed to the CLI
         :param module: module name specified with the cli
@@ -204,8 +202,8 @@ class HealthCheckController(object):
         Executes the given method
         :return:
         """
-        module_name = None
-        method_name = None
+        module_name = ''
+        method_name = ''
         # Extract option arguments
         optional_arguments = [arg for arg in HealthCheckController.OPTIONAL_ARGUMENTS if arg in args]
         args = [arg for arg in args if arg not in optional_arguments]
@@ -215,7 +213,7 @@ class HealthCheckController(object):
         if len(args) >= 2:
             method_name = args[1]
         # Determine method to execute
-        if (method_name is not None and module_name is None) or "--help" in optional_arguments:
+        if (method_name and not module_name) or "--help" in optional_arguments:
             print "Both the module name and the method name must be specified.".format(method_name, module_name)
             return HealthCheckController.print_help(module_name, method_name)
         # Find the required method and execute it
@@ -225,14 +223,13 @@ class HealthCheckController(object):
             return HealthCheckController.print_help(module_name)
         to_json = "--to-json" in optional_arguments
         unattended = "--unattended" in optional_arguments
-        result_handler = HCResults(not (unattended and to_json))
+        result_handler = HCResults(unattended, to_json)
         executed = False
         for mod_name, options in obj.iteritems():
-            if not (module_name is None or mod_name == module_name):
+            if not (not module_name or mod_name == module_name):
                 continue
             for option in options:
-                # Exclude combined tests: exposed via method_name = test
-                if method_name is None or option['method_name'] == method_name:
+                if not method_name or option['method_name'] == method_name:
                     mod = imp.load_source(option['module_name'], option['location'])
                     cl = getattr(mod, option['class'])()
                     if '--help' in optional_arguments:
@@ -254,8 +251,10 @@ class HealthCheckController(object):
 
     if __name__ == '__main__':
         import sys
+        # noinspection PyUnresolvedReferences
         from ovs.lib.healthcheck import HealthCheckController
         arguments = sys.argv
         # Remove filename
         del arguments[0]
+        arguments = ['ovs', 'celery-ports-test']
         HealthCheckController.run_method(*arguments)
