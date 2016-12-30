@@ -208,7 +208,6 @@ class OpenvStorageHealthCheck(object):
         """
         ERROR_KEY = "ERROR"
         try:
-
             i = inspect()
             stats = inspect().stats()
             if not stats:

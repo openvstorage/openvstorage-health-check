@@ -256,5 +256,5 @@ class HealthCheckController(object):
         arguments = sys.argv
         # Remove filename
         del arguments[0]
-        arguments = ['ovs', 'celery-ports-test']
+        # arguments = ['ovs', 'celery-ports-test']
         HealthCheckController.run_method(*arguments)
