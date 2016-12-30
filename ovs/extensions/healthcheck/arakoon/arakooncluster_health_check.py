@@ -27,7 +27,7 @@ import ConfigParser
 from StringIO import StringIO
 from datetime import date, timedelta, datetime
 from ovs.extensions.generic.system import System
-from ovs.extensions.healthcheck.decorators import ExposeToCli
+from ovs.extensions.healthcheck.decorators import expose_to_cli
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.storage.persistent.pyrakoonstore import PyrakoonStore
 from ovs.extensions.db.arakoon.ArakoonInstaller import ArakoonClusterConfig
@@ -131,8 +131,8 @@ class ArakoonHealthCheck(object):
         return result, missing_nodes
 
     @staticmethod
-    @ExposeToCli('arakoon', 'required-ports-test')
-    def check_required_ports(result_handler):
+    @expose_to_cli('arakoon', 'required-ports-test')
+    def check_required_ports(logger):
         """
         Checks all ports of Arakoon nodes (client & server)
 
@@ -158,8 +158,8 @@ class ArakoonHealthCheck(object):
                                                               ArakoonHealthCheck.MACHINE_DETAILS.ip)
 
     @staticmethod
-    @ExposeToCli('arakoon', 'restart-test')
-    def check_restarts(result_handler, arakoon_clusters=None, last_minutes=LAST_MINUTES,
+    @expose_to_cli('arakoon', 'restart-test')
+    def check_restarts(logger, arakoon_clusters=None, last_minutes=LAST_MINUTES,
                        max_amount_node_restarted=MAX_AMOUNT_NODE_RESTARTED):
         """
         Check the amount of restarts of an Arakoon node
@@ -188,7 +188,7 @@ class ArakoonHealthCheck(object):
                 command = 'grep "NODE STARTED" {0} | awk -v d1="$(date --date="-{1} min" +"%F %R")" ' \
                           '-v d2="$(date +"%F %R")" \'$0 > d1 && $0 < d2 || $0 ~ d2\''\
                           .format(arakoon_log, last_minutes)
-            elif Helper.RAW_INIT_MANAGER == InitManagerSupported.SYSTEMD:
+            else:
                 arakoon_log = "journalctl -u ovs-arakoon-{0}.service".format(cluster_name)
                 command = '{0} | grep "NODE STARTED" | awk -v d1="$(date --date="-{1} min" +"%F %R")" ' \
                           '-v d2="$(date +"%F %R")" \'$0 > d1 && $0 < d2 || $0 ~ d2\''\
@@ -214,8 +214,8 @@ class ArakoonHealthCheck(object):
         return result
 
     @staticmethod
-    @ExposeToCli('arakoon', 'collapse-test')
-    def check_collapse(result_handler, arakoon_clusters=None, max_collapse_age=MAX_COLLAPSE_AGE):
+    @expose_to_cli('arakoon', 'collapse-test')
+    def check_collapse(logger, arakoon_clusters=None, max_collapse_age=MAX_COLLAPSE_AGE):
         """
         Check collapsing of arakoon
 
@@ -312,8 +312,8 @@ class ArakoonHealthCheck(object):
         return result
 
     @staticmethod
-    @ExposeToCli('arakoon', 'integrity-test')
-    def verify_integrity(result_handler, arakoon_clusters=None):
+    @expose_to_cli('arakoon', 'integrity-test')
+    def verify_integrity(logger, arakoon_clusters=None):
         """
         Verifies the integrity of a list of arakoons
 
@@ -423,8 +423,8 @@ class ArakoonHealthCheck(object):
             return working_arakoon_list, no_master_arakoon_list, down_arakoon_list, unkown_arakoon_list
 
     @staticmethod
-    @ExposeToCli('arakoon', 'check-arakoons')
-    def check_arakoons(result_handler):
+    @expose_to_cli('arakoon', 'check-arakoons')
+    def check_arakoons(logger):
         """
         Verifies/validates the integrity of all available arakoons
 

@@ -13,7 +13,7 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
-import json
+
 from ovs.extensions.storage.exceptions import KeyNotFoundException
 from ovs.extensions.storage.persistentfactory import PersistentFactory
 
@@ -21,29 +21,60 @@ from ovs.extensions.storage.persistentfactory import PersistentFactory
 class CacheHelper(object):
 
     client = PersistentFactory.get_client()
-    prefix = 'ovs-health-check'
+    prefix = 'health-check_'
 
     @staticmethod
-    def set(info):
+    def set(item, key=None):
         """
         Store the information to the config management
-        :param info:
-        :return:
+        :param item: item to set
+        :param key: key to use
+        :return: True if successful, False if not
         """
-
-        if isinstance(info, type(dict)):
-            info = CacheHelper._parse_data(info)
-        CacheHelper.client.set(CacheHelper.prefix, info)
+        key = CacheHelper._generate_key(key=key)
+        return CacheHelper.client.set(key=key, value=item)
 
     @staticmethod
-    def get(key=prefix):
+    def append(item, key=None):
+        """
+        Appends the information to the value
+        Supports dicts, lists
+        :param item: item to set
+        :param key: key to use
+        :return: True if successful, False if not
+        """
+        supported_types = [dict, list]
+        retrieved_value = CacheHelper.get(key=key)
+        for item_type in supported_types:
+            if isinstance(item, item_type) and isinstance(retrieved_value, item_type):
+                if item_type == list:
+                    return CacheHelper.set(key=key, item=retrieved_value + item)
+                if item_type == dict:
+                    item.update(retrieved_value)
+                    return CacheHelper.set(key=key, item=item)
+        raise TypeError("{0} is not supported for appending to type {1}.".format(type(item), type(retrieved_value)))
+
+    @staticmethod
+    def get(key=None):
+        """
+        Gets a value from a specified key
+        :param key: key to use
+        :return: the value in case it was found else None
+        """
+        key = CacheHelper._generate_key(key=key)
         try:
-            return CacheHelper._parse_data(CacheHelper.client.get(key))
+            return CacheHelper.client.get(key)
         except KeyNotFoundException:
             return None
 
     @staticmethod
-    def delete(key=prefix):
+    def delete(key=None):
+        """
+        Deletes the value from a specified key
+        :param key: key to use
+        :return: True if successful, False if not
+        """
+        key = CacheHelper._generate_key(key=key)
         try:
             CacheHelper.client.delete(key)
             return True
@@ -51,24 +82,17 @@ class CacheHelper(object):
             return False
 
     @staticmethod
-    def _parse_data(data):
+    def _generate_key(key=None):
         """
-        Could data so it can be stored in PersistentFactory
-
-        :param data: any value
-        :type data: object
-        :return: parsed data - either the same type or dicts converted to json
-        :rtype: object
+        Internal method to append the prefix to the key
+        :param key: key to use
+        :return: the generated key
         """
-        try:
-            parsed_data = json.loads(data)
-        except ValueError:
-            # Not a good formatted dict
-            return json.dumps(data)
-        except TypeError:
-            # Not a dict
-            return data
-        return parsed_data
+        if key is None:
+            key = "{0}generic".format(CacheHelper.prefix)
+        else:
+            key = "{0}{1}".format(CacheHelper.prefix, key)
+        return key
 
     @staticmethod
     def _test_type_handling():
@@ -82,8 +106,8 @@ class CacheHelper(object):
             'string': "test",
             'literal': 'test',
             'dict': {"test": "test"},
-            'list': [1,2],
-            'set': set([1,2])
+            'list': [1, 2],
+            'set': {1, 2}
         }
 
         for key, value in testers.iteritems():
@@ -92,9 +116,13 @@ class CacheHelper(object):
             except Exception as e:
                 print "Could not set {0} type. Got {1}".format(key, e.message)
             try:
+                CacheHelper.append(value)
+                print "Appended {0}".format(key)
+            except Exception as e:
+                print "Could not append {0} type. Got {1}".format(key, e.message)
+            try:
                 data = CacheHelper.get()
-                print key
-                print type(data)
+                print data
             except Exception as e:
                 print "Could not get {0} type. Got {1}".format(key, e.message)
         CacheHelper.delete()
