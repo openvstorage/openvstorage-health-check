@@ -21,8 +21,6 @@ import psutil
 import socket
 import subprocess
 import timeout_decorator
-from celery.task.control import inspect
-from errno import errorcode
 from ovs.extensions.generic.configuration import NotFoundException
 from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.decorators import expose_to_cli
@@ -199,49 +197,33 @@ class OpenvStorageHealthCheck(object):
     @expose_to_cli('ovs', 'celery-ports-test')
     def check_rabbitmq_ports(result_handler):
         """
-        Checks all ports of Open vStorage components (framework, memcached, nginx, rabbitMQ and celery)
+        Checks all ports of Open vStorage components rabbitMQ and celery
 
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
         :return: True if successful; False it doesn't work
         :rtype: bool
         """
-        ERROR_KEY = "ERROR"
+        test_name = 'celery-ports-test'
+        # Check Celery and RabbitMQ
+        if Helper.get_ovs_type() != 'MASTER':
+            result_handler.skip('RabbitMQ is not running/active on this server!', 'port_celery')
+        result_handler.info('Checking Celery.')
+        from errno import errorcode
         try:
-            i = inspect()
+            from celery.task.control import inspect
             stats = inspect().stats()
-            if not stats:
-                result = {ERROR_KEY: 'No running Celery workers were found.'}
+            if stats:
+                result_handler.success('Successfully connected to Celery on all nodes.', test_name)
+            else:
+                result_handler.failure('No running Celery workers were found.', test_name)
         except IOError as ex:
-
-            msg = "Error connecting to the backend: " + str(ex)
+            msg = 'Could not connect to Celery. Got {0}.'.format(ex)
             if len(ex.args) > 0 and errorcode.get(ex.args[0]) == 'ECONNREFUSED':
                 msg += ' Check that the RabbitMQ server is running.'
-            result = {ERROR_KEY: msg}
+                result_handler.failure(msg, test_name)
         except ImportError as ex:
-            result = {ERROR_KEY: str(ex)}
-        print result
-        return
-        # # Check Celery and RabbitMQ
-        # result_handler.info('Checking RabbitMQ/Celery ...', '')
-        # if Helper.get_ovs_type() != 'MASTER':
-        #     result_handler.skip('RabbitMQ is not running/active on this server!', 'port_celery')
-        #     return True
-        # cmd = ['celery inspect ping -b amqp://ovs:0penv5tor4ge@{0}//'.format(OpenvStorageHealthCheck.LOCAL_SR.ip)]
-        # process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        # out, err = process.communicate(timeout=OpenvStorageHealthCheck.CELERY_CHECK_TIME)
-        # results = {}
-        # for line in out.splitlines():
-        #     if '-> celery@' in line:
-        #         continue
-        #     if 'pong' in line.strip():
-        #
-        # if len(out) != 1 and 'pong' in out[1].strip():
-        #     result_handler.success('Connection successfully established!', 'port_celery')
-        #     return True
-        # else:
-        #     result_handler.failure('Connection FAILED to service Celery, please check RabbitMQ and ovs-workers?', 'port_celery')
-        #     return False
+            result_handler.failure('Could not import the celery module. Got {}'.format(str(ex)), test_name)
 
     @staticmethod
     @expose_to_cli('ovs', 'packages-test')
@@ -256,9 +238,12 @@ class OpenvStorageHealthCheck(object):
         result_handler.info('Checking OVS packages: ', 'check_ovs_packages')
 
         for package in Helper.packages:
-            result = commands.getoutput('apt-cache policy {0}'.format(package)).splitlines()
-            if len(result) != 1:
-                result_handler.success('Package {0} is present, with version {1}'.format(package, result[2].split(':')[1].strip()),
+            cmd = ['apt-cache', 'policy', package]
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            out, err = process.communicate()
+            results = out.splitlines()
+            if len(results) != 1:
+                result_handler.success('Package {0} is present, with version {1}'.format(package, results[2].split(':')[1].strip()),
                                        'package_{0}'.format(package))
             else:
                 result_handler.skip('Package {0} is NOT present ...'.format(package), 

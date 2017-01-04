@@ -77,7 +77,7 @@ class HCResults(object):
         self.unattended = unattended
         self.to_json = to_json
 
-        self.print_progress = not(to_json and unattended)
+        self.print_progress = not(to_json or unattended)
         # Setup HC counters
         self.counters = {}
         for stype in self.MESSAGES.values():

@@ -13,7 +13,6 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
-import itertools
 from ovs.dal.hybrids.service import Service
 from ovs.dal.hybrids.servicetype import ServiceType
 from ovs.dal.lists.servicelist import ServiceList
@@ -59,7 +58,7 @@ class ServiceHelper(object):
         :rtype: ovs.dal.lists.datalist.DataList
         """
         return DataList(Service, {'type': DataList.where_operator.AND,
-                                  'items': [('storagerouter.guid', DataList.operator.EQUALS, ServiceHelper.LOCAL_SR.guid)]})
+                                  'items': [('storagerouter_guid', DataList.operator.EQUALS, ServiceHelper.LOCAL_SR.guid)]})
 
     @staticmethod
     def get_local_arakoon_services():
@@ -68,25 +67,11 @@ class ServiceHelper(object):
         :return: list of all arakoon services that run on this node
         :rtype: ovs.dal.lists.datalist.DataList
         """
-        return itertools.chain(*[DataList(Service, {'type': DataList.where_operator.AND,
-                                                    'items': [
-                                                      ('storagerouter.guid', DataList.operator.EQUALS, ServiceHelper.LOCAL_SR.guid),
-                                                      ('type.name', DataList.operator.EQUALS, ServiceType.SERVICE_TYPES.ARAKOON)
-                                                    ]}),
-                                 DataList(Service, {'type': DataList.where_operator.AND,
-                                                    'items': [
-                                                        ('storagerouter.guid', DataList.operator.EQUALS, ServiceHelper.LOCAL_SR.guid),
-                                                        ('type.name', DataList.operator.EQUALS, ServiceType.SERVICE_TYPES.ALBA_MGR)
-                                                    ]}),
-                                 DataList(Service, {'type': DataList.where_operator.AND,
-                                                    'items': [
-                                                        ('storagerouter.guid', DataList.operator.EQUALS,
-                                                         ServiceHelper.LOCAL_SR.guid),
-                                                        ('type.name', DataList.operator.EQUALS,
-                                                         ServiceType.SERVICE_TYPES.NS_MGR)
-                                                    ]})
-                                 ]
-                               )
+        return DataList(Service, {'type': DataList.where_operator.AND,
+                                  'items': [('storagerouter_guid', DataList.operator.EQUALS, ServiceHelper.LOCAL_SR.guid),
+                                            ('type.name', DataList.operator.IN, [ServiceType.SERVICE_TYPES.ARAKOON,
+                                                                                 ServiceType.SERVICE_TYPES.ALBA_MGR,
+                                                                                 ServiceType.SERVICE_TYPES.NS_MGR])]})
 
     @staticmethod
     def get_local_voldr_services():
@@ -97,7 +82,7 @@ class ServiceHelper(object):
         """
         return DataList(Service, {'type': DataList.where_operator.AND,
                                   'items': [
-                                      ('storagerouter.guid', DataList.operator.EQUALS, ServiceHelper.LOCAL_SR.guid),
+                                      ('storagerouter_guid', DataList.operator.EQUALS, ServiceHelper.LOCAL_SR.guid),
                                       ('type.name', DataList.operator.EQUALS, ServiceType.SERVICE_TYPES.MD_SERVER)
                                   ]})
 
@@ -110,6 +95,6 @@ class ServiceHelper(object):
         """
         return DataList(Service, {'type': DataList.where_operator.AND,
                                   'items': [
-                                      ('storagerouter.guid', DataList.operator.EQUALS, ServiceHelper.LOCAL_SR.guid),
+                                      ('storagerouter_guid', DataList.operator.EQUALS, ServiceHelper.LOCAL_SR.guid),
                                       ('type.name', DataList.operator.EQUALS, ServiceType.SERVICE_TYPES.ALBA_PROXY)
                                   ]})
