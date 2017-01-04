@@ -44,7 +44,7 @@ class ServiceHelper(object):
         :return: list of all services run on this node
         :rtype: ovs.dal.lists.datalist.DataList
         """
-        return (service for service in ServiceHelper.get_local_services() if service.storagerouter_guid == ServiceHelper.LOCAL_SR.guid)
+        return (service for service in ServiceHelper.get_services() if service.storagerouter_guid == ServiceHelper.LOCAL_SR.guid)
 
     @staticmethod
     def get_service(service_guid):
