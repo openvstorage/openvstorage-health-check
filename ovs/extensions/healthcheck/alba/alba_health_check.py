@@ -588,10 +588,7 @@ class AlbaHealthCheck(object):
                     bucket = bucket_safety['bucket']
                     min_disk_safety = bucket[0]
                     max_disk_safety = bucket[1]
-                    current_disk_safety = bucket[2]
-                    calculated_disk_safety = \
-                        current_disk_safety + bucket_safety['applicable_dead_osds'] + \
-                        (min_disk_safety - max_disk_safety)
+                    calculated_disk_safety = bucket_safety['remaining_safety']
                     to_be_added_namespace = {'namespace': namespace['namespace'], 'amount_in_bucket':
                                                                                   (bucket_safety['count'] /
                                                                                    namespace['safety_count'])*100}
