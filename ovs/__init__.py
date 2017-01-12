@@ -13,18 +13,3 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
-
-
-# class decorator
-# noinspection PyPep8Naming
-class expose_to_cli(object):
-    def __init__(self, module_name=None, method_name=None):
-        if module_name and method_name:
-            self.module_name = module_name
-            self.method_name = method_name
-
-    def __call__(self, func):
-        self.function = func
-        func.module_name = self.module_name
-        func.method_name = self.method_name
-        return func

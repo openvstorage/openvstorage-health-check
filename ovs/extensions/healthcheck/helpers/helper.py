@@ -48,6 +48,7 @@ class Helper(object):
     rights_dirs = settings["healthcheck"]["rights_dirs"]
     owners_files = settings["healthcheck"]["owners_files"]
     check_logs = settings["healthcheck"]["check_logs"]
+    max_hours_zero_disk_safety = settings["healthcheck"]["max_hours_zero_disk_safety"]
 
     @staticmethod
     def get_ovs_type():
@@ -141,8 +142,8 @@ class Helper(object):
         return subprocess.check_output("cat /etc/lsb-release | grep DISTRIB_DESCRIPTION | "
                                        "cut -d '=' -f 2 | sed 's/\"//g'", shell=True).strip()
 
+
 class InitManagerSupported(object):
 
     INIT = "init"
     SYSTEMD = "systemd"
-
