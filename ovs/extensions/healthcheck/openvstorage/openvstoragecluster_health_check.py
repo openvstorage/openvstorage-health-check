@@ -166,8 +166,9 @@ class OpenvStorageHealthCheck(object):
     def check_nginx_ports(result_handler):
         """
         Checks the extra ports from ovs
-        :param result_handler:
-        :return:
+        :param result_handler: logging object
+        :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :return: None
         """
         return OpenvStorageHealthCheck._check_extra_ports(result_handler, 'nginx')
 
@@ -176,8 +177,9 @@ class OpenvStorageHealthCheck(object):
     def check_memcached_ports(result_handler):
         """
         Checks the extra ports from ovs
-        :param result_handler:
-        :return:
+        :param result_handler: logging object
+        :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :return: None
         """
         return OpenvStorageHealthCheck._check_extra_ports(result_handler, 'memcached')
 
@@ -186,7 +188,7 @@ class OpenvStorageHealthCheck(object):
         """
         Checks the extra ports specified in the settings.json
         :param result_handler:
-        :return:
+        :return: None
         """
         result_handler.info('Checking {0} ports'.format(key))
         for ports in Helper.extra_ports[key]:

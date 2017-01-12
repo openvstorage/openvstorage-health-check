@@ -48,7 +48,7 @@ class VolumedriverHealthCheck(object):
         Checks the dtl for all vdisks on the local node
 
         :param result_handler: logging object
-        :type result_handler: ovs.extensions.results.HCResults
+        :type result_handler: ovs.extensions.healthcheck.results.HCResults
         :return: nothing
         :rtype: None
         """
@@ -87,7 +87,7 @@ class VolumedriverHealthCheck(object):
         :param vdisk_size: size of the volume in bytes (e.g. 10737418240 is 10GB in bytes)
         :type vdisk_size: int
         :param logger: logger instance
-        :type logger: ovs.extensions.results.HCResults
+        :type logger: ovs.extensions.healthcheck.results.HCResults
         :return: True if succeeds
         :rtype: bool
         """
@@ -136,7 +136,7 @@ class VolumedriverHealthCheck(object):
         Checks if the VOLUMEDRIVERS work on a local machine (compatible with multiple vPools)
 
         :param result_handler: logging object
-        :type result_handler: ovs.extensions.results.HCResults
+        :type result_handler: ovs.extensions.healthcheck.results.HCResults
         :return: None
         :rtype: NoneType
         """
@@ -206,7 +206,7 @@ class VolumedriverHealthCheck(object):
         Checks for halted volumes on a single or multiple vPools
 
         :param logger: logging object
-        :type logger: ovs.extensions.results.HCResults
+        :type logger: ovs.extensions.healthcheck.results.HCResults
         :return: None
         :rtype: NoneType
         """
@@ -326,7 +326,7 @@ class VolumedriverHealthCheck(object):
         Checks if the file drivers work on a local machine (compatible with multiple vPools)
 
         :param logger: logging object
-        :type logger: ovs.extensions.results.HCResults
+        :type logger: ovs.extensions.healthcheck.results.HCResults
         """
 
         logger.info('Checking file drivers: ', 'filedriver')

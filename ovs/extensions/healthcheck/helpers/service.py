@@ -74,6 +74,18 @@ class ServiceHelper(object):
                                                                                  ServiceType.SERVICE_TYPES.NS_MGR])]})
 
     @staticmethod
+    def get_local_abm_services():
+        """
+        Fetches all arakoon services that run on this node
+        :return: list of all arakoon services that run on this node
+        :rtype: ovs.dal.lists.datalist.DataList
+        """
+        return DataList(Service, {'type': DataList.where_operator.AND,
+                                  'items': [
+                                      ('storagerouter_guid', DataList.operator.EQUALS, ServiceHelper.LOCAL_SR.guid),
+                                      ('type.name', DataList.operator.EQUALS, ServiceType.SERVICE_TYPES.ALBA_MGR)
+                                  ]})
+    @staticmethod
     def get_local_voldr_services():
         """
         Fetches all alba proxy services that run on this node

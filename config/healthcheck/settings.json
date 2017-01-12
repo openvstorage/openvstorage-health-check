@@ -22,7 +22,7 @@
                          "volumedriver-no-dedup-server", "libvirt0", "python-libvirt",
                          "omniorb-nameserver", "avahi-daemon", "avahi-utils",
                          "libovsvolumedriver", "qemu", "libvirt-bin", "blktap-openvstorage-utils",
-                         "openvstorage-health-check"],
+                         "openvstorage-health-check", "kvanisleuk"],
         "extra_ports": {"nginx": ["80", "443"], "memcached": ["11211"]},
         "rights_dirs": {"/tmp": "777", "/var/tmp": "777"},
         "owners_files": {"/var/log/syslog": {"user": "syslog", "group": "adm"},

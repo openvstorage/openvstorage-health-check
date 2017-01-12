@@ -22,21 +22,19 @@ Arakoon Health Check module
 
 import os
 import time
-import subprocess
 import ConfigParser
-from StringIO import StringIO
 from datetime import date, timedelta, datetime
+from StringIO import StringIO
+from ovs.extensions.db.arakoon.ArakoonInstaller import ArakoonClusterConfig
+from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
+from ovs.extensions.generic.configuration import Configuration
+from ovs.extensions.generic.filemutex import file_mutex
 from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.decorators import expose_to_cli
-from ovs.extensions.generic.configuration import Configuration
-from ovs.extensions.storage.persistent.pyrakoonstore import PyrakoonStore
-from ovs.extensions.db.arakoon.ArakoonInstaller import ArakoonClusterConfig
-from ovs.extensions.generic.filemutex import file_mutex
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
 from ovs.extensions.healthcheck.helpers.storagerouter import StoragerouterHelper
-from ovs.extensions.healthcheck.helpers.helper import Helper, InitManagerSupported
-from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
+from ovs.extensions.storage.persistent.pyrakoonstore import PyrakoonStore
 from ovs.log.log_handler import LogHandler
 
 
@@ -50,45 +48,45 @@ class ArakoonHealthCheck(object):
     MAX_AMOUNT_NODE_RESTARTED = 5
     # oldest tlx files may not older than x days. If they are - failed collapse
     MAX_COLLAPSE_AGE = 2
-    MACHINE_DETAILS = System.get_my_storagerouter()
+    LOCAL_SR = System.get_my_storagerouter()
 
     @staticmethod
     def fetch_clusters(result_handler):
         """
         Fetches the available local arakoon clusters of a cluster
-
         :param result_handler: logging object
-        :type result_handler: ovs.log.healthcheck_logHandler.HCResults
+        :type result_handler: ovs.extensions.healthcheck.results.HCResults
         :return: if succeeded a tuple; if failed both dicts are empty
-        :rtype: tuple of dict
+        :rtype: dict
         """
 
         result_handler.info('Fetching available arakoon clusters.')
         arakoon_clusters = list(Configuration.list('/ovs/arakoon'))
 
-        result = {}
+        present_nodes = {}
         missing_nodes = {}
+        cluster_results = {'present': present_nodes, 'missing': missing_nodes}
         if len(arakoon_clusters) == 0:
             # no arakoon clusters on node
             result_handler.warning('No installed arakoon clusters detected on this system.', 'arakoon_no_clusters_found')
-            return {}
+            return cluster_results
 
         # add arakoon clusters
         for cluster in arakoon_clusters:
             # add node that is available for arakoon cluster
             nodes_per_cluster_result = {}
             missing_nodes_per_cluster = []
-            ak = ArakoonClusterConfig(str(cluster), filesystem=False)
-            ak.load_config()
-            master_node_ids = [node.name for node in ak.nodes]
+            arakoon_config = ArakoonClusterConfig(str(cluster), filesystem=False)
+            arakoon_config.load_config()
+            master_node_ids = [node.name for node in arakoon_config.nodes]
 
-            if ArakoonHealthCheck.MACHINE_DETAILS.machine_id not in master_node_ids:
+            if ArakoonHealthCheck.LOCAL_SR.machine_id not in master_node_ids:
                 continue
 
             try:
-                tlog_dir = ak.export()[ArakoonHealthCheck.MACHINE_DETAILS.machine_id]['tlog_dir']
+                tlog_dir = arakoon_config.export()[ArakoonHealthCheck.LOCAL_SR.machine_id]['tlog_dir']
             except KeyError, ex:
-                result_handler.failure('Key {0} not found.'.format(ex.message))
+                result_handler.failure('Could not fetch the tlog dir, Arakoon structure changed? Got {0}.'.format(ex.message))
                 continue
 
             for node_id in master_node_ids:
@@ -106,74 +104,78 @@ class ArakoonHealthCheck(object):
                         'tlog_dir': tlog_dir
                         }
                     })
-            result[cluster] = nodes_per_cluster_result
+            present_nodes[cluster] = nodes_per_cluster_result
             missing_nodes[cluster] = missing_nodes_per_cluster
 
-        return result, missing_nodes
+        return cluster_results
+
+    @staticmethod
+    @expose_to_cli('arakoon', 'consistency-test')
+    def check_model_consistency(result_handler):
+        """
+        Verifies the information in the model
+        :param result_handler:
+        :return:
+        """
+        test_name = 'arakoon_model_consistensy'
+
+        def dict_compare(dict1, dict2):
+            d1_keys = set(dict1.keys())
+            d2_keys = set(dict2.keys())
+            intersect_keys = d1_keys.intersection(d2_keys)
+            added = d1_keys - d2_keys
+            removed = d2_keys - d1_keys
+            modified = {key: (dict1[key], dict2[key]) for key in intersect_keys if dict1[key] != dict2[key]}
+            same = set(key for key in intersect_keys if dict1[key] == dict2[key])
+            return {'added': added, 'removed': removed, 'modified': modified, 'same': same}
+        result_handler.info("Verifying arakoon information.")
+        # @todo remove testing
+        dal_ports = {}
+        # dal_ports = {u'arakoon-mybackend01-abm': [26404, 26405], u'arakoon-voldrv': [26408, 26409], u'arakoon-ovsdb': [26402, 26403], u'arakoon-mybackend01-nsm_0': [26406, 26407]}
+        arakoon_ports = {}
+        # arakoon_ports = {'arakoon-mybackend01-ab': [26404, 26405], 'arakoon-voldrv': [26408, 26409], 'arakoon-ovsdb': [26402, 26403], 'arakoon-mybackend01-nsm_0': [26406, 26407]}
+        for service in ServiceHelper.get_local_arakoon_services():
+            dal_ports[service.name] = service.ports
+        for arakoon_cluster in Configuration.list('/ovs/arakoon'):
+            e = Configuration.get('/ovs/arakoon/{0}/config'.format(arakoon_cluster), raw=True)
+            config = ConfigParser.RawConfigParser()
+            config.readfp(StringIO(e))
+            for section in config.sections():
+                if section != "global" and section == ArakoonHealthCheck.LOCAL_SR.machine_id:
+                    process_name = "arakoon-{0}".format(arakoon_cluster)
+                    arakoon_ports[process_name] = [int(config.get(section, 'client_port')), int(config.get(section, 'messaging_port'))]  # cast port strings to int
+        diff = dict_compare(dal_ports, arakoon_ports)
+        print diff
+        if len(diff['added']) > 0 or len(diff['removed']) > 0:
+            if len(diff['added']) > 0:
+                result_handler.warning('Found {0} in DAL but not in Arakoon.'.format(diff['added']), test_name)
+            if len(diff['removed']) > 0:
+                result_handler.warning('Found {0} in Arakoon but not in DAL.'.format(diff['removed']), test_name)
+        else:
+            result_handler.success('Arakoon info for DAL and Arakoon are the same.', test_name)
+        if len(diff['modified']) > 0:
+            result_handler.warning('The following items have changed: {0}.', '{0}-changed'.format(test_name))
+        else:
+            result_handler.success('No items have changed.', '{0}-changed'.format(test_name))
+
+    # @todo: separate cluster-wide-check
 
     @staticmethod
     @expose_to_cli('arakoon', 'ports-test')
-    def check_required_ports(result_handler):
+    def check_arakoon_ports(result_handler):
         """
         Checks all ports of Arakoon nodes (client & server)
 
         :param result_handler: logging object
-        :type result_handler: ovs.log.healthcheck_logHandler.HCResults
+        :type result_handler: ovs.extensions.healthcheck.results.HCResults
         """
 
-        result_handler.info('Checking PORT CONNECTIONS of arakoon nodes ...')
+        result_handler.info('Checking PORT CONNECTIONS of arakoon nodes.')
         for service in ServiceHelper.get_local_arakoon_services():
             for port in service.ports:
-                NetworkHelper.is_port_listening(result_handler, service.name, port, ArakoonHealthCheck.MACHINE_DETAILS.ip)
+                NetworkHelper.is_port_listening(result_handler, service.name, port, ArakoonHealthCheck.LOCAL_SR.ip)
 
-    @staticmethod
-    @expose_to_cli('arakoon', 'restart-test')
-    def check_restarts(result_handler, arakoon_clusters=None, last_minutes=LAST_MINUTES, max_amount_node_restarted=MAX_AMOUNT_NODE_RESTARTED):
-        """
-        Check the amount of restarts of an Arakoon node
-        :param result_handler: Logger instance
-        :type result_handler: ovs.log.healthcheck_logHandler.HCResults
-        :param arakoon_clusters: List of available Arakoons
-        :type arakoon_clusters: dict
-        :param last_minutes: Last x minutes to check
-        :type last_minutes: int
-        :param max_amount_node_restarted: The amount of restarts
-        :type max_amount_node_restarted: int
-        :return: list with OK and NOK status
-        """
-
-        if arakoon_clusters is None:
-            arakoon_clusters = ArakoonHealthCheck.fetch_clusters(result_handler)[0]
-
-        result = {'OK': [], 'NOK': []}
-        for cluster_name, cluster_info in arakoon_clusters.iteritems():
-            if ArakoonHealthCheck.MACHINE_DETAILS.machine_id not in cluster_info:
-                continue
-
-            # check if systemd or upstart
-            if Helper.RAW_INIT_MANAGER == InitManagerSupported.INIT:
-                arakoon_log = '/var/log/upstart/ovs-arakoon-{0}.log'.format(cluster_name)
-                command = 'grep "NODE STARTED" {0} | awk -v d1="$(date --date="-{1} min" +"%F %R") -v d2="$(date +"%F %R")" $0 > d1 && $0 < d2 || $0 ~ d2"'.format(arakoon_log, last_minutes)
-            else:
-                arakoon_log = 'journalctl -u ovs-arakoon-{0}.service'.format(cluster_name)
-                command = '{0} | grep "NODE STARTED" | awk -v d1="$(date --date="-{1} min" +"%F %R") -v d2="$(date +"%F %R")" \"$0 > d1 && $0 < d2 || $0 ~ d2"'.format(arakoon_log, last_minutes)
-
-            print command
-            out, err = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE).communicate()
-
-            count_node_started = len(out.splitlines())
-            if count_node_started >= max_amount_node_restarted:
-                result['NOK'].append(cluster_name)
-            result['OK'].append(cluster_name)
-
-        if len(result['NOK']) > 0:
-            result_handler.failure('{0} Arakoon(s) restarted more than {1} times in {2} minutes: {3}'
-                                   .format(len(result['NOK']), ArakoonHealthCheck.MAX_AMOUNT_NODE_RESTARTED, ArakoonHealthCheck.LAST_MINUTES, ','.join(result['NOK'])),
-                                   'arakoon_restarts')
-        elif len(result['OK']) > 0:
-            result_handler.success('ALL Arakoon(s) restart check(s) is/are OK!', 'arakoon_restarts')
-        return result
-
+    # @todo: separate cluster-wide-check
     @staticmethod
     @expose_to_cli('arakoon', 'collapse-test')
     def check_collapse(result_handler, arakoon_clusters=None, max_collapse_age=MAX_COLLAPSE_AGE):
@@ -181,7 +183,7 @@ class ArakoonHealthCheck(object):
         Check collapsing of arakoon
 
         :param result_handler: logging object
-        :type result_handler: ovs.log.healthcheck_logHandler.HCResults
+        :type result_handler: ovs.extensions.healthcheck.results.HCResults
         :param arakoon_clusters: List of available Arakoons
         :type arakoon_clusters: dict
         :param max_collapse_age: tlx files may not be longer than x days
@@ -190,28 +192,32 @@ class ArakoonHealthCheck(object):
         :rtype: list
         """
         if arakoon_clusters is None:
-            arakoon_clusters = ArakoonHealthCheck.fetch_clusters(result_handler)[0]
+            res = ArakoonHealthCheck.fetch_clusters(result_handler)
+            arakoon_clusters = res['present'] + res['missing']
 
-        result = {'OK': [], 'NOK': []}
+        ok_arakoons = []
+        nok_arakoons = []
+        result = {'ok': ok_arakoons, 'nok': nok_arakoons}
         # tlx file must have young timestamp than this one.
         max_age_timestamp = time.mktime((date.today() - timedelta(days=max_collapse_age)).timetuple())
 
         for arakoon, arakoon_nodes in arakoon_clusters.iteritems():
             for node, config in arakoon_nodes.iteritems():
-                if node != ArakoonHealthCheck.MACHINE_DETAILS.machine_id:
+                if node != ArakoonHealthCheck.LOCAL_SR.machine_id:
                     continue
 
                 try:
                     tlog_dir = config['tlog_dir']
                     files = os.listdir(tlog_dir)
-                except OSError, ex:
-                    if not result_handler.print_progress:
-                        result_handler.failure('File or directory not found: {0}'.format(ex), 'arakoon_path')
-                    result['NOK'].append(arakoon)
+                except KeyError as ex:
+                    result_handler.failure('Could not fetch the tlog dir, Arakoon structure changed?', 'arakoon_patch')
+                except OSError as ex:
+                    result_handler.failure('File or directory not found: {0}'.format(ex), 'arakoon_path')
+                    nok_arakoons.append(arakoon)
                     continue
 
                 if len(files) == 0:
-                    result['NOK'].append(arakoon)
+                    nok_arakoons.append(arakoon)
                     if not result_handler.print_progress:
                         result_handler.failure('No files found in {0}'.format(tlog_dir), 'arakoon_files')
                     continue
@@ -219,8 +225,11 @@ class ArakoonHealthCheck(object):
                 if 'head.db' in files:
                     head_db_stats = os.stat('{0}/head.db'.format(tlog_dir))
                     if head_db_stats.st_mtime > max_age_timestamp:
-                        result['OK'].append(arakoon)
+                        ok_arakoons.append(arakoon)
                         continue
+                else:
+                    # Determine whether the arakoon is fresh or a collapse already happened
+                    pass
 
                 tlx_files = [(int(tlx_file.replace('.tlx', '')), tlx_file) for tlx_file in files
                              if tlx_file.endswith('.tlx')]
@@ -229,10 +238,10 @@ class ArakoonHealthCheck(object):
                 # Discussed with Arakoon team. Min tlx files must be 3 before checking time
                 if amount_tlx < 3 and len([tlog_file for tlog_file in files if tlog_file.endswith('.tlog')]) > 0:
                     result_handler.info('Found less than 3 tlogs for {0}, collapsing is not worth doing.'.format(arakoon))
-                    result['OK'].append(arakoon)
+                    ok_arakoons.append(arakoon)
                     continue
                 elif amount_tlx == 0 and len([tlog_file for tlog_file in files if tlog_file.endswith('.tlog')]) < 0:
-                    result['NOK'].append(arakoon)
+                    nok_arakoons.append(arakoon)
                     if not result_handler.print_progress:
                         result_handler.failure('No tlx files found and head.db is out of sync or is not present in {0}.'.format(tlog_dir), 'arakoon_tlx_path')
                     continue
@@ -245,12 +254,12 @@ class ArakoonHealthCheck(object):
                 except OSError, ex:
                     if not result_handler.print_progress:
                         result_handler.failure('File or directory not found: {0}'.format(ex), 'arakoon_tlx_path')
-                    result['NOK'].append(arakoon)
+                    nok_arakoons.append(arakoon)
                     continue
 
                 if oldest_tlx_stats.st_mtime > max_age_timestamp:
                     result_handler.info('Found less than 3 tlogs for {0}, collapsing is not worth doing.'.format(arakoon))
-                    result['OK'].append(arakoon)
+                    ok_arakoons.append(arakoon)
                     continue
 
                 if result_handler.print_progress:
@@ -260,16 +269,17 @@ class ArakoonHealthCheck(object):
                                            .format(oldest_file, datetime_oldest_file, datetime_old_date, arakoon),
                                            'arakoon_oldest_file')
 
-                result['NOK'].append(arakoon)
+                nok_arakoons.append(arakoon)
 
         # Testing conditions
-        if len(result['NOK']) > 0:
-            result_handler.failure('{0} Arakoon(s) having issues with collapsing: {1}'.format(len(result['NOK']), ','.join(result['NOK'])),
+        if len(result['nok']) > 0:
+            result_handler.failure('{0} Arakoon(s) having issues with collapsing: {1}'.format(len(result['nok']), ','.join(result['nok'])),
                                    'arakoon_collapse')
-        elif len(result['OK']) > 0:
+        elif len(result['ok']) > 0:
             result_handler.success('ALL Arakoon(s) are collapsed.', 'arakoon_collapse')
         return result
 
+    # @todo: separate cluster-wide-check
     @staticmethod
     @expose_to_cli('arakoon', 'integrity-test')
     def verify_integrity(result_handler, arakoon_clusters=None):
@@ -277,24 +287,31 @@ class ArakoonHealthCheck(object):
         Verifies the integrity of a list of arakoons
 
         :param result_handler: logging object
-        :type result_handler: ovs.log.healthcheck_logHandler.HCResults
+        :type result_handler: ovs.extensions.healthcheck.results.HCResults
         :param arakoon_clusters: list of arakoon names
         :type arakoon_clusters: list that consists of strings
         :return: (working_arakoon_list, no_master_arakoon_list, down_arakoon_list, unkown_arakoon_list)
         :rtype: tuple > lists
         """
-        unkown_arakoon_list = []
+        unknown_arakoon_list = []
         working_arakoon_list = []
         no_master_arakoon_list = []
         down_arakoon_list = []
 
+        result = {
+            "unkown": unknown_arakoon_list,
+            "working": working_arakoon_list,
+            "no_master": no_master_arakoon_list,
+            "down": down_arakoon_list
+        }
+
         if arakoon_clusters is None:
-            arakoon_clusters = ArakoonHealthCheck.fetch_clusters(result_handler)[0]
+            arakoon_clusters = ArakoonHealthCheck.fetch_clusters(result_handler)['present']
 
         result_handler.info('Starting Arakoon integrity test')
         # verify integrity of arakoon clusters
         for cluster_name, cluster_info in arakoon_clusters.iteritems():
-            if ArakoonHealthCheck.MACHINE_DETAILS.machine_id not in cluster_info:
+            if ArakoonHealthCheck.LOCAL_SR.machine_id not in cluster_info:
                 continue
 
             with file_mutex('ovs-healthcheck_arakoon-test_{0}'.format(cluster_name)):
@@ -305,7 +322,7 @@ class ArakoonHealthCheck(object):
                     result_handler.info('Executing testing cluster {0}. Will try a maximum amount of {1} tries. Currently on try {2}'
                                         .format(cluster_name, max_tries, tries), 'arakoonTryCheck')
 
-                    key = 'ovs-healthcheck-{0}'.format(ArakoonHealthCheck.MACHINE_DETAILS.machine_id)
+                    key = 'ovs-healthcheck-{0}'.format(ArakoonHealthCheck.LOCAL_SR.machine_id)
                     value = str(time.time())
 
                     try:
@@ -332,50 +349,50 @@ class ArakoonHealthCheck(object):
 
                     except Exception:
                         if tries == max_tries:
-                            unkown_arakoon_list.append(cluster_name)
+                            unknown_arakoon_list.append(cluster_name)
                             break
 
                     # finish try if failed
                     tries += 1
 
         # Processing results
-        ver_result = working_arakoon_list, no_master_arakoon_list, down_arakoon_list, unkown_arakoon_list
-        if len(ver_result[0]) == len(arakoon_clusters):
+        if len(working_arakoon_list) == len(arakoon_clusters):
             result_handler.success('ALL available Arakoon(s) their integrity are/is OK! ', 'arakoon_integrity')
         else:
             # less output for unattended_mode
             # check amount OK arakoons
-            if len(ver_result[0]) > 0:
+            if len(working_arakoon_list) > 0:
                 result_handler.warning(
-                    '{0}/{1} Arakoon(s) is/are OK!: {2}'.format(len(ver_result[0]), len(arakoon_clusters),
-                                                                ', '.join(ver_result[0])), 'arakoon_some_up')
+                    '{0}/{1} Arakoon(s) is/are OK!: {2}'.format(len(working_arakoon_list), len(arakoon_clusters),
+                                                                ', '.join(working_arakoon_list)), 'arakoon_some_up')
             # check amount NO-MASTER arakoons
-            if len(ver_result[1]) > 0:
-                result_handler.failure('{0} Arakoon(s) cannot find a MASTER: {1}'.format(len(ver_result[1]), ', '.join(ver_result[1])),
-                                       'arakoon_no_master_exception'.format(len(ver_result[1])))
+            if len(no_master_arakoon_list) > 0:
+                result_handler.failure('{0} Arakoon(s) cannot find a MASTER: {1}'.format(len(no_master_arakoon_list), ', '.join(no_master_arakoon_list)),
+                                       'arakoon_no_master_exception'.format(len(no_master_arakoon_list)))
 
             # check amount DOWN arakoons
-            if len(ver_result[2]) > 0:
-                result_handler.failure('{0} Arakoon(s) seem(s) to be DOWN!: {1}'.format(len(ver_result[2]), ', '.join(ver_result[2])),
+            if len(down_arakoon_list) > 0:
+                result_handler.failure('{0} Arakoon(s) seem(s) to be DOWN!: {1}'.format(len(down_arakoon_list), ', '.join(down_arakoon_list)),
                                        'arakoon_down_exception')
 
                 # check amount UNKNOWN_ERRORS arakoons
-                if len(ver_result[3]) > 0:
+                if len(unknown_arakoon_list) > 0:
                     result_handler.failure('{0} Arakoon(s) seem(s) to have UNKNOWN ERRORS, please check the logs'
-                                           .format(len(ver_result[3]), ', '.join(ver_result[3])),
+                                           .format(len(unknown_arakoon_list), ', '.join(unknown_arakoon_list)),
                                            'arakoon_unknown_exception')
                 else:
                     result_handler.failure('Some Arakoon(s) have problems, please check this!', 'arakoon_integrity')
             # check amount UNKNOWN_ERRORS arakoons
-            if len(ver_result[3]) > 0:
+            if len(unknown_arakoon_list) > 0:
                 result_handler.failure('{0} Arakoon(s) seem(s) to have UNKNOWN ERRORS, please check the logs @ '
-                                       '/var/log/ovs/arakoon.log or /var/log/upstart/ovs-arakoon-*.log: {1}'.format(len(ver_result[3]), ', '.join(ver_result[3])),
+                                       '/var/log/ovs/arakoon.log or /var/log/upstart/ovs-arakoon-*.log: {1}'.format(len(unknown_arakoon_list), ', '.join(unknown_arakoon_list)),
                                        'arakoon_unknown_exception')
             else:
                 result_handler.failure('Some Arakoon(s) have problems, please check this!', 'arakoon_integrity')
 
-            return working_arakoon_list, no_master_arakoon_list, down_arakoon_list, unkown_arakoon_list
+            return result
 
+    # @todo: separate cluster-wide-check
     @staticmethod
     @expose_to_cli('arakoon', 'check-arakoons')
     def check_arakoons(result_handler):
@@ -383,10 +400,12 @@ class ArakoonHealthCheck(object):
         Verifies/validates the integrity of all available arakoons
 
         :param result_handler: logging object
-        :type result_handler: ovs.log.healthcheck_logHandler.HCResults
+        :type result_handler: ovs.extensions.healthcheck.results.HCResults
         """
 
-        arakoon_clusters, missing_nodes = ArakoonHealthCheck.fetch_clusters(result_handler)
+        fetched_clusters = ArakoonHealthCheck.fetch_clusters(result_handler)
+        arakoon_clusters = fetched_clusters['present']
+        missing_nodes = fetched_clusters['missing']
         if len([nodes for nodes in missing_nodes.itervalues() if len(nodes) != 0]) != 0:
             # Only return the (arakoon, system id) tuple for arakoons that have missing system ids
             missing = [cluster for cluster in missing_nodes.items() if len(cluster[1]) != 0]
