@@ -513,7 +513,9 @@ class AlbaHealthCheck(object):
                             logger.success('The disk safety of `{0}` namespace(s) is/are totally safe!'
                                            .format(len(namespaces)))
                         elif disk_safety != 0:
-                            unattended_status = logger.warning
+                            # avoid failure override
+                            if unattended_status != logger.failure:
+                                unattended_status = logger.warning
                             output = ',\n'.join([ns['namespace']+' with '+str(ns['amount_in_bucket'])+'% of its objects'
                                                  for ns in namespaces])
                             logger.warning('The disk safety of `{0}` namespace(s) is '
