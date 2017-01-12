@@ -26,6 +26,7 @@ import time
 import hashlib
 import subprocess
 from ovs.dal.hybrids.servicetype import ServiceType
+from ovs.dal.lists.albabackendlist import AlbaBackendList
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 from ovs.extensions.generic.configuration import Configuration, NotFoundException
 from ovs.extensions.generic.system import System
@@ -36,6 +37,7 @@ from ovs.extensions.healthcheck.helpers.albacli import AlbaCLI
 from ovs.extensions.healthcheck.helpers.backend import BackendHelper
 from ovs.extensions.healthcheck.helpers.configuration import ConfigurationManager, ConfigurationProduct
 from ovs.extensions.healthcheck.helpers.exceptions import ObjectNotFoundException, ConnectionFailedException, DiskNotFoundException, ConfigNotMatchedException, AlbaException
+from ovs.extensions.healthcheck.helpers.helper import Helper
 from ovs.extensions.healthcheck.helpers.init_manager import InitManager
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
 from ovs.extensions.healthcheck.helpers.storagedriver import StoragedriverHelper
@@ -479,19 +481,83 @@ class AlbaHealthCheck(object):
     @expose_to_cli('alba', 'disk-safety')
     def get_disk_safety(logger):
         """
-        Send disk safety for each vpool and the amount of namespaces with the lowest disk safety to DB
+        Check safety of every namespace in every backend
+
+        :param logger: logging object
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler.HCLogHandler
         """
 
-        logger.info('Checking if objects need to be repaired...')
         test_name = 'disk-safety'
-        abm_services = set(service.abm_service for service in ServiceHelper.get_services() if service.type.name == ServiceType.SERVICE_TYPES.ALBA_MGR)
+        max_hours_zero_disk_safety = Helper.max_hours_zero_disk_safety
 
-        disk_lost_overview = {}
-        for abm_service in abm_services:
-            alba_backend = abm_service.alba_backend
-            if alba_backend.name in disk_lost_overview:
-                continue
-            # Determine if services are from ab instance
+        results = AlbaHealthCheck.get_disk_safety_buckets(logger=logger)
+        for backend_name, policies in results.iteritems():
+            logger.info('Checking disk safety on backend: {0}'.format(backend_name))
+            for policy_prefix, policy_details in policies.iteritems():
+                # '1,2' is policy_prefix and value is policy_details
+                # {'1,2': {'max_disk_safety': 2, 'current_disk_safety': {<namespaces in safety buckets>} }
+                logger.info('Checking policy `{0}` with max. disk safety `{1}`'
+                            .format(policy_prefix, policy_details['max_disk_safety']))
+                # if there is only 1 bucket category that is equal to the max_disk_safety, all your data is safe
+                if len(policy_details['current_disk_safety'].keys()) == 1 \
+                        and policy_details['current_disk_safety'].iterkeys().next() == policy_details['max_disk_safety']:
+                    # all data is safe!
+                    logger.success('All data is safe on backend `{0}` with `{1}` namespace(s)'
+                                   .format(backend_name, len(policy_details['current_disk_safety'].itervalues()
+                                                             .next())), test_name+'-'+backend_name)
+                else:
+                    # some data is not or less safe!
+                    unattended_status = logger.success
+                    for disk_safety, namespaces in policy_details['current_disk_safety'].iteritems():
+                        if disk_safety == policy_details['max_disk_safety']:
+                            logger.success('The disk safety of `{0}` namespace(s) is/are totally safe!'
+                                           .format(len(namespaces)))
+                        elif disk_safety != 0:
+                            unattended_status = logger.warning
+                            output = ',\n'.join([ns['namespace']+' with '+str(ns['amount_in_bucket'])+'% of its objects'
+                                                 for ns in namespaces])
+                            logger.warning('The disk safety of `{0}` namespace(s) is '
+                                           '`{1}`, max. disk safety is `{2}`: \n{3}'
+                                           .format(len(namespaces), disk_safety, policy_details['max_disk_safety'],
+                                                   output))
+                        else:
+                            # @TODO: after x amount of hours in disk safety 0 put in error, else put in warning
+                            unattended_status = logger.failure
+                            output = ',\n'.join([ns['namespace']+' with '+str(ns['amount_in_bucket'])+'% of its objects'
+                                                 for ns in namespaces])
+                            logger.failure('The disk safety of `{0}` namespace(s) is/are ZERO: \n{1}'
+                                           .format(len(namespaces), output))
+
+                    # for unattended run
+                    if not logger.print_progress:
+                        unattended_status("", test_name+'-'+backend_name)
+
+    @staticmethod
+    def get_disk_safety_buckets(logger):
+        """
+        Fetch safety of every namespace in every backend
+
+        - amount_in_bucket is in %
+        - max_disk_safety is the max. key that should be available in current_disk_safety
+
+        Output example: {'mybackend02': {'1,2': {'max_disk_safety': 2, 'current_disk_safety':
+        {2: {'namespace': u'b4eef27e-ef54-4fe8-8658-cdfbda7ceae4_000000065', 'amount_in_bucket': 100}}}}, 'mybackend':
+        {'1,2': {'max_disk_safety': 2, 'current_disk_safety':
+        {2: {'namespace': u'b4eef27e-ef54-4fe8-8658-cdfbda7ceae4_000000065', 'amount_in_bucket': 100}}}},
+        'mybackend-global': {'1,2': {'max_disk_safety': 2, 'current_disk_safety':
+        {1: {'namespace': u'e88c88c9-632c-4975-b39f-e9993e352560', 'amount_in_bucket': 100}}}}}
+
+        :param logger: logging object
+        :type logger: ovs.log.healthcheck_logHandler.HCLogHandler.HCLogHandler
+        :return: Safety of every namespace in every backend
+        :rtype: dict
+        """
+
+        test_name = 'disk-safety'
+
+        disk_safety_overview = {}
+        for alba_backend in AlbaBackendList.get_albabackends():
+            disk_safety_overview[alba_backend.name] = {}
             config = Configuration.get_configuration_path('ovs/arakoon/{0}-abm/config'.format(alba_backend.name))
             # Fetch alba info
             try:
@@ -501,94 +567,40 @@ class AlbaHealthCheck(object):
                 namespaces = AlbaCLI.run(command='get-disk-safety', config=config)
                 presets = AlbaCLI.run(command='list-presets', config=config)
             except AlbaException as ex:
-                logger.exception('Could not fetch alba information. Message: {0}'.format(ex), test_name)
+                logger.exception('Could not fetch alba information for backend `{0}` Message: {1}'
+                                 .format(alba_backend.name, ex), test_name)
                 # Do not execute further
                 continue
 
-            # Maximum amount of disks that may be lost - preset will determine this
-            max_lost_disks = 0
-            for preset_name in presets:
-                # noinspection PyTypeChecker
-                for policy in preset_name['policies']:
-                    if policy[1] > max_lost_disks:
-                        max_lost_disks = policy[1]
+            # collect in_use presets & their policies
+            for preset in presets:
+                if preset['in_use']:
+                    for policy in preset['policies']:
+                        disk_safety_overview[alba_backend.name][str(policy[0])+','+str(policy[1])] = \
+                            {'current_disk_safety': {}, 'max_disk_safety': policy[1]}
 
-            lost_disks = {}
-            details = {'total_objects': 0, 'lost_disks': lost_disks, 'lost_objects': 0, 'lowest_safety': 0, 'objects_to_repair': 0, 'most_disks_lost': 0}
-            disk_lost_overview[alba_backend.name] = details
-
+            # collect namespaces
             for namespace in namespaces:
                 for bucket_safety in namespace['bucket_safety']:
+                    # calc safety bucket
                     bucket = bucket_safety['bucket']
-                    disk_lost = abs(bucket[2] - bucket_safety['applicable_dead_osds'] - (bucket[0] + bucket[1]))
-                    remaining_safety = bucket_safety['remaining_safety']
-                    objects = bucket_safety['count']
-                    if remaining_safety not in lost_disks:
-                        lost_disks[remaining_safety] = 0
-                    lost_disks[remaining_safety] += objects
-                    details['total_objects'] += objects
-                    if remaining_safety < 0:
-                        details['lost_objects'] += objects
-                    elif disk_lost > 0:
-                        details['objects_to_repair'] += objects
-                    if remaining_safety < details['lowest_safety']:
-                        details['lowest_safety'] = remaining_safety
-                    if disk_lost > details['most_disks_lost']:
-                        details['most_disks_lost'] = disk_lost
+                    min_disk_safety = bucket[0]
+                    max_disk_safety = bucket[1]
+                    current_disk_safety = bucket[2]
+                    calculated_disk_safety = \
+                        current_disk_safety + bucket_safety['applicable_dead_osds'] + \
+                        (min_disk_safety - max_disk_safety)
+                    to_be_added_namespace = {'namespace': namespace['namespace'], 'amount_in_bucket':
+                                                                                  (bucket_safety['count'] /
+                                                                                   namespace['safety_count'])*100}
+                    if calculated_disk_safety in disk_safety_overview[alba_backend.name][str(min_disk_safety)+','+str(max_disk_safety)]['current_disk_safety']:
+                        disk_safety_overview[alba_backend.name][str(min_disk_safety) + ',' + str(max_disk_safety)][
+                            'current_disk_safety'][calculated_disk_safety].append(to_be_added_namespace)
+                    else:
+                        disk_safety_overview[alba_backend.name][str(min_disk_safety) + ',' + str(max_disk_safety)][
+                            'current_disk_safety'][calculated_disk_safety] = [to_be_added_namespace]
 
-        for backend_name, disk_safety_info in disk_lost_overview.iteritems():
-            # Get worst values first to see if the environment is in a critical state
-            lost_objects = disk_safety_info['lost_objects']
-            lowest_safety = disk_safety_info['lowest_safety']
-            objects_no_safety = disk_safety_info['lost_disks'].get(0, 0)
-            objects_to_repair = disk_safety_info['objects_to_repair']
-            disk_lost = disk_safety_info['most_disks_lost']
-            total_objects = disk_safety_info['total_objects']
-            # Limit to 4 numbers
-            repair_percentage = float('{0:.4f}'.format((float(objects_to_repair) / total_objects) * 100)) if total_objects != 0 else 0
-            if disk_lost == 0:
-                logger.success('Backend {0} has no disks that are lost.'.format(backend_name))
-            else:
-                msg = "Another {0} disks can be lost." if lowest_safety > 0 else "Losing more disks will cause data loss!"
-                logger.failure('Backend {0} has lost {1} disk(s). {2}'.format(backend_name, disk_lost, msg))
-
-                added_msg = ' and will be beyond repair if another disk fails' if objects_no_safety > 0 else ''
-                msg = 'Backend {0}: {1} out of {2} objects have to be repaired{3}.'.format(backend_name, objects_to_repair, total_objects, added_msg)
-                if lost_objects > 0:
-                    logger.failure('Backend {0}: {1} out of {2} objects are beyond repair.'.format(backend_name, lost_objects, total_objects))
-                elif objects_to_repair > 0:
-                    logger.warning(msg)
-                else:
-                    logger.success(msg)
-            # Log if the amount is rising
-            cache = CacheHelper.get()
-            repair_increasing = False
-            if cache is None or cache.get(backend_name, None) is None:
-                # First run of healthcheck
-                logger.success('Object repair for backend_name {0} will be monitored on increments.'.format(backend_name))
-            # If there are no objects to repair, do not show if increasing or decreasing
-            elif objects_to_repair > 0:
-                if cache[backend_name]['object_to_repair'] > objects_to_repair:
-                    # Amount of objects to repair is descending
-                    logger.success('Amount of objects to repair is decreasing for backend_name {0}.'.format(backend_name))
-                elif cache[backend_name]['object_to_repair'] < objects_to_repair:
-                    # Amount of objects to repair is rising
-                    repair_increasing = True
-                    logger.failure('Amount of objects to repair is increasing for backend_name {0}.'.format(backend_name))
-
-            if logger.print_progress is False:
-                # Custom recap for operations
-                logger.custom(
-                    msg='Recap of disk-safety: {0}% of the objects have to be repaired. Backend has lost {1} and number of objects to repair is {2}.'.format(repair_percentage, disk_lost, 'rising' if repair_increasing is True else 'descending or the same'),
-                    test_name='{0}_{1}'.format(test_name, backend_name),
-                    value=' '.join([str(repair_percentage), 'SUCCESS' if disk_lost == 0 else 'FAILURE', 'FAILURE' if repair_increasing is True else 'SUCCESS']))
-            if cache is None:
-                cache = {}
-            cache[backend_name] = {
-                    'object_to_repair': objects_to_repair,
-            }
-            CacheHelper.set(cache)
-        return CacheHelper.get()
+        return disk_safety_overview
 
     @staticmethod
     @expose_to_cli('alba', 'processes-test')
