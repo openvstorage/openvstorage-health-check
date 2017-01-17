@@ -34,14 +34,10 @@ class HealthCheckController(object):
     OPTIONAL_ARGUMENTS = ["--to-json", "--unattended", "--help"]
 
     @staticmethod
-    def get_results(result_handler, unattended, to_json, module_name=None, method_name=None):
+    def get_results(result_handler, module_name=None, method_name=None):
         """
         Gets the result of the Open vStorage healthcheck
 
-        :param unattended: unattendend mode?
-        :type unattended: bool
-        :param to_json: silent mode?
-        :type to_json: bool
         :param result_handler: result parser
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
         :param module_name:  module name specified with the cli
@@ -138,6 +134,7 @@ class HealthCheckController(object):
                                     if hasattr(submember[1], 'module_name') and hasattr(submember[1], 'method_name'):
                                         if not submember[1].module_name in found_items:
                                             found_items[submember[1].module_name] = []
+                                        # noinspection PyUnresolvedReferences
                                         found_items[submember[1].module_name].append(
                                             {'method_name': submember[1].method_name,
                                              'module_name': name,
@@ -244,7 +241,7 @@ class HealthCheckController(object):
                         raise
         # Get results
         if executed is True:
-            return HealthCheckController.get_results(result_handler, unattended, to_json, module_name, method_name)
+            return HealthCheckController.get_results(result_handler, module_name, method_name)
         else:
             print "Found no methods for module {0}".format(module_name)
             return HealthCheckController.print_help()

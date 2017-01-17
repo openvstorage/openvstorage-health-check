@@ -159,7 +159,6 @@ class ArakoonHealthCheck(object):
             result_handler.success('No items have changed.', '{0}-changed'.format(test_name))
 
     # @todo: separate cluster-wide-check
-
     @staticmethod
     @expose_to_cli('arakoon', 'ports-test')
     def check_arakoon_ports(result_handler):
@@ -205,11 +204,10 @@ class ArakoonHealthCheck(object):
             for node, config in arakoon_nodes.iteritems():
                 if node != ArakoonHealthCheck.LOCAL_SR.machine_id:
                     continue
-
                 try:
                     tlog_dir = config['tlog_dir']
                     files = os.listdir(tlog_dir)
-                except KeyError as ex:
+                except KeyError:
                     result_handler.failure('Could not fetch the tlog dir, Arakoon structure changed?', 'arakoon_patch')
                 except OSError as ex:
                     result_handler.failure('File or directory not found: {0}'.format(ex), 'arakoon_path')
@@ -258,7 +256,7 @@ class ArakoonHealthCheck(object):
                     continue
 
                 if oldest_tlx_stats.st_mtime > max_age_timestamp:
-                    result_handler.info('Found less than 3 tlogs for {0}, collapsing is not worth doing.'.format(arakoon))
+                    result_handler.success('Oldest tlx file for Arakoon {0} is not older than {1}.'.format(arakoon, max_collapse_age), 'arakoon_collapse_time')
                     ok_arakoons.append(arakoon)
                     continue
 
@@ -315,45 +313,21 @@ class ArakoonHealthCheck(object):
                 continue
 
             with file_mutex('ovs-healthcheck_arakoon-test_{0}'.format(cluster_name)):
-                tries = 1
-                max_tries = 2  # should be 5 but .nop is taking WAY to long
+                try:
+                    # determine if there is a healthy cluster
+                    client = PyrakoonStore(str(cluster_name))
+                    client.nop()
+                except ArakoonNotFound:
+                    down_arakoon_list.append(cluster_name)
+                    break
 
-                while tries <= max_tries:
-                    result_handler.info('Executing testing cluster {0}. Will try a maximum amount of {1} tries. Currently on try {2}'
-                                        .format(cluster_name, max_tries, tries), 'arakoonTryCheck')
+                except (ArakoonNoMaster, ArakoonNoMasterResult):
+                    no_master_arakoon_list.append(cluster_name)
+                    break
 
-                    key = 'ovs-healthcheck-{0}'.format(ArakoonHealthCheck.LOCAL_SR.machine_id)
-                    value = str(time.time())
-
-                    try:
-                        # determine if there is a healthy cluster
-                        client = PyrakoonStore(str(cluster_name))
-                        client.nop()
-
-                        # perform more complicated action to arakoon
-                        client.set(key, value)
-                        if client.get(key) == value:
-                            client.delete(key)
-                            working_arakoon_list.append(cluster_name)
-                            break
-
-                    except ArakoonNotFound:
-                        if tries == max_tries:
-                            down_arakoon_list.append(cluster_name)
-                            break
-
-                    except (ArakoonNoMaster, ArakoonNoMasterResult):
-                        if tries == max_tries:
-                            no_master_arakoon_list.append(cluster_name)
-                            break
-
-                    except Exception:
-                        if tries == max_tries:
-                            unknown_arakoon_list.append(cluster_name)
-                            break
-
-                    # finish try if failed
-                    tries += 1
+                except Exception:
+                    unknown_arakoon_list.append(cluster_name)
+                    break
 
         # Processing results
         if len(working_arakoon_list) == len(arakoon_clusters):

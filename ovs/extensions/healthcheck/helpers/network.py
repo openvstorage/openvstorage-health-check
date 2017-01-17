@@ -13,7 +13,9 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
+import shlex
 import socket
+import subprocess
 
 
 class NetworkHelper(object):
@@ -31,15 +33,14 @@ class NetworkHelper(object):
         :param ip: ip address to try
         :type ip: str
         """
-        result_handler.info('Checking port {0} of service {1} ...'.format(port, process_name), '_is_port_listening')
-        if NetworkHelper.check_port_connection(port, ip):
-            result_handler.success('Connection successfully established!', 'port_{0}_{1}'.format(process_name, port))
+        result_handler.info('Checking port {0} of service {1} ...'.format(port, process_name))
+        if NetworkHelper._check_port_connection(port, ip):
+            result_handler.success('Connection successfully established to service {0} on {1}:{2}'.format(process_name, ip, port), 'port_{0}_{1}'.format(process_name, port))
         else:
-            result_handler.failure('Connection FAILED to service {1} on port {0}'.format(port, process_name),
-                                   'port_{0}_{1}'.format(process_name, port))
+            result_handler.failure('Connection FAILED to service {0} on {1}:{2}'.format(process_name, ip, port), 'port_{0}_{1}'.format(process_name, port))
 
     @staticmethod
-    def check_port_connection(port_number, ip):
+    def _check_port_connection(port_number, ip):
         """
         Checks the port connection on a IP address
 
@@ -57,12 +58,40 @@ class NetworkHelper(object):
         if result == 0:
             return True
         else:
-            # double check because some services run on localhost
+            # Check if it might be referencing to the wrong ip
+            if ip not in NetworkHelper._get_local_ip_addresses():
+                return False
             result = sock.connect_ex(('127.0.0.1', int(port_number)))
             if result == 0:
                 return True
             else:
                 return False
+
+    @staticmethod
+    def _get_local_ip_addresses():
+        cmd = "ip a | grep 'inet ' | sed 's/\s\s*/ /g' | cut -d ' ' -f 3 | cut -d '/' -f 1 "
+        if "|" in cmd:
+            cmd_parts = cmd.split('|')
+        else:
+            cmd_parts = [cmd]
+
+        counter = 0
+        processes = {}
+        for cmd_part in cmd_parts:
+            cmd_part = cmd_part.strip()
+            if counter == 0:
+                # First command uses no stdin from another Popen object
+                processes[counter] = subprocess.Popen(shlex.split(cmd_part), stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            else:
+                # All other commands use the previous Popen objects output and pipe it to theirs
+                processes[counter] = subprocess.Popen(shlex.split(cmd_part), stdin=processes[counter - 1].stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            counter += 1
+        output, err = processes[counter - 1].communicate()
+        exit_code = processes[0].wait()
+        if exit_code != 0 or err:
+            raise subprocess.CalledProcessError("Command {0} exited with {1} and message {2}".format(cmd, exit_code, err), cmd)
+
+        return output.split('\n')
 
     @staticmethod
     def check_if_dns_resolves(fqdn='google.com'):

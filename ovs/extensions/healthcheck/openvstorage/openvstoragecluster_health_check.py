@@ -20,20 +20,19 @@ import glob
 import psutil
 import socket
 import subprocess
-import timeout_decorator
-from ovs.extensions.generic.configuration import NotFoundException
+from ovs.extensions.generic.configuration import Configuration, NotFoundException
 from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.decorators import expose_to_cli
-from ovs.extensions.generic.configuration import Configuration
+from ovs.extensions.healthcheck.helpers.filesystem import FilesystemHelper
 from ovs.extensions.healthcheck.helpers.helper import Helper
 from ovs.extensions.healthcheck.helpers.init_manager import InitManager
-from ovs.extensions.healthcheck.helpers.filesystem import FilesystemHelper
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.helpers.rabbitmq import RabbitMQ
 from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
 from ovs.lib.storagerouter import StorageRouterController
 from volumedriver.storagerouter import storagerouterclient as src
 from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException
+from timeout_decorator import timeout
 from timeout_decorator.timeout_decorator import TimeoutError
 
 
@@ -186,8 +185,11 @@ class OpenvStorageHealthCheck(object):
     @staticmethod
     def _check_extra_ports(result_handler, key):
         """
-        Checks the extra ports specified in the settings.json
-        :param result_handler:
+        Checks the extra ports for key specified in the settings.json
+        :param result_handler: logging object
+        :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :param key: check all ports for this key
+        :type key: string
         :return: None
         """
         result_handler.info('Checking {0} ports'.format(key))
@@ -210,6 +212,7 @@ class OpenvStorageHealthCheck(object):
         # Check Celery and RabbitMQ
         if Helper.get_ovs_type() != 'MASTER':
             result_handler.skip('RabbitMQ is not running/active on this server!', 'port_celery')
+            return True
         result_handler.info('Checking Celery.')
         from errno import errorcode
         try:
@@ -217,8 +220,10 @@ class OpenvStorageHealthCheck(object):
             stats = inspect().stats()
             if stats:
                 result_handler.success('Successfully connected to Celery on all nodes.', test_name)
+                return True
             else:
                 result_handler.failure('No running Celery workers were found.', test_name)
+                return False
         except IOError as ex:
             msg = 'Could not connect to Celery. Got {0}.'.format(ex)
             if len(ex.args) > 0 and errorcode.get(ex.args[0]) == 'ECONNREFUSED':
@@ -275,7 +280,7 @@ class OpenvStorageHealthCheck(object):
             logger.failure('Found no LOCAL OVS services', test_name)
 
     @staticmethod
-    @timeout_decorator.timeout(CELERY_CHECK_TIME)
+    @timeout(CELERY_CHECK_TIME)
     def _check_celery():
         """
         Preliminary/Simple check for Celery and RabbitMQ component

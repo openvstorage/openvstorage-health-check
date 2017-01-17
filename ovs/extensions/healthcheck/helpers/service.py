@@ -13,11 +13,11 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
+from ovs.dal.datalist import DataList
 from ovs.dal.hybrids.service import Service
 from ovs.dal.hybrids.servicetype import ServiceType
 from ovs.dal.lists.servicelist import ServiceList
 from ovs.extensions.generic.system import System
-from ovs.dal.datalist import DataList
 
 
 class ServiceHelper(object):
