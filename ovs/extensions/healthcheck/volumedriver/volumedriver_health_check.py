@@ -377,6 +377,6 @@ class VolumedriverHealthCheck(object):
         :rtype: NoneType
         """
         VolumedriverHealthCheck.check_dtl(logger)
-        VolumedriverHealthCheck.check_volumedrivers(logger)
+        # VolumedriverHealthCheck.check_volumedrivers(logger)
         VolumedriverHealthCheck.check_for_halted_volumes(logger)
         VolumedriverHealthCheck.check_filedrivers(logger)
