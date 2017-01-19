@@ -21,6 +21,7 @@ import psutil
 import socket
 import subprocess
 from ovs.extensions.generic.configuration import Configuration, NotFoundException
+from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.decorators import expose_to_cli
 from ovs.extensions.healthcheck.helpers.filesystem import FilesystemHelper
@@ -29,6 +30,7 @@ from ovs.extensions.healthcheck.helpers.init_manager import InitManager
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.helpers.rabbitmq import RabbitMQ
 from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
+from ovs.extensions.packages.package import PackageManager
 from ovs.lib.storagerouter import StorageRouterController
 from volumedriver.storagerouter import storagerouterclient as src
 from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException
@@ -241,20 +243,29 @@ class OpenvStorageHealthCheck(object):
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
         """
-
+        test_name = 'packages_test'
         result_handler.info('Checking OVS packages: ', 'check_ovs_packages')
-
-        for package in Helper.packages:
-            cmd = ['apt-cache', 'policy', package]
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out, err = process.communicate()
-            results = out.splitlines()
-            if len(results) != 1:
-                result_handler.success('Package {0} is present, with version {1}'.format(package, results[2].split(':')[1].strip()),
-                                       'package_{0}'.format(package))
+        client = SSHClient(OpenvStorageHealthCheck.LOCAL_SR)
+        # PackageManager.SDM_PACKAGE_NAMES for sdm
+        required_packages = list(PackageManager.OVS_PACKAGE_NAMES)
+        extra_packages = list(Helper.packages)
+        installed = PackageManager.get_installed_versions(client=client, package_names=list(required_packages + extra_packages))
+        while len(required_packages) > 0:
+            package = required_packages.pop()
+            version = installed.get(package, '')
+            if version:
+                result_handler.success(
+                    'Package {0} is installed with version {1}'.format(package, version.replace('\n', '')), test_name)
             else:
-                result_handler.skip('Package {0} is NOT present ...'.format(package), 
-                                    'package_{0}'.format(package))
+                result_handler.failure('Package {0} is not installed...'.format(package), test_name)
+        while len(extra_packages) > 0:
+            package = extra_packages.pop()
+            version = installed.get(package, '')
+            if version:
+                result_handler.success(
+                    'Package {0} is installed with version {1}'.format(package, version.replace('\n', '')), test_name)
+            else:
+                result_handler.skip('Package {0} is not installed...'.format(package), test_name)
 
     @staticmethod
     @expose_to_cli('ovs', 'processes-test')

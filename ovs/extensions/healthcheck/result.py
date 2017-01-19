@@ -112,9 +112,9 @@ class HCResults(object):
                 if error_type not in HCResults.EXCLUDED_MESSAGES:
                     # Enable custom error type:
                     if error_type == 'CUSTOM':
-                        self.result_dict[test_name] = {"messages": custom_value, "code": code, "state": error_type}
+                        self.result_dict[test_name] = {"messages": ['{0}-{1}'.format(code, custom_value)], "state": error_type}
                     else:
-                        self.result_dict[test_name] = {"messages": msg, "code": code, "state": error_type}
+                        self.result_dict[test_name] = {"messages": ['{0}-{1}'.format(code, msg)], "state": error_type}
             self.counters[error_type] += 1
 
             if self.print_progress:

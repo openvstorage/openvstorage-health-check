@@ -253,5 +253,5 @@ class HealthCheckController(object):
         arguments = sys.argv
         # Remove filename
         del arguments[0]
-        arguments = ['arakoon', 'consistency-test']
+        arguments = ['ovs', 'packages-test']
         HealthCheckController.run_method(*arguments)
