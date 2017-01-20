@@ -21,26 +21,7 @@ import subprocess
 class NetworkHelper(object):
 
     @staticmethod
-    def is_port_listening(result_handler, process_name, port, ip):
-        """
-        Checks the port connection of a process
-        :param result_handler: logging object
-        :type result_handler: ovs.extensions.healthcheck.result.HCResults
-        :param process_name: name of a certain process running on this local machine
-        :type process_name: str
-        :param port: port where the service is running on
-        :type port: int
-        :param ip: ip address to try
-        :type ip: str
-        """
-        result_handler.info('Checking port {0} of service {1} ...'.format(port, process_name))
-        if NetworkHelper._check_port_connection(port, ip):
-            result_handler.success('Connection successfully established to service {0} on {1}:{2}'.format(process_name, ip, port), 'port_{0}_{1}'.format(process_name, port))
-        else:
-            result_handler.failure('Connection FAILED to service {0} on {1}:{2}'.format(process_name, ip, port), 'port_{0}_{1}'.format(process_name, port))
-
-    @staticmethod
-    def _check_port_connection(port_number, ip):
+    def check_port_connection(port_number, ip):
         """
         Checks the port connection on a IP address
 

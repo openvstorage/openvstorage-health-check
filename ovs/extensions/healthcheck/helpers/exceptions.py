@@ -19,6 +19,22 @@ Exceptions module
 """
 
 
+class HealthCheckException(Exception):
+    """
+    Exception class that provides the error codes
+    """
+    def __init__(self, message, error_code):
+        """
+        Initialize the class
+        :param message: error message
+        :param error_code: error code
+        """
+        # Call the base class constructor with the parameters it needs
+        super(HealthCheckException, self).__init__(message)
+        # Own properties
+        self.error_code = error_code
+
+
 class SectionNotFoundError(Exception):
     """
     Raised when an object was queries that doesn't exist
@@ -161,5 +177,4 @@ class AlbaException(Exception):
         self.alba_command = alba_command
 
     def __str__(self):
-        return "Command '{0}' failed with '{1}'.".format(self.alba_command, self.EXCEPTION_MAPPING.get(self.message,
-                                                                                                       self.message))
+        return "Command '{0}' failed with '{1}'.".format(self.alba_command, self.EXCEPTION_MAPPING.get(self.message, self.message))

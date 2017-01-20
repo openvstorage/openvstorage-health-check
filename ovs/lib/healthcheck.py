@@ -253,5 +253,4 @@ class HealthCheckController(object):
         arguments = sys.argv
         # Remove filename
         del arguments[0]
-        arguments = ['ovs', 'packages-test']
         HealthCheckController.run_method(*arguments)

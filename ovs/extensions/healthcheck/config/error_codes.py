@@ -13,3 +13,9 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
+
+
+class ErrorCodes(object):
+    default = type('DefaultCode', (), {'error_code': 'HC000', 'information': 'Default code', 'solution': 'No solution'})
+    # example_arakoon = type('ArakoonCode', (), {'error_code': 'ARA000', 'information': 'Occurs when arakoon is not running.', 'solution': 'Restart Arakoon'})
+    # example_arakoon2 = type('ArakoonCode', (), {'error_code': 'ARA001', 'information': 'Occurs when arakoon is not responding.', 'solution': 'Restart Arakoon'})

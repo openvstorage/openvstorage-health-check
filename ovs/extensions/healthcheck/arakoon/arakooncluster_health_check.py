@@ -59,6 +59,7 @@ class ArakoonHealthCheck(object):
         :return: if succeeded a tuple; if failed both dicts are empty
         :rtype: dict
         """
+        test_name = 'arakoon-fetch-cluster-test'
 
         result_handler.info('Fetching available arakoon clusters.')
         arakoon_clusters = list(Configuration.list('/ovs/arakoon'))
@@ -68,7 +69,7 @@ class ArakoonHealthCheck(object):
         cluster_results = {'present': present_nodes, 'missing': missing_nodes}
         if len(arakoon_clusters) == 0:
             # no arakoon clusters on node
-            result_handler.warning('No installed arakoon clusters detected on this system.', 'arakoon_no_clusters_found')
+            result_handler.warning('No installed arakoon clusters detected on this system.', test_name)
             return cluster_results
 
         # add arakoon clusters
@@ -86,7 +87,7 @@ class ArakoonHealthCheck(object):
             try:
                 tlog_dir = arakoon_config.export()[ArakoonHealthCheck.LOCAL_SR.machine_id]['tlog_dir']
             except KeyError, ex:
-                result_handler.failure('Could not fetch the tlog dir, Arakoon structure changed? Got {0}.'.format(ex.message))
+                result_handler.failure('Could not fetch the tlog dir, Arakoon structure changed? Got {0}.'.format(ex.message), test_name)
                 continue
 
             for node_id in master_node_ids:
@@ -128,6 +129,7 @@ class ArakoonHealthCheck(object):
             modified = {key: (dict1[key], dict2[key]) for key in intersect_keys if dict1[key] != dict2[key]}
             same = set(key for key in intersect_keys if dict1[key] == dict2[key])
             return {'added': added, 'removed': removed, 'modified': modified, 'same': same}
+
         result_handler.info("Verifying arakoon information.")
         # @todo remove testing
         dal_ports = {}
@@ -145,7 +147,6 @@ class ArakoonHealthCheck(object):
                     process_name = "arakoon-{0}".format(arakoon_cluster)
                     arakoon_ports[process_name] = [int(config.get(section, 'client_port')), int(config.get(section, 'messaging_port'))]  # cast port strings to int
         diff = dict_compare(dal_ports, arakoon_ports)
-        print diff
         if len(diff['added']) > 0 or len(diff['removed']) > 0:
             if len(diff['added']) > 0:
                 result_handler.warning('Found {0} in DAL but not in Arakoon.'.format(diff['added']), test_name)
@@ -154,9 +155,9 @@ class ArakoonHealthCheck(object):
         else:
             result_handler.success('Arakoon info for DAL and Arakoon are the same.', test_name)
         if len(diff['modified']) > 0:
-            result_handler.warning('The following items have changed: {0}.', '{0}-changed'.format(test_name))
+            result_handler.warning('The following items have changed: {0}.'.format(diff['modified']), test_name)
         else:
-            result_handler.success('No items have changed.', '{0}-changed'.format(test_name))
+            result_handler.success('No items have changed.', test_name)
 
     # @todo: separate cluster-wide-check
     @staticmethod
@@ -168,11 +169,17 @@ class ArakoonHealthCheck(object):
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.results.HCResults
         """
-
+        test_name = 'arakoon-ports-test'
         result_handler.info('Checking PORT CONNECTIONS of arakoon nodes.')
+        ip = ArakoonHealthCheck.LOCAL_SR.ip
         for service in ServiceHelper.get_local_arakoon_services():
             for port in service.ports:
-                NetworkHelper.is_port_listening(result_handler, service.name, port, ArakoonHealthCheck.LOCAL_SR.ip)
+                result = NetworkHelper.check_port_connection(port, ip)
+                if result:
+                    result_handler.success(
+                        'Connection successfully established to service {0} on {1}:{2}'.format(service.name, ip, port), test_name)
+                else:
+                    result_handler.failure('Connection FAILED to service {0} on {1}:{2}'.format(service.name, ip, port), test_name)
 
     # @todo: separate cluster-wide-check
     @staticmethod
@@ -190,9 +197,12 @@ class ArakoonHealthCheck(object):
         :return: list with OK, NOK status
         :rtype: list
         """
+        test_name = 'arakoon-collapse-test'
+
         if arakoon_clusters is None:
             res = ArakoonHealthCheck.fetch_clusters(result_handler)
-            arakoon_clusters = res['present'] + res['missing']
+            arakoon_clusters = dict(res['missing'])
+            arakoon_clusters.update(res['present'])
 
         ok_arakoons = []
         nok_arakoons = []
@@ -208,16 +218,16 @@ class ArakoonHealthCheck(object):
                     tlog_dir = config['tlog_dir']
                     files = os.listdir(tlog_dir)
                 except KeyError:
-                    result_handler.failure('Could not fetch the tlog dir, Arakoon structure changed?', 'arakoon_patch')
+                    result_handler.failure('Could not fetch the tlog dir, Arakoon structure changed?', test_name)
                 except OSError as ex:
-                    result_handler.failure('File or directory not found: {0}'.format(ex), 'arakoon_path')
+                    result_handler.failure('File or directory not found: {0}'.format(ex), test_name)
                     nok_arakoons.append(arakoon)
                     continue
 
                 if len(files) == 0:
                     nok_arakoons.append(arakoon)
                     if not result_handler.print_progress:
-                        result_handler.failure('No files found in {0}'.format(tlog_dir), 'arakoon_files')
+                        result_handler.failure('No files found in {0}'.format(tlog_dir), test_name)
                     continue
 
                 if 'head.db' in files:
@@ -241,7 +251,7 @@ class ArakoonHealthCheck(object):
                 elif amount_tlx == 0 and len([tlog_file for tlog_file in files if tlog_file.endswith('.tlog')]) < 0:
                     nok_arakoons.append(arakoon)
                     if not result_handler.print_progress:
-                        result_handler.failure('No tlx files found and head.db is out of sync or is not present in {0}.'.format(tlog_dir), 'arakoon_tlx_path')
+                        result_handler.failure('No tlx files found and head.db is out of sync or is not present in {0}.'.format(tlog_dir), test_name)
                     continue
 
                 tlx_files.sort(key=lambda tup: tup[0])
@@ -251,12 +261,12 @@ class ArakoonHealthCheck(object):
                     oldest_tlx_stats = os.stat('{0}/{1}'.format(tlog_dir, oldest_file))
                 except OSError, ex:
                     if not result_handler.print_progress:
-                        result_handler.failure('File or directory not found: {0}'.format(ex), 'arakoon_tlx_path')
+                        result_handler.failure('File or directory not found: {0}'.format(ex), test_name)
                     nok_arakoons.append(arakoon)
                     continue
 
                 if oldest_tlx_stats.st_mtime > max_age_timestamp:
-                    result_handler.success('Oldest tlx file for Arakoon {0} is not older than {1}.'.format(arakoon, max_collapse_age), 'arakoon_collapse_time')
+                    result_handler.success('Oldest tlx file for Arakoon {0} is not older than {1}.'.format(arakoon, max_collapse_age), test_name)
                     ok_arakoons.append(arakoon)
                     continue
 
@@ -265,16 +275,16 @@ class ArakoonHealthCheck(object):
                     datetime_old_date = datetime.fromtimestamp(max_age_timestamp).isoformat()
                     result_handler.failure('oldest file: {0} with timestamp: {1} is older than {2} for arakoon {3}'
                                            .format(oldest_file, datetime_oldest_file, datetime_old_date, arakoon),
-                                           'arakoon_oldest_file')
+                                           test_name)
 
                 nok_arakoons.append(arakoon)
 
         # Testing conditions
         if len(result['nok']) > 0:
             result_handler.failure('{0} Arakoon(s) having issues with collapsing: {1}'.format(len(result['nok']), ','.join(result['nok'])),
-                                   'arakoon_collapse')
+                                   test_name)
         elif len(result['ok']) > 0:
-            result_handler.success('ALL Arakoon(s) are collapsed.', 'arakoon_collapse')
+            result_handler.success('ALL Arakoon(s) are collapsed.', test_name)
         return result
 
     # @todo: separate cluster-wide-check
@@ -291,6 +301,8 @@ class ArakoonHealthCheck(object):
         :return: (working_arakoon_list, no_master_arakoon_list, down_arakoon_list, unkown_arakoon_list)
         :rtype: tuple > lists
         """
+        test_name = 'arakoon-integrity-test'
+
         unknown_arakoon_list = []
         working_arakoon_list = []
         no_master_arakoon_list = []
@@ -331,44 +343,40 @@ class ArakoonHealthCheck(object):
 
         # Processing results
         if len(working_arakoon_list) == len(arakoon_clusters):
-            result_handler.success('ALL available Arakoon(s) their integrity are/is OK! ', 'arakoon_integrity')
+            result_handler.success('ALL available Arakoon(s) their integrity are/is OK! ', test_name)
         else:
             # less output for unattended_mode
             # check amount OK arakoons
             if len(working_arakoon_list) > 0:
                 result_handler.warning(
-                    '{0}/{1} Arakoon(s) is/are OK!: {2}'.format(len(working_arakoon_list), len(arakoon_clusters),
-                                                                ', '.join(working_arakoon_list)), 'arakoon_some_up')
+                    '{0}/{1} Arakoon(s) is/are OK!: {2}'.format(len(working_arakoon_list), len(arakoon_clusters), ', '.join(working_arakoon_list)), test_name)
             # check amount NO-MASTER arakoons
             if len(no_master_arakoon_list) > 0:
-                result_handler.failure('{0} Arakoon(s) cannot find a MASTER: {1}'.format(len(no_master_arakoon_list), ', '.join(no_master_arakoon_list)),
-                                       'arakoon_no_master_exception'.format(len(no_master_arakoon_list)))
+                result_handler.failure('{0} Arakoon(s) cannot find a MASTER: {1}'.format(len(no_master_arakoon_list), ', '.join(no_master_arakoon_list)), test_name)
 
             # check amount DOWN arakoons
             if len(down_arakoon_list) > 0:
-                result_handler.failure('{0} Arakoon(s) seem(s) to be DOWN!: {1}'.format(len(down_arakoon_list), ', '.join(down_arakoon_list)),
-                                       'arakoon_down_exception')
+                result_handler.failure('{0} Arakoon(s) seem(s) to be DOWN!: {1}'.format(len(down_arakoon_list), ', '.join(down_arakoon_list)), test_name)
 
                 # check amount UNKNOWN_ERRORS arakoons
                 if len(unknown_arakoon_list) > 0:
-                    result_handler.failure('{0} Arakoon(s) seem(s) to have UNKNOWN ERRORS, please check the logs'
-                                           .format(len(unknown_arakoon_list), ', '.join(unknown_arakoon_list)),
-                                           'arakoon_unknown_exception')
+                    result_handler.exception('{0} Arakoon(s) seem(s) to have UNKNOWN ERRORS, please check the logs'
+                                             .format(len(unknown_arakoon_list), ', '.join(unknown_arakoon_list)),test_name)
                 else:
-                    result_handler.failure('Some Arakoon(s) have problems, please check this!', 'arakoon_integrity')
+                    result_handler.failure('Some Arakoon(s) have problems, please check this!', test_name)
             # check amount UNKNOWN_ERRORS arakoons
             if len(unknown_arakoon_list) > 0:
                 result_handler.failure('{0} Arakoon(s) seem(s) to have UNKNOWN ERRORS, please check the logs @ '
                                        '/var/log/ovs/arakoon.log or /var/log/upstart/ovs-arakoon-*.log: {1}'.format(len(unknown_arakoon_list), ', '.join(unknown_arakoon_list)),
-                                       'arakoon_unknown_exception')
+                                       test_name)
             else:
-                result_handler.failure('Some Arakoon(s) have problems, please check this!', 'arakoon_integrity')
+                result_handler.failure('Some Arakoon(s) have problems, please check this!', test_name)
 
             return result
 
     # @todo: separate cluster-wide-check
     @staticmethod
-    @expose_to_cli('arakoon', 'check-arakoons')
+    @expose_to_cli('arakoon', 'missing-node-test')
     def check_arakoons(result_handler):
         """
         Verifies/validates the integrity of all available arakoons
@@ -376,6 +384,7 @@ class ArakoonHealthCheck(object):
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.results.HCResults
         """
+        test_name = 'arakoon-missing-node-test'
 
         fetched_clusters = ArakoonHealthCheck.fetch_clusters(result_handler)
         arakoon_clusters = fetched_clusters['present']
@@ -384,10 +393,6 @@ class ArakoonHealthCheck(object):
             # Only return the (arakoon, system id) tuple for arakoons that have missing system ids
             missing = [cluster for cluster in missing_nodes.items() if len(cluster[1]) != 0]
             result_handler.failure('The following nodes are stored in arakoon but missing in reality (output format is (arakoon, [system ids]): {0}'.format(missing),
-                                   'nodes_missing')
+                                   test_name)
         else:
-            result_handler.success('Found no nodes that are missing according to arakoons.', 'nodes_missing')
-        if len(arakoon_clusters.keys()) != 0:
-            result_handler.success('{0} available Arakoons successfully fetched, starting verification of clusters.'.format(len(arakoon_clusters)), 'arakoon_found')
-        else:
-            result_handler.skip('No available clusters found', 'arakoon_found')
+            result_handler.success('Found no nodes that are missing according to arakoons.', test_name)
