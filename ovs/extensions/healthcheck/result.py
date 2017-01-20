@@ -116,7 +116,7 @@ class HCResults(object):
                     self.result_dict[test_name] = {"state": print_value,
                                                    'messages': collections.OrderedDict(empty_messages)}
                 messages = self.result_dict[test_name]['messages']
-                messages[severity].append({'code': code, 'message': message})
+                messages[severity.type].append({'code': code, 'message': message})
                 result_severity = Severities.get_severity_by_print_value(self.result_dict[test_name]['state'])
                 if severity.value > result_severity.value:
                     self.result_dict[test_name]['state'] = print_value
