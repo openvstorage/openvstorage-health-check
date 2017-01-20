@@ -5,6 +5,7 @@
             "enable": true
         },
         "debug_mode": false,
+        "max_hours_zero_disk_safety": 2,
         "max_check_log_size": 500,
         "check_logs": {"/var/log/upstart": {"prefix": ["ovs", "asd"], "type": "dir", "contains_nested": false},
                         "/var/log/ovs": {"prefix": null, "type": "dir", "contains_nested": true},
