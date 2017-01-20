@@ -25,31 +25,38 @@ from ovs.extensions.healthcheck.config.error_codes import ErrorCodes
 
 
 class Severity(object):
+    def __init__(self, print_value, value, severity_type, color):
+        self.print_value = print_value
+        self.value = value
+        self.type = severity_type
+        self.color = color
+
+
+class Severities(object):
     """
     Severities for Open vStorage healthcheck results
     """
     # Value -1 means ignore this severity type for json/unattended logging
-    error = type('ErrorSeverity', (), {'print_value': 'FAILED', 'value': 3, 'color': '\033[91m', 'type': 'error'})
-    success = type('SuccessSeverity', (), {'print_value': 'SUCCESS', 'value': 1, 'color': '\033[92m', 'type': 'success'})
-    debug = type('DebugSeverity', (), {'print_value': 'DEBUG', 'value': -1, 'color': '\033[94m', 'type': 'debug'})
-    info = type('InfoSeverity', (), {'print_value': 'INFO', 'value': -1, 'color': '\033[94m', 'type': 'info'})
-    skip = type('SkipSeverity', (), {'print_value': 'SKIPPED', 'value': 0, 'color': '\033[95m', 'type': 'skip'})
-    exception = type('ExceptionSeverity', (), {'print_value': 'EXCEPTION', 'value': 4, 'color': '\033[91m', 'type': 'exception'})
-    warning = type('WarningSeverity', (), {'print_value': 'WARNING', 'value': 2, 'color': '\033[93m', 'type': 'warning'})
-    # custom = type('CustomSeverity', (), {'print_value': 'CUSTOM', 'value': 0, 'color': '\033[94m', 'type': 'custom'})
+    error = Severity('FAILED', 3, 'error', '\033[91m')
+    success = Severity('SUCCESS', 1, 'success', '\033[92m')
+    debug = Severity('DEBUG', -1, 'debug', '\033[94m')
+    info = Severity('INFO', -1, 'info', '\033[94m')
+    skip = Severity('SKIPPED', 0, 'skip', '\033[95m')
+    exception = Severity('EXCEPTION', 4, 'exception', '\033[91m')
+    warning = Severity('WARNING', 2, 'warning', '\033[93m')
 
     @staticmethod
     def get_severity_types():
-        return [attr for attr in dir(Severity) if not (attr.startswith("__") or inspect.isfunction(getattr(Severity, attr)))]
+        return [attr for attr in dir(Severities) if not (attr.startswith("__") or inspect.isfunction(getattr(Severities, attr)))]
 
     @staticmethod
     def get_severities():
-        return [value for attr, value in vars(Severity).iteritems() if not (attr.startswith("__") or inspect.isfunction(getattr(Severity, attr)))]
+        return [value for attr, value in vars(Severities).iteritems() if not (attr.startswith("__") or inspect.isfunction(getattr(Severities, attr)))]
 
     @staticmethod
     def get_severity_by_print_value(print_value):
-        for attr, value in vars(Severity).iteritems():
-            if not (attr.startswith("__") or inspect.isfunction(getattr(Severity, attr))) and value.print_value == print_value:
+        for attr, value in vars(Severities).iteritems():
+            if not (attr.startswith("__") or inspect.isfunction(getattr(Severities, attr))) and value.print_value == print_value:
                 return value
 
 
@@ -81,13 +88,13 @@ class HCResults(object):
         self.print_progress = not(to_json or unattended)
         # Setup HC counters
         self.counters = {}
-        for severity in Severity.get_severities():
+        for severity in Severities.get_severities():
             self.counters[severity.print_value] = 0
 
         # Result of healthcheck in dict form
         self.result_dict = {}
 
-    def _call(self, message, test_name, code, log_type, custom_value=None):
+    def _call(self, message, test_name, code, severity):
         """
         Process a message with a certain short test_name and type error message
         :param message: Log message for attended run
@@ -95,35 +102,22 @@ class HCResults(object):
         :param test_name: name for monitoring output
         :param code: error code
         :type code: str
-        :param log_type:
-            * 'error'
-            * 'success'
-            * 'debug'
-            * 'info'
-            * 'skip'
-            * 'exception'
-            * 'warning'
-        :type log_type: str
-        :param custom_value: a custom value that will be added when the error_message = custom
-        :param custom_value: object
+        :param severity: Severity object
+        :type severity: ovs.extensions.healthcheck.result.Severity
         :return:
         """
-        severity = getattr(Severity, log_type)
         print_value = severity.print_value
         if test_name is not None:
             if severity.value != -1:
                 # Enable custom error type:
                 if test_name not in self.result_dict:
-                    empty_messages = sorted([(sev.type, []) for sev in Severity.get_severities() if sev.value != -1])
+                    empty_messages = sorted([(sev.type, []) for sev in Severities.get_severities() if sev.value != -1])
                     # noinspection PyArgumentList
                     self.result_dict[test_name] = {"state": print_value,
                                                    'messages': collections.OrderedDict(empty_messages)}
                 messages = self.result_dict[test_name]['messages']
-                if print_value == 'CUSTOM':
-                    messages[log_type].append({'code': code, 'message': custom_value})
-                else:
-                    messages[log_type].append({'code': code, 'message': message})
-                result_severity = Severity.get_severity_by_print_value(self.result_dict[test_name]['state'])
+                messages[severity].append({'code': code, 'message': message})
+                result_severity = Severities.get_severity_by_print_value(self.result_dict[test_name]['state'])
                 if severity.value > result_severity.value:
                     self.result_dict[test_name]['state'] = print_value
                 self.result_dict[test_name]["messages"] = messages
@@ -158,7 +152,7 @@ class HCResults(object):
         :type code: str
         :return:
         """
-        self._call(msg, test_name, code, log_type='error', )
+        self._call(msg, test_name, code, severity=Severities.error)
 
     def success(self, msg, test_name=None, code=ErrorCodes.default.error_code):
         """
@@ -171,7 +165,7 @@ class HCResults(object):
         :type code: str
         :return:
         """
-        self._call(msg, test_name, code, log_type='success')
+        self._call(msg, test_name, code, severity=Severities.success)
 
     def warning(self, msg, test_name=None, code=ErrorCodes.default.error_code):
         """
@@ -184,7 +178,7 @@ class HCResults(object):
         :type code: str
         :return:
         """
-        self._call(msg, test_name, code, log_type='warning')
+        self._call(msg, test_name, code, severity=Severities.warning)
 
     def info(self, msg, test_name=None, code=ErrorCodes.default.error_code):
         """
@@ -197,7 +191,7 @@ class HCResults(object):
         :type code: str
         :return:
         """
-        self._call(msg, test_name, code, log_type='info')
+        self._call(msg, test_name, code, severity=Severities.info)
 
     def exception(self, msg, test_name=None, code=ErrorCodes.default.error_code):
         """
@@ -210,7 +204,7 @@ class HCResults(object):
         :type code: str
         :return:
         """
-        self._call(msg, test_name, code, log_type='exception')
+        self._call(msg, test_name, code, severity=Severities.exception)
 
     def skip(self, msg, test_name=None, code=ErrorCodes.default.error_code):
         """
@@ -223,7 +217,7 @@ class HCResults(object):
         :type code: str
         :return:
         """
-        self._call(msg, test_name, code, log_type='skip')
+        self._call(msg, test_name, code, severity=Severities.skip)
 
     def debug(self, msg, test_name=None, code=ErrorCodes.default.error_code):
         """
@@ -236,20 +230,4 @@ class HCResults(object):
         :type code: str
         :return:
         """
-        self._call(msg, test_name, code, log_type='debug')
-
-    def custom(self, msg, test_name=None, value=None, code=ErrorCodes.default.error_code):
-        """
-        Report a custom log. The value will determine the tag
-        :param msg: Log message for attended run
-        :type msg: str
-        :param test_name: name for monitoring output
-        :type test_name: str
-        :param value: Value added to the log
-        :type value: str
-        :param code: error code
-        :type code: str
-        :return:
-        """
-
-        self._call(msg, test_name, code, log_type='custom', custom_value=value)
+        self._call(msg, test_name, code, severity=Severities.debug)
