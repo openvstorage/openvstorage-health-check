@@ -15,7 +15,20 @@
 # but WITHOUT ANY WARRANTY of any kind.
 
 
+class ErrorCode(object):
+    """
+    Error code class. Every error code is defined by a unique code and provides information and a solution to a problem
+    """
+    def __init__(self, error_code, information, solution):
+        self.error_code = error_code
+        self.information = information
+        self.solution = solution
+
+
 class ErrorCodes(object):
-    default = type('DefaultCode', (), {'error_code': 'HC000', 'information': 'Default code', 'solution': 'No solution'})
+    """
+    Data list class containing all error codes
+    """
+    default = ErrorCode('HC000', 'Default code', 'Default code')  # Used in the start of these error codes. Means no code is in place
     # example_arakoon = type('ArakoonCode', (), {'error_code': 'ARA000', 'information': 'Occurs when arakoon is not running.', 'solution': 'Restart Arakoon'})
     # example_arakoon2 = type('ArakoonCode', (), {'error_code': 'ARA001', 'information': 'Occurs when arakoon is not responding.', 'solution': 'Restart Arakoon'})

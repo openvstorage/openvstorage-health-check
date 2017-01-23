@@ -197,14 +197,13 @@ class OpenvStorageHealthCheck(object):
         """
         result_handler.info('Checking {0} ports'.format(key))
         ip = OpenvStorageHealthCheck.LOCAL_SR.ip
-        for ports in Helper.extra_ports[key]:
-            for port in ports:
-                result_handler.info('Checking port {0} of service {1}.'.format(port, key))
-                result = NetworkHelper.check_port_connection(port, ip)
-                if result:
-                    result_handler.success('Connection successfully established to service {0} on {1}:{2}'.format(key, ip, port), test_name)
-                else:
-                    result_handler.failure('Connection FAILED to service {0} on {1}:{2}'.format(key, ip, port), test_name)
+        for port in Helper.extra_ports[key]:
+            result_handler.info('Checking port {0} of service {1}.'.format(port, key))
+            result = NetworkHelper.check_port_connection(port, ip)
+            if result:
+                result_handler.success('Connection successfully established to service {0} on {1}:{2}'.format(key, ip, port), test_name)
+            else:
+                result_handler.failure('Connection FAILED to service {0} on {1}:{2}'.format(key, ip, port), test_name)
 
     @staticmethod
     @expose_to_cli(MODULE, 'celery-ports-test')
@@ -292,7 +291,7 @@ class OpenvStorageHealthCheck(object):
                 if InitManager.service_running(service_name=service_name, ip=OpenvStorageHealthCheck.LOCAL_SR.ip):
                     logger.success('Service {0} is running!'.format(service_name), test_name)
                 else:
-                    logger.failure('Service {0} is NOT running, please check this.'.format(service_name), test_name)
+                    logger.failure('Service {0} is not running, please check this.'.format(service_name), test_name)
         else:
             logger.failure('Found no LOCAL OVS services', test_name)
 
@@ -432,13 +431,13 @@ class OpenvStorageHealthCheck(object):
 
         # check if there zombie processes
         if len(zombie_processes) == 0:
-            result_handler.success('There are NO zombie processes on this node!', test_name)
+            result_handler.success('There are no zombie processes on this node!', test_name)
         else:
             result_handler.warning('We DETECTED zombie processes on this node: {0}'.format(', '.join(zombie_processes)), test_name)
 
         # check if there dead processes
         if len(dead_processes) == 0:
-            result_handler.success('There are NO dead processes on this node!', 'process_dead')
+            result_handler.success('There are no dead processes on this node!', 'process_dead')
         else:
             result_handler.failure('We DETECTED dead processes on this node: {0}'.format(', '.join(dead_processes)), test_name)
 
@@ -486,16 +485,16 @@ class OpenvStorageHealthCheck(object):
 
             # display discrepancies for vPool
             if len(missing_in_volumedriver) != 0:
-                result_handler.warning('Detected volumes that are MISSING in volumedriver but ARE in ovsdb in vpool: {0} - vdisk guid(s):{1}.'
+                result_handler.warning('Detected volumes that are MISSING in volumedriver but are in ovsdb in vpool: {0} - vdisk guid(s):{1}.'
                                        .format(vp.name, ' '.join(missing_in_volumedriver)), test_name)
             else:
-                result_handler.success('NO discrepancies found for ovsdb in vPool {0}'.format(vp.name), test_name)
+                result_handler.success('No discrepancies found for ovsdb in vPool {0}'.format(vp.name), test_name)
 
             if len(missing_in_model) != 0:
-                result_handler.warning('Detected volumes that are AVAILABLE in volumedriver but ARE NOT in ovsdb in vpool: {0} - vdisk volume id(s):{1}'
+                result_handler.warning('Detected volumes that are AVAILABLE in volumedriver but are not in ovsdb in vpool: {0} - vdisk volume id(s):{1}'
                                        .format(vp.name, ', '.join(missing_in_model)), test_name)
             else:
-                result_handler.success('NO discrepancies found for voldrv in vpool {0}'.format(vp.name), test_name)
+                result_handler.success('No discrepancies found for voldrv in vpool {0}'.format(vp.name), test_name)
 
     @staticmethod
     @expose_to_cli(MODULE, 'verify-rabbitmq-test')

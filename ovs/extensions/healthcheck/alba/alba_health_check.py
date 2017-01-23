@@ -57,7 +57,7 @@ class AlbaHealthCheck(object):
     TEMP_FILE_FETCHED_LOC = '/tmp/ovs-hc-fetched.xml'
 
     @staticmethod
-    def _fetch_available_backends(result_handler):
+    def _fetch_available_backends(result_handler, test_name):
         """
         Fetches the available alba backends
 
@@ -66,7 +66,6 @@ class AlbaHealthCheck(object):
         :return: information about each alba backend
         :rtype: list that consists of dicts
         """
-        test_name = '{0}-get-alba-backends'.format(AlbaHealthCheck.MODULE)
         result = []
         errors_found = 0
         for abl in BackendHelper.get_albabackends():
@@ -92,13 +91,13 @@ class AlbaHealthCheck(object):
                             asd['node_id'] = node_id
                             asd_id = asd.get('asd_id')
                             try:
-                                asd['port'] = Configuration.get('/ovs/alba/asds/{0}/config|port'.format(asd_id))
+                                asd['port'] = Configuration.get('/ovs/alba/asds/{0}/config|port'.format(asd_id), test_name)
                                 disks.append(asd)
                             except NotFoundException as ex:
-                                result_handler.failure('Could not find {0} in Arakoon. Got {1}'.format('/ovs/alba/asds/{0}/config|port'.format(asd_id), str(ex)))
+                                result_handler.failure('Could not find {0} in Arakoon. Got {1}'.format('/ovs/alba/asds/{0}/config|port'.format(asd_id), str(ex)), test_name)
                                 raise
                             except Exception as ex:
-                                result_handler.failure('Could not connect to the Arakoon.')
+                                result_handler.failure('Could not connect to the Arakoon.', test_name)
                                 raise ConnectionFailedException(str(ex))
                 # create result
                 result.append({
@@ -387,7 +386,7 @@ class AlbaHealthCheck(object):
         test_name = '{0}-backend-test'.format(AlbaHealthCheck.MODULE)
         result_handler.info('Checking available ALBA backends.')
         try:
-            alba_backends = AlbaHealthCheck._fetch_available_backends(result_handler)
+            alba_backends = AlbaHealthCheck._fetch_available_backends(result_handler, test_name)
             if len(alba_backends) == 0:
                 return result_handler.skip('No backends found.', test_name)
 
@@ -557,7 +556,7 @@ class AlbaHealthCheck(object):
     @staticmethod
     @expose_to_cli(MODULE, 'proxy-port-test')
     def check_alba_proxy_ports(result_handler):
-        test_name = '{0-proxy-port-test'.format(AlbaHealthCheck.MODULE)
+        test_name = '{0}-proxy-port-test'.format(AlbaHealthCheck.MODULE)
         for service in ServiceHelper.get_local_proxy_services():
             for port in service.ports:
                 ip = service.alba_proxy.storagedriver.storage_ip

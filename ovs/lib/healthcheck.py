@@ -253,5 +253,4 @@ class HealthCheckController(object):
         arguments = sys.argv
         # Remove filename
         del arguments[0]
-        arguments = ['arakoon', 'integrity-test', '--to-json']
         HealthCheckController.run_method(*arguments)
