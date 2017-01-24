@@ -13,6 +13,7 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
+from ovs.extensions.generic.system import System
 from ovs.dal.hybrids.service import Service
 from ovs.dal.lists.servicelist import ServiceList
 
@@ -21,6 +22,8 @@ class ServiceHelper(object):
     """
     A Servicehelper class
     """
+
+    LOCAL_SR = System.get_my_storagerouter()
 
     def __init__(self):
         pass
@@ -33,6 +36,15 @@ class ServiceHelper(object):
         :return:
         """
         return ServiceList.get_services()
+
+    @staticmethod
+    def get_local_services():
+        """
+        Fetches all services run on this node
+        :return: list of all services run on this node
+        :rtype: ovs.dal.lists.datalist.DataList
+        """
+        return (service for service in ServiceHelper.get_services() if service.storagerouter_guid == ServiceHelper.LOCAL_SR.guid)
 
     @staticmethod
     def get_service(service_guid):

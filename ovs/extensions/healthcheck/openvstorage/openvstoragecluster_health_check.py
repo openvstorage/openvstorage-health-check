@@ -204,17 +204,15 @@ class OpenvStorageHealthCheck(object):
         logger.info('Checking PORT CONNECTIONS of OVS & EXTRA services ...', '')
 
         # check ports for OVS services
-        logger.info('Checking OVS ports', '')
-        for sr in ServiceHelper.get_services():
-            if sr.storagerouter_guid == OpenvStorageHealthCheck.LOCAL_SR.guid:
-                for port in sr.ports:
-                    if sr.name.split('_')[0] == 'albaproxy':
-                        storagedriver_id = '{0}{1}'.format(sr.name.split('_')[1], OpenvStorageHealthCheck.LOCAL_ID)
-                        ip = StoragedriverHelper.get_by_storagedriver_id(storagedriver_id).storage_ip
-                        OpenvStorageHealthCheck._is_port_listening(logger, sr.name, port, ip)
-                    else:
-                        OpenvStorageHealthCheck._is_port_listening(logger, sr.name, port)
-
+        logger.info('Checking OVS ports')
+        for sr in ServiceHelper.get_local_services():
+            for port in sr.ports:
+                if sr.name.split('_')[0] == 'albaproxy':
+                    storagedriver_id = "{0}{1}".format(sr.name.split('_')[1], OpenvStorageHealthCheck.MACHINE_ID)
+                    ip = StoragedriverHelper.get_by_storagedriver_id(storagedriver_id).storage_ip
+                    OpenvStorageHealthCheck._is_port_listening(logger, sr.name, port, ip)
+                else:
+                    OpenvStorageHealthCheck._is_port_listening(logger, sr.name, port)
         # check NGINX and memcached
         logger.info('Checking EXTRA ports', '')
         for process, ports in Helper.extra_ports.iteritems():
@@ -222,7 +220,7 @@ class OpenvStorageHealthCheck(object):
                 OpenvStorageHealthCheck._is_port_listening(logger, process, port)
 
         # Check Celery and RabbitMQ
-        logger.info('Checking RabbitMQ/Celery ...', '')
+        logger.info('Checking RabbitMQ/Celery.', '')
         if Helper.get_ovs_type() == 'MASTER':
             pcommand = 'celery inspect ping -b amqp://ovs:0penv5tor4ge@{0}//'.format(OpenvStorageHealthCheck.LOCAL_SR.ip)
             pcel = commands.getoutput(pcommand.format(pcommand)).splitlines()
