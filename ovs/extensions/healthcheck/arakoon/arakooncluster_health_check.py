@@ -103,7 +103,7 @@ class ArakoonHealthCheck(object):
     def check_model_consistency(result_handler):
         """
         Verifies the information in the model
-        :param result_handler:
+        :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
         :return: None
         :rtype: NoneType
@@ -155,6 +155,8 @@ class ArakoonHealthCheck(object):
         Checks all ports of Arakoon nodes (client & server) on the local node
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :return: None
+        :rtype: NoneType
         """
         test_name = '{0}-ports-test'.format(ArakoonHealthCheck.MODULE)
         result_handler.info('Checking PORT CONNECTIONS of arakoon nodes.')

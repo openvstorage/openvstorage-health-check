@@ -53,25 +53,31 @@ class OpenvStorageHealthCheck(object):
     def get_local_settings(result_handler):
         """
         Fetch settings of the local Open vStorage node
-
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :return: local settings of the node
+        :rtype: dict
         """
         test_name = '{0}-local-settings-test'.format(OpenvStorageHealthCheck.MODULE)
         ovs_version = Helper.get_ovs_version()
         result_handler.info('Fetching LOCAL information of node: ')
         # Fetch all details
+        local_settings = {}
         try:
-            result_handler.info('Cluster ID: {0}'.format(Helper.get_cluster_id()))
-            result_handler.info('Hostname: {0}'.format(socket.gethostname()))
-            result_handler.info('Storagerouter ID: {0}'.format(OpenvStorageHealthCheck.LOCAL_ID))
-            result_handler.info('Storagerouter TYPE: {0}'.format(OpenvStorageHealthCheck.LOCAL_SR.node_type))
-            result_handler.info('Environment RELEASE: {0}'.format(ovs_version[0]))
-            result_handler.info('Environment BRANCH: {0}'.format(ovs_version[1].title()))
-            result_handler.info('Environment OS: {0}'.format(Helper.check_os()))
-            result_handler.success('Fetched all local settings', 'local-settings')
+            local_settings = {'cluster_id' : Helper.get_cluster_id(),
+                              'hostname': socket.gethostname(),
+                              'storagerouter_id': OpenvStorageHealthCheck.LOCAL_ID,
+                              'storagerouter_type': OpenvStorageHealthCheck.LOCAL_SR.node_type,
+                              'environment_release': ovs_version[0],
+                              'environment_branch': ovs_version[1].title(),
+                              'environment os': Helper.check_os()}
         except (subprocess.CalledProcessError, NotFoundException, IOError) as ex:
             result_handler.failure('Could not fetch local-settings. Got {0}'.format(ex.message), test_name)
+        else:
+            for key, value in local_settings.iteritems():
+                result_handler.info('{0}: {1}'.format(key.replace('_', ' ').title(), value))
+            result_handler.success('Fetched all local settings', test_name)
+        return local_settings
 
     @staticmethod
     @expose_to_cli(MODULE, 'log-files-test')
@@ -422,7 +428,7 @@ class OpenvStorageHealthCheck(object):
                 # noinspection PyArgumentList
                 voldrv_volume_list = voldrv_client.list_volumes()
             except (ClusterNotReachableException, RuntimeError) as ex:
-                result_handler.failure('Seems like the volumedriver {0} is not running: {1}'.format(vp.name, ex.message), test_name)
+                result_handler.failure('Seems like the volumedriver {0} is not running. Got {1}'.format(vp.name, ex.message), test_name)
                 continue
 
             vdisk_volume_ids = []

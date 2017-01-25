@@ -409,7 +409,7 @@ class AlbaHealthCheck(object):
     # @todo: separate cluster-wide-check
     @staticmethod
     @expose_to_cli(MODULE, 'disk-safety-test')
-    def get_disk_safety(result_handler):
+    def check_disk_safety(result_handler):
         """
         Check safety of every namespace in every backend
         :param result_handler: logging object
@@ -418,7 +418,7 @@ class AlbaHealthCheck(object):
         :rtype: NoneType
         """
         test_name = '{0}-disk-safety-test'.format(AlbaHealthCheck.MODULE)
-        results = AlbaHealthCheck.get_disk_safety_buckets(result_handler)
+        results = AlbaHealthCheck.get_disk_safety(result_handler)
         for backend_name, policies in results.iteritems():
             result_handler.info('Checking disk safety on backend: {0}'.format(backend_name))
             for policy_prefix, policy_details in policies.iteritems():
@@ -437,17 +437,17 @@ class AlbaHealthCheck(object):
                             result_handler.success('The disk safety of {0} namespace(s) is/are totally safe!'.format(len(namespaces)), test_name)
                         elif disk_safety != 0:
                             # avoid failure override
-                            output = ',\n'.join([ns['namespace']+' with '+str(ns['amount_in_bucket'])+'% of its objects' for ns in namespaces])
+                            output = ',\n'.join(['{0} with {1}% of its objects'.format(ns['namespace'], str(ns['amount_in_bucket'])) for ns in namespaces])
                             result_handler.warning('The disk safety of {0} namespace(s) is {1}, max. disk safety is {2}: \n{3}'
                                                    .format(len(namespaces), disk_safety, policy_details['max_disk_safety'], output),
                                                    test_name)
                         else:
                             # @TODO: after x amount of hours in disk safety 0 put in error, else put in warning
-                            output = ',\n'.join([ns['namespace']+' with '+str(ns['amount_in_bucket'])+'% of its objects' for ns in namespaces])
+                            output = ',\n'.join(['{0} with {1}% of its objects'.format(ns['namespace'], str(ns['amount_in_bucket'])) for ns in namespaces])
                             result_handler.failure('The disk safety of {0} namespace(s) is/are ZERO: \n{1}'.format(len(namespaces), output), test_name)
 
     @staticmethod
-    def get_disk_safety_buckets(result_handler):
+    def get_disk_safety(result_handler):
         """
         Fetch safety of every namespace in every backend
         - amount_in_bucket is in %
@@ -486,24 +486,20 @@ class AlbaHealthCheck(object):
                 if not preset['in_use']:
                     continue
                 for policy in preset['policies']:
-                    disk_safety_overview[alba_backend.name][str(policy[0])+','+str(policy[1])] = {'current_disk_safety': {}, 'max_disk_safety': policy[1]}
+                    disk_safety_overview[alba_backend.name]['{0},{1}'.format(str(policy[0]), str(policy[1]))] = {'current_disk_safety': {}, 'max_disk_safety': policy[1]}
 
             # collect namespaces
             for namespace in namespaces:
                 for bucket_safety in namespace['bucket_safety']:
                     # calc safety bucket
-                    bucket = bucket_safety['bucket']
-                    min_disk_safety = bucket[0]
-                    max_disk_safety = bucket[1]
                     calculated_disk_safety = bucket_safety['remaining_safety']
-                    to_be_added_namespace = {'namespace': namespace['namespace'], 'amount_in_bucket': (bucket_safety['count'] / namespace['safety_count'])*100}
-                    if calculated_disk_safety in disk_safety_overview[alba_backend.name][str(min_disk_safety)+','+str(max_disk_safety)]['current_disk_safety']:
-                        disk_safety_overview[alba_backend.name][str(min_disk_safety) + ',' + str(max_disk_safety)][
-                            'current_disk_safety'][calculated_disk_safety].append(to_be_added_namespace)
+                    safety = '{0},{1}'.format(str(bucket_safety['bucket'][0]), str(bucket_safety['bucket'][1]))
+                    current_disk_safety = disk_safety_overview[alba_backend.name][safety]['current_disk_safety']
+                    to_be_added_namespace = {'namespace': namespace['namespace'], 'amount_in_bucket': (bucket_safety['count'] / namespace['safety_count']) * 100}
+                    if calculated_disk_safety in current_disk_safety:
+                        current_disk_safety[calculated_disk_safety].append(to_be_added_namespace)
                     else:
-                        disk_safety_overview[alba_backend.name][str(min_disk_safety) + ',' + str(max_disk_safety)][
-                            'current_disk_safety'][calculated_disk_safety] = [to_be_added_namespace]
-
+                        current_disk_safety[calculated_disk_safety] = [to_be_added_namespace]
         return disk_safety_overview
 
     # @todo: incorporate asd-manager code to check the service

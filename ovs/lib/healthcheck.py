@@ -222,27 +222,32 @@ class HealthCheckController(object):
         unattended = "--unattended" in optional_arguments
         result_handler = HCResults(unattended, to_json)
         executed = False
-        for mod_name, options in obj.iteritems():
-            if not (not module_name or mod_name == module_name):
-                continue
-            for option in options:
-                if not method_name or option['method_name'] == method_name:
-                    mod = imp.load_source(option['module_name'], option['location'])
-                    cl = getattr(mod, option['class'])()
-                    if '--help' in optional_arguments:
-                        print getattr(cl, option['function']).__doc__
-                        return
-                    # Execute method
-                    try:
-                        executed = True
-                        getattr(cl, option['function'])(result_handler)
-                    except Exception as ex:
-                        result_handler.exception('Uncaught exception during exection of {0}.{1}. Got {2}'.format(cl, option['function'], str(ex)))
-                        HealthCheckController.logger.exception('Error during execution of {0}.{1}'.format(cl, option['function']))
+        interrupted = False
+        try:
+            for mod_name, options in obj.iteritems():
+                if not (not module_name or mod_name == module_name):
+                    continue
+                for option in options:
+                    if not method_name or option['method_name'] == method_name:
+                        mod = imp.load_source(option['module_name'], option['location'])
+                        cl = getattr(mod, option['class'])()
+                        if '--help' in optional_arguments:
+                            print getattr(cl, option['function']).__doc__
+                            return
+                        # Execute method
+                        try:
+                            executed = True
+                            getattr(cl, option['function'])(result_handler)
+                        except Exception as ex:
+                            result_handler.exception('Uncaught exception during exection of {0}.{1}. Got {2}'.format(cl, option['function'], str(ex)))
+                            HealthCheckController.logger.exception('Error during execution of {0}.{1}'.format(cl, option['function']))
+        except KeyboardInterrupt:
+            interrupted = True
+            result_handler.warning('Caught keyboard interrupt. Output may be incomplete!')
         # Get results
         if executed is True:
             return HealthCheckController.get_results(result_handler, module_name, method_name)
-        else:
+        elif interrupted is False:
             print "Found no methods for module {0}".format(module_name)
             return HealthCheckController.print_help()
 
