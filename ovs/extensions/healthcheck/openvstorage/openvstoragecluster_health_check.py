@@ -26,16 +26,16 @@ from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.decorators import expose_to_cli
 from ovs.extensions.healthcheck.helpers.filesystem import FilesystemHelper
 from ovs.extensions.healthcheck.helpers.helper import Helper
-from ovs.extensions.healthcheck.helpers.init_manager import InitManager
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.helpers.rabbitmq import RabbitMQ
 from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
 from ovs.extensions.packages.package import PackageManager
+from ovs.extensions.services.service import ServiceManager
 from ovs.lib.storagerouter import StorageRouterController
-from volumedriver.storagerouter import storagerouterclient as src
-from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException
 from timeout_decorator import timeout
 from timeout_decorator.timeout_decorator import TimeoutError
+from volumedriver.storagerouter import storagerouterclient as src
+from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException
 
 
 class OpenvStorageHealthCheck(object):
@@ -75,93 +75,44 @@ class OpenvStorageHealthCheck(object):
 
     @staticmethod
     @expose_to_cli(MODULE, 'log-files-test')
-    def check_size_of_log_files(result_handler):
+    def check_size_of_log_files(result_handler, max_log_size=Helper.max_log_size):
         """
         Checks the size of the initialized log files
-
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :param max_log_size: maximum log size of a log file (in MB)
+        :type max_log_size: double
+        :return: None
+        :rtype: NoneType
         """
-        test_name = '{0}-log-files-test'.format(OpenvStorageHealthCheck.MODULE)
+        def get_log_files_by_path(start_path, recursive=True):
+            files_to_check = []
+            for entry in os.listdir(start_path):
+                entry_path = '{0}/{1}'.format(start_path, entry)
+                if os.path.isdir(entry_path) and recursive is True:
+                    files_to_check.extend(get_log_files_by_path(entry_path))
+                elif entry.endswith('.log'):
+                    files_to_check.append(entry_path)
+            return files_to_check
 
-        collection = []
+        test_name = '{0}-log-files-test'.format(OpenvStorageHealthCheck.MODULE)
         good_size = []
         too_big = []
+        result_handler.info('Checking if log files their size is not bigger than {0} MB: '.format(max_log_size))
 
-        result_handler.info('Checking if log files their size is not bigger than {0} MB: '.format(Helper.max_log_size))
-
-        # collect log files
-        for log, settings in Helper.check_logs.iteritems():
-            if settings.get('type') != 'dir':
-                # check if filename exists
-                if os.path.exists(log):
-                    collection.append(log)
-                continue
-            if os.path.isdir(log) is False:
-                continue
-            files = OpenvStorageHealthCheck._list_logs_in_directory(log)
-            for filename in files:
-                if settings.get('prefix'):
-                    for prefix in list(settings.get('prefix')):
-                        if prefix in filename:
-                            collection.append(filename)
-                else:
-                    collection.append(filename)
-
-            if not settings.get('contains_nested'):
-                continue
-            nested_dirs = OpenvStorageHealthCheck._list_dirs_in_directory(log)
-            for dirname in nested_dirs:
-                nested_files = OpenvStorageHealthCheck._list_logs_in_directory(log+'/'+dirname)
-                # check size of log files
-                for nested_file in nested_files:
-                    if settings.get('prefix'):
-                        for prefix in list(settings.get('prefix')):
-                            if prefix in nested_file:
-                                collection.append(nested_file)
-                    else:
-                        collection.append(nested_file)
-
-        # process log files
-        for c_files in collection:
+        for c_files in get_log_files_by_path('/var/log/'):
             # check if logfile is larger than max_size
-            if os.stat(c_files).st_size < 1024000 * Helper.max_log_size:
+            if os.stat(c_files).st_size < 1024 ** 2 * max_log_size:
                 good_size.append(c_files)
-                result_handler.success('Logfile {0} has a GOOD size!'.format(c_files), test_name)
+                result_handler.success('Logfile {0} size is fine!'.format(c_files), test_name)
             else:
                 too_big.append(c_files)
-                result_handler.failure('Logfile {0} is a BIG logfile!'.format(c_files), test_name)
+                result_handler.warning('Logfile {0} is larger than {0} MB!'.format(c_files, max_log_size), test_name)
 
         if len(too_big) != 0:
-            result_handler.failure('Some log files are TOO BIG, please check these files {0}!'.format(', '.join(too_big)), test_name)
+            result_handler.failure('The following log files are too big: {0}.'.format(', '.join(too_big)), test_name)
         else:
-            result_handler.success('ALL log files are ok!', test_name)
-
-    @staticmethod
-    def _list_logs_in_directory(pwd):
-        """
-        lists the log files in a certain directory
-
-        :param pwd: absolute location of a directory (e.g. /var/log)
-        :type pwd: str
-        :return: list of files
-        :rtype: list
-        """
-
-        return glob.glob('{0}/*.log'.format(pwd))
-
-    @staticmethod
-    def _list_dirs_in_directory(pwd):
-        """
-        lists the directories in a certain directory
-
-        :param pwd: absolute location of a directory (e.g. /var/log)
-        :type pwd: str
-        :return: list of directories
-        :rtype: list
-        """
-
-        return next(os.walk(pwd))[1]
+            result_handler.success('All log files are ok!', test_name)
 
     @staticmethod
     @expose_to_cli('ovs', 'nginx-ports-test')
@@ -171,6 +122,7 @@ class OpenvStorageHealthCheck(object):
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
         :return: None
+        :rtype: NoneType
         """
         return OpenvStorageHealthCheck._check_extra_ports(result_handler, 'nginx', '{0}-nginx-ports-test'.format(OpenvStorageHealthCheck.MODULE))
 
@@ -182,6 +134,7 @@ class OpenvStorageHealthCheck(object):
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
         :return: None
+        :rtype: NoneType
         """
         return OpenvStorageHealthCheck._check_extra_ports(result_handler, 'memcached', '{0}-memcached-ports-test'.format(OpenvStorageHealthCheck.MODULE))
 
@@ -194,9 +147,12 @@ class OpenvStorageHealthCheck(object):
         :param key: check all ports for this key
         :type key: string
         :return: None
+        :rtype: NoneType
         """
         result_handler.info('Checking {0} ports'.format(key))
         ip = OpenvStorageHealthCheck.LOCAL_SR.ip
+        if key not in Helper.extra_ports:
+            raise RuntimeError('Settings.json is incorrect! The extra ports to check do not have {0}'.format(key))
         for port in Helper.extra_ports[key]:
             result_handler.info('Checking port {0} of service {1}.'.format(port, key))
             result = NetworkHelper.check_port_connection(port, ip)
@@ -210,17 +166,15 @@ class OpenvStorageHealthCheck(object):
     def check_rabbitmq_ports(result_handler):
         """
         Checks all ports of Open vStorage components rabbitMQ and celery
-
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
-        :return: True if successful; False it doesn't work
-        :rtype: bool
+        :return: None
+        :rtype: NoneType
         """
         test_name = '{0}-celery-ports-test'.format(OpenvStorageHealthCheck.MODULE)
         # Check Celery and RabbitMQ
         if Helper.get_ovs_type() != 'MASTER':
             result_handler.skip('RabbitMQ is not running/active on this server!', 'port_celery')
-            return True
         result_handler.info('Checking Celery.')
         from errno import errorcode
         try:
@@ -229,10 +183,8 @@ class OpenvStorageHealthCheck(object):
             stats = inspect().stats()
             if stats:
                 result_handler.success('Successfully connected to Celery on all nodes.', test_name)
-                return True
             else:
                 result_handler.failure('No running Celery workers were found.', test_name)
-                return False
         except IOError as ex:
             msg = 'Could not connect to Celery. Got {0}.'.format(ex)
             if len(ex.args) > 0 and errorcode.get(ex.args[0]) == 'ECONNREFUSED':
@@ -246,9 +198,10 @@ class OpenvStorageHealthCheck(object):
     def check_ovs_packages(result_handler):
         """
         Checks the availability of packages for Open vStorage
-
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :return: None
+        :rtype: NoneType
         """
         test_name = '{0}-packages_test'.format(OpenvStorageHealthCheck.MODULE)
         result_handler.info('Checking OVS packages: ', 'check_ovs_packages')
@@ -279,21 +232,22 @@ class OpenvStorageHealthCheck(object):
     def check_ovs_processes(logger):
         """
         Checks the availability of processes for Open vStorage
-
         :param logger: logging object
         :type logger: ovs.extensions.healthcheck.result.HCResults
+        :return: None
+        :rtype: NoneType
         """
         test_name = '{0}-processes-test'.format(OpenvStorageHealthCheck.MODULE)
-        logger.info('Checking LOCAL OVS services: ', test_name)
-        services = InitManager.get_local_services(prefix='ovs', ip=OpenvStorageHealthCheck.LOCAL_SR.ip)
-        if len(services) > 0:
-            for service_name in services:
-                if InitManager.service_running(service_name=service_name, ip=OpenvStorageHealthCheck.LOCAL_SR.ip):
-                    logger.success('Service {0} is running!'.format(service_name), test_name)
-                else:
-                    logger.failure('Service {0} is not running, please check this.'.format(service_name), test_name)
-        else:
-            logger.failure('Found no LOCAL OVS services', test_name)
+        logger.info('Checking local ovs services.')
+        client = SSHClient(OpenvStorageHealthCheck.LOCAL_SR)
+        services = [service for service in ServiceManager.list_services(client=client) if service.startswith(OpenvStorageHealthCheck.MODULE)]
+        if len(services) == 0:
+            logger.warning('Found no local ovs services.', test_name)
+        for service_name in services:
+            if ServiceManager.get_service_status(service_name, client)[0] is True:
+                logger.success('Service {0} is running!'.format(service_name), test_name)
+            else:
+                logger.failure('Service {0} is not running, please check this.'.format(service_name), test_name)
 
     @staticmethod
     @timeout(CELERY_CHECK_TIME)
@@ -308,7 +262,6 @@ class OpenvStorageHealthCheck(object):
             obj = StorageRouterController.get_support_info.s(guid).apply_async(routing_key='sr.{0}'.format(machine_id)).get()
         except TimeoutError as ex:
             raise TimeoutError('{0}: Process is taking to long!'.format(ex.value))
-
         if obj:
             return True
         else:
@@ -322,8 +275,8 @@ class OpenvStorageHealthCheck(object):
 
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
-        :return: True if successful else False
-        :rtype: bool
+        :return: None
+        :rtype: NoneType
         """
         test_name = '{0}-workers-test'.format(OpenvStorageHealthCheck.MODULE)
         result_handler.info('Checking if OVS-WORKERS are running smoothly: ')
@@ -333,12 +286,10 @@ class OpenvStorageHealthCheck(object):
             # basic celery check
             OpenvStorageHealthCheck._check_celery()
             result_handler.success('The OVS-WORKERS are working smoothly!', test_name)
-            return True
         except TimeoutError:
             # apparently the basic check failed, so we are going crazy
             result_handler.failure('The test timed out after {0}s! Is RabbitMQ and ovs-workers running?'.format(OpenvStorageHealthCheck.CELERY_CHECK_TIME),
                                    test_name)
-            return False
         except Exception as ex:
             result_handler.failure('The celery check has failed with {0}'.format(str(ex)), test_name)
             return False
@@ -351,6 +302,8 @@ class OpenvStorageHealthCheck(object):
 
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :return: None
+        :rtype: NoneType
         """
         test_name = '{0}-directories-test'.format(OpenvStorageHealthCheck.MODULE)
         result_handler.info('Checking if OWNERS are set correctly on certain maps: ')
@@ -388,8 +341,8 @@ class OpenvStorageHealthCheck(object):
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
         :param fqdn: the absolute pathname of the file
         :type fqdn: str
-        :return: True if the DNS resolving works; False it doesn't work
-        :rtype: bool
+        :return: None
+        :rtype: NoneType
         """
         test_name = '{0}-dns-test'.format(OpenvStorageHealthCheck.MODULE)
         result_handler.info('Checking DNS resolving: ')
@@ -402,12 +355,13 @@ class OpenvStorageHealthCheck(object):
 
     @staticmethod
     @expose_to_cli(MODULE, 'zombie-processes-test')
-    def get_zombied_and_dead_processes(result_handler):
+    def check_zombied_and_dead_processes(result_handler):
         """
         Finds zombie or dead processes on a local machine
-
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :return: None
+        :rtype: NoneType
         """
         test_name = '{0}-zombies-processes-test'.format(OpenvStorageHealthCheck.MODULE)
 
@@ -446,9 +400,10 @@ class OpenvStorageHealthCheck(object):
     def check_model_consistency(result_handler):
         """
         Checks if the model consistency of OVSDB vs. VOLUMEDRIVER and does a preliminary check on RABBITMQ
-
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :return: None
+        :rtype: NoneType
         """
         test_name = '{0}-model-test'.format(OpenvStorageHealthCheck.MODULE)
         result_handler.info('Checking model consistency: ')
@@ -503,6 +458,8 @@ class OpenvStorageHealthCheck(object):
         Verify rabbitmq
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :return: None
+        :rtype: NoneType
         """
         test_name = '{0}-verify-rabbitmq-test'.format(OpenvStorageHealthCheck.MODULE)
         # RabbitMQ check: cluster verification

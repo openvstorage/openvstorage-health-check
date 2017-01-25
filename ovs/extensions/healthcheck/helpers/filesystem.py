@@ -24,33 +24,28 @@ class FilesystemHelper(object):
     def get_owner_of_file(filename):
         """
         Gets the OWNER of a certain file
-
         :param filename: the absolute pathname of the file
         :type filename: str
         :return: owner name of a file
         :rtype: str
         """
-
         return getpwuid(os.stat(filename).st_uid).pw_name
 
     @staticmethod
     def get_group_of_file(filename):
         """
         Gets the GROUP of a certain file
-
         :param filename: the absolute pathname of the file
         :type filename: str
         :return: group of a file
         :rtype: str
         """
-
         return grp.getgrgid(os.stat(filename).st_gid).gr_name
 
     @staticmethod
     def check_rights_of_file(filename, rights):
         """
         Checks if there are RIGHTS mistakes in a certain file
-
         :param filename: the absolute pathname of the file
         :type filename: str
         :param rights: the correct rights that the file needs to have
@@ -58,7 +53,6 @@ class FilesystemHelper(object):
         :return: True if the rights are correct; False if they are wrong
         :rtype: bool
         """
-
         # fetch file to start compare
         st = os.stat(filename)
         return oct(st.st_mode)[-3:] == str(rights)

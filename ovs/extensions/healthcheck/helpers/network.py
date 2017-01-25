@@ -24,7 +24,6 @@ class NetworkHelper(object):
     def check_port_connection(port_number, ip):
         """
         Checks the port connection on a IP address
-
         :param port_number: Port number of a service that is running on the local machine. (Public or loopback)
         :type port_number: int
         :param ip: ip address to try
@@ -32,7 +31,6 @@ class NetworkHelper(object):
         :return: True if the port is available; False if the port is NOT available
         :rtype: bool
         """
-
         # check if port is open
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         result = sock.connect_ex((ip, int(port_number)))
@@ -50,6 +48,11 @@ class NetworkHelper(object):
 
     @staticmethod
     def _get_local_ip_addresses():
+        """
+        Fetches all ips adresses configured on this node
+        :return: all local ip adresses
+        :rtype: list
+        """
         cmd = "ip a | grep 'inet ' | sed 's/\s\s*/ /g' | cut -d ' ' -f 3 | cut -d '/' -f 1 "
         if "|" in cmd:
             cmd_parts = cmd.split('|')

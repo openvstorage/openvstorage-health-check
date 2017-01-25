@@ -46,11 +46,10 @@ class VolumedriverHealthCheck(object):
     def check_dtl(result_handler):
         """
         Checks the dtl for all vdisks on the local node
-
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.results.HCResults
-        :return: nothing
-        :rtype: None
+        :return: None
+        :rtype: NoneType
         """
         test_name = '{0}-dtl-test'.format(VolumedriverHealthCheck.MODULE)
         # Fetch vdisks hosted on this machine
@@ -79,7 +78,6 @@ class VolumedriverHealthCheck(object):
     def _check_volumedriver(vdisk_name, storagedriver_guid, logger, vdisk_size=VDISK_CHECK_SIZE):
         """
         Checks if the volumedriver can create a new vdisk
-
         :param vdisk_name: name of a vdisk (e.g. test.raw)
         :type vdisk_name: str
         :param storagedriver_guid: guid of a storagedriver
@@ -107,7 +105,6 @@ class VolumedriverHealthCheck(object):
     def _check_volumedriver_remove(vpool_name, vdisk_name, present=True):
         """
         Remove a vdisk from a vpool
-
         :param vdisk_name: name of a vdisk (e.g. test.raw)
         :type vdisk_name: str
         :param vpool_name: name of a vpool
@@ -134,7 +131,6 @@ class VolumedriverHealthCheck(object):
     def check_volumedrivers(result_handler):
         """
         Checks if the VOLUMEDRIVERS work on a local machine (compatible with multiple vPools)
-
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.results.HCResults
         :return: None
@@ -169,8 +165,7 @@ class VolumedriverHealthCheck(object):
                         except Exception as ex:
                             raise RuntimeError('Could not delete the created volume. Got {0}'.format(str(ex)))
                         # Working at this point
-                        result_handler.success('Volumedriver of vPool {0} is working fine!'.format(vp.name),
-                                               'volumedriver_{0}'.format(vp.name))
+                        result_handler.success('Volumedriver of vPool {0} is working fine!'.format(vp.name), test_name)
                     else:
                         # not working
                         result_handler.failure('Something went wrong during vdisk creation on vpool {0}.'.format(vp.name), test_name)
@@ -199,16 +194,13 @@ class VolumedriverHealthCheck(object):
     def check_for_halted_volumes(logger):
         """
         Checks for halted volumes on a single or multiple vPools
-
         :param logger: logging object
         :type logger: ovs.extensions.healthcheck.results.HCResults
         :return: None
         :rtype: NoneType
         """
         test_name = '{0}-halted-volumes-test'.format(VolumedriverHealthCheck.MODULE)
-
         logger.info('Checking for halted volumes.')
-
         vpools = VPoolHelper.get_vpools()
 
         if len(vpools) == 0:
@@ -267,7 +259,6 @@ class VolumedriverHealthCheck(object):
     def _info_volume(voldrv_client, volume_name):
         """
         Fetch the information from a volume through the volumedriver client
-
         :param voldrv_client: client of a volumedriver
         :type voldrv_client: volumedriver.storagerouter.storagerouterclient.LocalStorageRouterClient
         :param volume_name: name of a volume in the volumedriver
@@ -284,7 +275,6 @@ class VolumedriverHealthCheck(object):
         """
         Async method to checks if a FILEDRIVER `touch` works on a vpool
         Always try to check if the file exists after performing this method
-
         :param vp_name: name of the vpool
         :type vp_name: str
         :param test_name: name of the test file (e.g. `ovs-healthcheck-LOCAL_ID`)
@@ -301,7 +291,6 @@ class VolumedriverHealthCheck(object):
         """
         Async method to checks if a FILEDRIVER `remove` works on a vpool
         Always try to check if the file exists after performing this method
-
         :param vp_name: name of the vpool
         :type vp_name: str
         :return: True if succeeded, False if failed
@@ -316,12 +305,10 @@ class VolumedriverHealthCheck(object):
     def check_filedrivers(logger):
         """
         Checks if the file drivers work on a local machine (compatible with multiple vPools)
-
         :param logger: logging object
         :type logger: ovs.extensions.healthcheck.results.HCResults
         """
         test_name = '{0}-filedrivers-test'.format(VolumedriverHealthCheck.MODULE)
-
         logger.info('Checking file drivers.')
 
         vpools = VPoolHelper.get_vpools()

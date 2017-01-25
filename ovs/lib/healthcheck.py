@@ -48,7 +48,7 @@ class HealthCheckController(object):
         :rtype: dict
         """
         recap_executer = 'Health Check'
-        if (module_name and method_name) is not None:
+        if module_name and method_name:
             recap_executer = '{0} {1}'.format(module_name, method_name)
 
         result = result_handler.get_results()
@@ -234,11 +234,11 @@ class HealthCheckController(object):
                         return
                     # Execute method
                     try:
-                        getattr(cl, option['function'])(result_handler)
                         executed = True
-                    except:
+                        getattr(cl, option['function'])(result_handler)
+                    except Exception as ex:
+                        result_handler.exception('Uncaught exception during exection of {0}.{1}. Got {2}'.format(cl, option['function'], str(ex)))
                         HealthCheckController.logger.exception('Error during execution of {0}.{1}'.format(cl, option['function']))
-                        raise
         # Get results
         if executed is True:
             return HealthCheckController.get_results(result_handler, module_name, method_name)

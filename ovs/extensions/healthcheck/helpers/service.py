@@ -85,6 +85,7 @@ class ServiceHelper(object):
                                       ('storagerouter_guid', DataList.operator.EQUALS, ServiceHelper.LOCAL_SR.guid),
                                       ('type.name', DataList.operator.EQUALS, ServiceType.SERVICE_TYPES.ALBA_MGR)
                                   ]})
+
     @staticmethod
     def get_local_voldr_services():
         """

@@ -47,7 +47,6 @@ class Helper(object):
     extra_ports = settings["healthcheck"]["extra_ports"]
     rights_dirs = settings["healthcheck"]["rights_dirs"]
     owners_files = settings["healthcheck"]["owners_files"]
-    check_logs = settings["healthcheck"]["check_logs"]
     max_hours_zero_disk_safety = settings["healthcheck"]["max_hours_zero_disk_safety"]
 
     @staticmethod
@@ -67,7 +66,6 @@ class Helper(object):
     def get_ovs_version():
         """
         Gets the RELEASE & BRANCH of the Open vStorage cluster
-
         :return: RELEASE & BRANCH of openvstorage cluster
         :rtype: tuple
         """
@@ -84,7 +82,6 @@ class Helper(object):
     def get_cluster_id():
         """
         Gets the cluster ID of the Open vStorage cluster
-
         :return: cluster id of openvstorage cluster
         :rtype: str
         """
@@ -108,16 +105,8 @@ class Helper(object):
     def check_os():
         """
         Fetches the OS description
-
         :return: OS description
         :rtype: str
         """
-
         return subprocess.check_output("cat /etc/lsb-release | grep DISTRIB_DESCRIPTION | "
                                        "cut -d '=' -f 2 | sed 's/\"//g'", shell=True).strip()
-
-
-class InitManagerSupported(object):
-
-    INIT = "init"
-    SYSTEMD = "systemd"
