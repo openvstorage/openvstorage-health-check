@@ -19,9 +19,7 @@
 """
 Helper module
 """
-
 import json
-import socket
 import subprocess
 from ovs.extensions.generic.system import System
 from ovs.extensions.generic.sshclient import SSHClient

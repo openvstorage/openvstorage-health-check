@@ -16,7 +16,6 @@
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
 import os
-import glob
 import psutil
 import socket
 import subprocess
@@ -64,7 +63,7 @@ class OpenvStorageHealthCheck(object):
         # Fetch all details
         local_settings = {}
         try:
-            local_settings = {'cluster_id' : Helper.get_cluster_id(),
+            local_settings = {'cluster_id': Helper.get_cluster_id(),
                               'hostname': socket.gethostname(),
                               'storagerouter_id': OpenvStorageHealthCheck.LOCAL_ID,
                               'storagerouter_type': OpenvStorageHealthCheck.LOCAL_SR.node_type,
