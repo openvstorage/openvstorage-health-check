@@ -64,6 +64,33 @@ class HCResults(object):
     """
     Open vStorage Log Handler
     """
+
+    class HCResultCollector(object):
+        """
+        Result collector object. Forwards all calls to the HCResults instances stored within
+        Usage is to keep the HCResults unmodified while adjusting the test name for every test
+        """
+        def __init__(self, result, test_name):
+            """
+            Initialize this subclass
+            :param result: Instance of HCResults
+            :type result: HCResults
+            :param test_name: test name to be added to the results
+            :type test_name: str
+            """
+            self._result = result
+            self._test_name = test_name
+
+        def __getattr__(self, item):
+            """
+            Get attribute. This method should point to the method of the parent (HCResults instance)
+            :param item: item to get (method from HCResults)
+            :type item: str
+            :return: method of HCResults
+            :rtype: method
+            """
+            return lambda *args, **kwargs: getattr(self._result, item)(test_name=self._test_name, *args, **kwargs)
+
     # Statics
     MODULE = "helper"
     # Log types that need to be replaced before logging to file
@@ -94,12 +121,13 @@ class HCResults(object):
         # Result of healthcheck in dict form
         self.result_dict = {}
 
-    def _call(self, message, test_name, code, severity):
+    def _call(self, add_to_result, message, code, severity, test_name=''):
         """
-        Process a message with a certain short test_name and type error message
+        Process a message with a certain short _test_name and type error message
         :param message: Log message for attended run
         :type message: str
         :param test_name: name for monitoring output
+        :type test_name: str
         :param code: error code
         :type code: str
         :param severity: Severity object
@@ -107,9 +135,8 @@ class HCResults(object):
         :return:
         """
         print_value = severity.print_value
-        if test_name is not None:
+        if add_to_result is True and test_name:
             if severity.value != -1:
-                # Enable custom error type:
                 if test_name not in self.result_dict:
                     empty_messages = sorted([(sev.type, []) for sev in Severities.get_severities() if sev.value != -1])
                     # noinspection PyArgumentList
@@ -141,93 +168,93 @@ class HCResults(object):
             print json.dumps(self.result_dict, indent=4)
         return self.result_dict
 
-    def failure(self, msg, test_name=None, code=ErrorCodes.default.error_code):
+    def failure(self, msg, add_to_result=True, code=ErrorCodes.default.error_code, **kwargs):
         """
         Report a failure log
         :param msg: Log message for attended run
         :type msg: str
-        :param test_name: name for monitoring output
-        :type test_name: str
+        :param add_to_result: name for monitoring output
+        :type add_to_result: bool
         :param code: error code
         :type code: str
         :return:
         """
-        self._call(msg, test_name, code, severity=Severities.error)
+        self._call(message=msg, add_to_result=add_to_result, code=code, severity=Severities.error, **kwargs)
 
-    def success(self, msg, test_name=None, code=ErrorCodes.default.error_code):
+    def success(self, msg, add_to_result=True, code=ErrorCodes.default.error_code, **kwargs):
         """
         Report a success log
         :param msg: Log message for attended run
         :type msg: str
-        :param test_name: name for monitoring output
-        :type test_name: str
+        :param add_to_result: name for monitoring output
+        :type add_to_result: bool
         :param code: error code
         :type code: str
         :return:
         """
-        self._call(msg, test_name, code, severity=Severities.success)
+        self._call(message=msg, add_to_result=add_to_result, code=code, severity=Severities.success, **kwargs)
 
-    def warning(self, msg, test_name=None, code=ErrorCodes.default.error_code):
+    def warning(self, msg, add_to_result=True, code=ErrorCodes.default.error_code, **kwargs):
         """
         Report a warning log
         :param msg: Log message for attended run
         :type msg: str
-        :param test_name: name for monitoring output
-        :type test_name: str
+        :param add_to_result: name for monitoring output
+        :type add_to_result: bool
         :param code: error code
         :type code: str
         :return:
         """
-        self._call(msg, test_name, code, severity=Severities.warning)
+        self._call(message=msg, add_to_result=add_to_result, code=code, severity=Severities.warning, **kwargs)
 
-    def info(self, msg, test_name=None, code=ErrorCodes.default.error_code):
+    def info(self, msg, add_to_result=True, code=ErrorCodes.default.error_code, **kwargs):
         """
         Report a info log
         :param msg: Log message for attended run
         :type msg: str
-        :param test_name: name for monitoring output
-        :type test_name: str
+        :param add_to_result: name for monitoring output
+        :type add_to_result: bool
         :param code: error code
         :type code: str
         :return:
         """
-        self._call(msg, test_name, code, severity=Severities.info)
+        self._call(message=msg, add_to_result=add_to_result, code=code, severity=Severities.info, **kwargs)
 
-    def exception(self, msg, test_name=None, code=ErrorCodes.default.error_code):
+    def exception(self, msg, add_to_result=True, code=ErrorCodes.default.error_code, **kwargs):
         """
         Report a exception log
         :param msg: Log message for attended run
         :type msg: str
-        :param test_name: name for monitoring output
-        :type test_name: str
+        :param add_to_result: name for monitoring output
+        :type add_to_result: bool
         :param code: error code
         :type code: str
         :return:
         """
-        self._call(msg, test_name, code, severity=Severities.exception)
+        self._call(message=msg, add_to_result=add_to_result, code=code, severity=Severities.exception, **kwargs)
 
-    def skip(self, msg, test_name=None, code=ErrorCodes.default.error_code):
+    def skip(self, msg, add_to_result=True, code=ErrorCodes.default.error_code,  **kwargs):
         """
         Report a skipped log
         :param msg: Log message for attended run
         :type msg: str
-        :param test_name: name for monitoring output
-        :type test_name: str
+        :param add_to_result: name for monitoring output
+        :type add_to_result: bool
         :param code: error code
         :type code: str
         :return:
         """
-        self._call(msg, test_name, code, severity=Severities.skip)
+        self._call(message=msg, add_to_result=add_to_result, code=code, severity=Severities.skip, **kwargs)
 
-    def debug(self, msg, test_name=None, code=ErrorCodes.default.error_code):
+    def debug(self, msg, add_to_result=True, code=ErrorCodes.default.error_code, **kwargs):
         """
         Report a debug log
         :param msg: Log message for attended run
         :type msg: str
-        :param test_name: name for monitoring output
-        :type test_name: str
+        :param add_to_result: name for monitoring output
+        :type add_to_result: bool
         :param code: error code
         :type code: str
         :return:
         """
-        self._call(msg, test_name, code, severity=Severities.debug)
+        self._call(message=msg, add_to_result=add_to_result, code=code, severity=Severities.debug, **kwargs)
