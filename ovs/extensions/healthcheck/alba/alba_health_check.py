@@ -120,17 +120,12 @@ class AlbaHealthCheck(object):
                                 AlbaCLI.run(command='proxy-create-namespace',
                                             named_params={'host': ip, 'port': service.ports[0]},
                                             extra_params=[namespace_key, preset_name])
-                            except AlbaException as ex:
-                                # @TODO remove check when the issue has been that blocks uploads
-                                # after namespaces are created
-                                # linked ticket: https://github.com/openvstorage/alba/issues/427
-                                if 'Proxy exception: Proxy_protocol.Protocol.Error.NamespaceAlreadyExists' in str(ex):
-                                    result_handler.skip('Namespace {0} already exists.'.format(namespace_key))
-                                else:
-                                    raise
+                                result_handler.success('Namespace successfully created on proxy {0} with preset {1}!'.format(service.name, preset_name))
+                            except AlbaException:
+                                raise
                             namespace_info = AlbaCLI.run(command='show-namespace', config=abm_config, extra_params=[namespace_key])
                             Toolbox.verify_required_params(required_params=namespace_params, actual_params=namespace_info)
-                            result_handler.success('Namespace successfully fetched on proxy {0}with preset {1}!'.format(service.name, preset_name))
+                            result_handler.success('Namespace successfully fetched on proxy {0} with preset {1}!'.format(service.name, preset_name))
 
                             # Put test object to given dir
                             with open(AlbaHealthCheck.TEMP_FILE_LOC, 'wb') as output_file:
@@ -164,11 +159,7 @@ class AlbaHealthCheck(object):
                                                .format(namespace_key, service.name, preset_name, ex))
                     except AlbaException as ex:
                         if ex.alba_command == 'proxy-create-namespace':
-                            # @TODO uncomment when the issue has been that blocks uploads
-                            # after namespaces are created
-                            # linked ticket: https://github.com/openvstorage/alba/issues/427
-                            # Should fail as we do not cleanup
-                            result_handler.warning('Create namespace has failed with {0} on namespace {1} with proxy {2} with preset {3}'
+                            result_handler.failure('Create namespace has failed with {0} on namespace {1} with proxy {2} with preset {3}'
                                                    .format(str(ex), namespace_key, service.name, preset_name))
                         elif ex.alba_command == 'show-namespace':
                             result_handler.failure('Show namespace has failed with {0} on namespace {1} with proxy {2} with preset {3}'
@@ -199,14 +190,8 @@ class AlbaHealthCheck(object):
                             subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC)], stdout=fnull,
                                             stderr=subprocess.STDOUT)
 
-                            # @TODO uncomment when the issue has been that blocks uploads
-                            # after namespaces are created
-                            # linked ticket: https://github.com/openvstorage/alba/issues/427
-                            # # Remove namespace afterwards
-                            # result_handler.info('Deleting namespace '{0}'.'.format(namespace_key))
-                            #     AlbaCLI.run(command='proxy-delete-namespace',
-                            #                 named_params={'host': ip, 'port': service.ports[0]},
-                            #                 extra_params=[namespace_key])
+                            result_handler.info('Deleting namespace {0}.'.format(namespace_key))
+                            AlbaCLI.run(command='proxy-delete-namespace', named_params={'host': ip, 'port': service.ports[0]}, extra_params=[namespace_key])
                         except subprocess.CalledProcessError:
                             raise
                         except AlbaException:

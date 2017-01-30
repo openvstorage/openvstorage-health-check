@@ -18,6 +18,7 @@ import os
 import inspect
 from datetime import datetime, timedelta
 from ovs.extensions.healthcheck.result import HCResults
+from ovs.extensions.healthcheck.helpers.helper import Helper
 from ovs.extensions.storage.volatilefactory import VolatileFactory
 from ovs.log.log_handler import LogHandler
 
@@ -244,6 +245,8 @@ class HealthCheckCLIRunner(CLIRunner):
             HealthCheckCLIRunner.print_help(found_method_pointers)
             return
         try:
+            result_handler.info('Starting OpenvStorage Healthcheck version {0}'.format(Helper.get_healthcheck_version()))
+            result_handler.info("======================")
             for found_method in found_method_pointers:
                 test_name = '{0}-{1}'.format(found_method.expose_to_cli['module_name'], found_method.expose_to_cli['method_name'])
                 found_method(result_handler.HCResultCollector(result=result_handler, test_name=test_name))
