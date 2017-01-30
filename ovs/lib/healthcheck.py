@@ -23,5 +23,5 @@ if __name__ == '__main__':
     arguments = sys.argv
     # Remove filename
     del arguments[0]
-    # arguments = ['ovs', 'local-settings-test', '--to-json']
+    # arguments = ['X', 'proxy-port-test']
     HealthCheckCLIRunner.run_method(*arguments)

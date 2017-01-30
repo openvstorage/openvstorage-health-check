@@ -30,7 +30,7 @@ from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, 
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.generic.filemutex import file_mutex
 from ovs.extensions.generic.system import System
-from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli
+from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
 from ovs.extensions.healthcheck.helpers.storagerouter import StoragerouterHelper
@@ -99,7 +99,7 @@ class ArakoonHealthCheck(object):
         return cluster_results
 
     @staticmethod
-    @expose_to_cli('arakoon', 'consistency-test')
+    @expose_to_cli('arakoon', 'consistency-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_model_consistency(result_handler):
         """
         Verifies the information in the model
@@ -147,7 +147,7 @@ class ArakoonHealthCheck(object):
 
     # @todo: separate cluster-wide-check
     @staticmethod
-    @expose_to_cli('arakoon', 'ports-test')
+    @expose_to_cli('arakoon', 'ports-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_local_arakoon_ports(result_handler):
         """
         Checks all ports of Arakoon nodes (client & server) on the local node
@@ -169,7 +169,7 @@ class ArakoonHealthCheck(object):
 
     # @todo: separate cluster-wide-check
     @staticmethod
-    @expose_to_cli('arakoon', 'collapse-test')
+    @expose_to_cli('arakoon', 'collapse-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_collapse(result_handler, arakoon_clusters=None, max_collapse_age=MAX_COLLAPSE_AGE):
         """
         Check collapsing of arakoon
@@ -264,7 +264,7 @@ class ArakoonHealthCheck(object):
 
     # @todo: separate cluster-wide-check
     @staticmethod
-    @expose_to_cli('arakoon', 'integrity-test')
+    @expose_to_cli('arakoon', 'integrity-test', HealthCheckCLIRunner.ADDON_TYPE)
     def verify_integrity(result_handler, arakoon_clusters=None):
         """
         Verifies the integrity of a list of arakoons
@@ -299,7 +299,7 @@ class ArakoonHealthCheck(object):
 
     # @todo: separate cluster-wide-check
     @staticmethod
-    @expose_to_cli('arakoon', 'missing-node-test')
+    @expose_to_cli('arakoon', 'missing-node-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_missing_nodes(result_handler):
         """
         Verifies/validates the integrity of all available arakoons

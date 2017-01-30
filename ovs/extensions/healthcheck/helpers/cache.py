@@ -13,16 +13,14 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
-
 import time
 import datetime
-from ovs.extensions.storage.exceptions import KeyNotFoundException
-from ovs.extensions.storage.persistentfactory import PersistentFactory
+from ovs.extensions.storage.volatilefactory import VolatileFactory
 
 
 class CacheHelper(object):
 
-    client = PersistentFactory.get_client()
+    client = VolatileFactory.get_client()
     prefix = 'health-check_'
 
     @staticmethod
@@ -84,17 +82,14 @@ class CacheHelper(object):
         :return: the value in case it was found else None
         """
         _key = CacheHelper._generate_key(key=key)
-        try:
-            if exists_hours is None:
-                if raw:
-                    return CacheHelper.client.get(_key)
-                else:
-                    return CacheHelper.client.get(_key)['item']
+        if exists_hours is None:
+            if raw:
+                return CacheHelper.client.get(_key)
             else:
-                value = CacheHelper.client.get(_key)
-                return time.time() < (value['time_added'] + datetime.timedelta(hours=int(exists_hours)).total_seconds())
-        except KeyNotFoundException:
-            return None
+                return CacheHelper.client.get(_key)['item']
+        else:
+            value = CacheHelper.client.get(_key)
+            return time.time() < (value['time_added'] + datetime.timedelta(hours=int(exists_hours)).total_seconds())
 
     @staticmethod
     def delete(key=None):
@@ -104,11 +99,7 @@ class CacheHelper(object):
         :return: True if successful, False if not
         """
         _key = CacheHelper._generate_key(key=key)
-        try:
-            CacheHelper.client.delete(_key)
-            return True
-        except KeyNotFoundException:
-            return False
+        CacheHelper.client.delete(_key)
 
     @staticmethod
     def _generate_key(key=None):

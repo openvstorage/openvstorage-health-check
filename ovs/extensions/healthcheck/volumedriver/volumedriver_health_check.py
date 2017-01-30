@@ -20,7 +20,7 @@ from ovs.dal.exceptions import ObjectNotFoundException
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.generic.filemutex import file_mutex
 from ovs.extensions.generic.system import System
-from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli
+from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
 from ovs.extensions.healthcheck.helpers.exceptions import VDiskNotFoundError
 from ovs.extensions.healthcheck.helpers.vdisk import VDiskHelper
 from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
@@ -42,7 +42,7 @@ class VolumedriverHealthCheck(object):
     VDISK_TIMEOUT_BEFORE_DELETE = 0.5
 
     @staticmethod
-    @expose_to_cli(MODULE, 'dtl-test')
+    @expose_to_cli(MODULE, 'dtl-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_dtl(result_handler):
         """
         Checks the dtl for all vdisks on the local node
@@ -125,7 +125,7 @@ class VolumedriverHealthCheck(object):
                 return True
 
     @staticmethod
-    @expose_to_cli(MODULE, 'volumedrivers-test')
+    @expose_to_cli(MODULE, 'volumedrivers-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_volumedrivers(result_handler):
         """
         Checks if the VOLUMEDRIVERS work on a local machine (compatible with multiple vPools)
@@ -185,7 +185,7 @@ class VolumedriverHealthCheck(object):
                         pass
 
     @staticmethod
-    @expose_to_cli(MODULE, 'halted-volumes-test')
+    @expose_to_cli(MODULE, 'halted-volumes-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_for_halted_volumes(result_handler):
         """
         Checks for halted volumes on a single or multiple vPools
@@ -295,7 +295,7 @@ class VolumedriverHealthCheck(object):
         return not os.path.exists('/mnt/{0}/ovs-healthcheck-test-*.xml'.format(vp_name))
 
     @staticmethod
-    @expose_to_cli(MODULE, 'filedrivers-test')
+    @expose_to_cli(MODULE, 'filedrivers-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_filedrivers(result_handler):
         """
         Checks if the file drivers work on a local machine (compatible with multiple vPools)

@@ -30,7 +30,7 @@ from ovs.extensions.generic.configuration import Configuration, NotFoundExceptio
 from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.generic.system import System
 from ovs.extensions.generic.volatilemutex import volatile_mutex
-from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli
+from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
 from ovs.extensions.healthcheck.helpers.albacli import AlbaCLI
 from ovs.extensions.healthcheck.helpers.backend import BackendHelper
 from ovs.extensions.healthcheck.helpers.exceptions import AlbaException, ConfigNotMatchedException, ConnectionFailedException, DiskNotFoundException, ObjectNotFoundException
@@ -54,7 +54,7 @@ class AlbaHealthCheck(object):
 
     # @todo: isolate this cluster check
     @staticmethod
-    @expose_to_cli(MODULE, 'proxy-test')
+    @expose_to_cli(MODULE, 'proxy-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_if_proxies_work(result_handler):
         """
         Checks if all Alba Proxies work on a local machine, it creates a namespace and tries to put and object
@@ -349,7 +349,7 @@ class AlbaHealthCheck(object):
 
     # @todo: separate cluster-wide-check
     @staticmethod
-    @expose_to_cli(MODULE, 'backend-test')
+    @expose_to_cli(MODULE, 'backend-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_backends(result_handler):
         """
         Checks Alba as a whole
@@ -404,7 +404,7 @@ class AlbaHealthCheck(object):
 
     # @todo: separate cluster-wide-check
     @staticmethod
-    @expose_to_cli(MODULE, 'disk-safety-test')
+    @expose_to_cli(MODULE, 'disk-safety-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_disk_safety(result_handler):
         """
         Check safety of every namespace in every backend
@@ -495,7 +495,7 @@ class AlbaHealthCheck(object):
 
     # @todo: incorporate asd-manager code to check the service
     @staticmethod
-    @expose_to_cli(MODULE, 'processes-test')
+    @expose_to_cli(MODULE, 'processes-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_alba_processes(result_handler):
         """
         Checks the availability of processes for Alba
@@ -517,7 +517,7 @@ class AlbaHealthCheck(object):
                 result_handler.failure('Service {0} is NOT running! '.format(service_name))
 
     @staticmethod
-    @expose_to_cli(MODULE, 'proxy-port-test')
+    @expose_to_cli(MODULE, 'proxy-port-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_alba_proxy_ports(result_handler):
         """
         Checks if all proxies are listening on their ports

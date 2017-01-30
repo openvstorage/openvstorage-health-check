@@ -165,7 +165,7 @@ class HCResults(object):
                             print "{0} {1}".format(key, value["state"])
         if self.to_json:
             import json
-            print json.dumps(self.result_dict, indent=4)
+            print json.dumps(self.result_dict, indent=4, sort_keys=True)
         return self.result_dict
 
     def failure(self, msg, add_to_result=True, code=ErrorCodes.default.error_code, **kwargs):
