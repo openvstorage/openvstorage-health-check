@@ -17,8 +17,8 @@ import imp
 import os
 import inspect
 from datetime import datetime, timedelta
-from ovs.extensions.healthcheck.result import HCResults
 from ovs.extensions.healthcheck.helpers.helper import Helper
+from ovs.extensions.healthcheck.result import HCResults
 from ovs.extensions.storage.volatilefactory import VolatileFactory
 from ovs.log.log_handler import LogHandler
 
@@ -223,13 +223,37 @@ class HealthCheckCLIRunner(CLIRunner):
     ADDON_TYPE = 'healthcheck'
 
     @staticmethod
+    def _keep_old_argument_style(args):
+        """
+        Fills up the missing arguments to the wildcards
+        :param args: all arguments passed by bash
+        :return:
+        """
+        args = list(args)
+        possible_args = ['--help', '--unattended', '--to-json']
+        indexes = [args.index(arg) for arg in args if arg in possible_args]
+        if len(indexes) > 0:
+            if indexes[0] == 0:
+                args.insert(0, HealthCheckCLIRunner._WILDCARD)
+                args.insert(1, HealthCheckCLIRunner._WILDCARD)
+            elif indexes[0] == 1:
+                args.insert(1, HealthCheckCLIRunner._WILDCARD)
+        else:
+            if len(args) == 0:
+                args.insert(0, HealthCheckCLIRunner._WILDCARD)
+                args.insert(1, HealthCheckCLIRunner._WILDCARD)
+            elif len(args) == 1:
+                args.insert(1, HealthCheckCLIRunner._WILDCARD)
+        return args
+
+    @staticmethod
     def run_method(*args):
         """
         Executes the given method
-        :return: None
-        :rtype: NoneType
+        :return: results & recap
+        :rtype: dict
         """
-        args = list(args)
+        args = HealthCheckCLIRunner._keep_old_argument_style(args)
         unattended = False
         to_json = False
         if '--unattended' in args:
@@ -244,16 +268,19 @@ class HealthCheckCLIRunner(CLIRunner):
         if help_requested is True:
             HealthCheckCLIRunner.print_help(found_method_pointers)
             return
+        local_settings = Helper.get_local_settings()
+        for key, value in local_settings.iteritems():
+            result_handler.info('{0}: {1}'.format(key.replace('_', ' ').title(), value))
         try:
             result_handler.info('Starting OpenvStorage Healthcheck version {0}'.format(Helper.get_healthcheck_version()))
             result_handler.info("======================")
             for found_method in found_method_pointers:
                 test_name = '{0}-{1}'.format(found_method.expose_to_cli['module_name'], found_method.expose_to_cli['method_name'])
                 found_method(result_handler.HCResultCollector(result=result_handler, test_name=test_name))
-            HealthCheckCLIRunner.get_results(result_handler, module_name, method_name)
+            return HealthCheckCLIRunner.get_results(result_handler, module_name, method_name)
         except KeyboardInterrupt:
             HealthCheckCLIRunner.logger.warning('Caught keyboard interrupt. Output may be incomplete!')
-            HealthCheckCLIRunner.get_results(result_handler, module_name, method_name)
+            return HealthCheckCLIRunner.get_results(result_handler, module_name, method_name)
 
     @staticmethod
     def get_results(result_handler, module_name, method_name):

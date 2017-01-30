@@ -17,9 +17,7 @@
 # but WITHOUT ANY WARRANTY of any kind.
 import os
 import psutil
-import socket
-import subprocess
-from ovs.extensions.generic.configuration import Configuration, NotFoundException
+from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
@@ -46,36 +44,6 @@ class OpenvStorageHealthCheck(object):
     LOCAL_ID = System.get_my_machine_id()
 
     CELERY_CHECK_TIME = 7
-
-    @staticmethod
-    @expose_to_cli(MODULE, 'local-settings-test', HealthCheckCLIRunner.ADDON_TYPE)
-    def get_local_settings(result_handler):
-        """
-        Fetch settings of the local Open vStorage node
-        :param result_handler: logging object
-        :type result_handler: ovs.extensions.healthcheck.result.HCResults
-        :return: local settings of the node
-        :rtype: dict
-        """
-        ovs_version = Helper.get_ovs_version()
-        result_handler.info('Fetching LOCAL information of node: ')
-        # Fetch all details
-        local_settings = {}
-        try:
-            local_settings = {'cluster_id': Helper.get_cluster_id(),
-                              'hostname': socket.gethostname(),
-                              'storagerouter_id': OpenvStorageHealthCheck.LOCAL_ID,
-                              'storagerouter_type': OpenvStorageHealthCheck.LOCAL_SR.node_type,
-                              'environment_release': ovs_version[0],
-                              'environment_branch': ovs_version[1].title(),
-                              'environment os': Helper.check_os()}
-        except (subprocess.CalledProcessError, NotFoundException, IOError) as ex:
-            result_handler.failure('Could not fetch local-settings. Got {0}'.format(ex.message))
-        else:
-            for key, value in local_settings.iteritems():
-                result_handler.info('{0}: {1}'.format(key.replace('_', ' ').title(), value))
-            result_handler.success('Fetched all local settings')
-        return local_settings
 
     @staticmethod
     @expose_to_cli(MODULE, 'log-files-test', HealthCheckCLIRunner.ADDON_TYPE)
@@ -175,7 +143,7 @@ class OpenvStorageHealthCheck(object):
         :rtype: NoneType
         """
         # Check Celery and RabbitMQ
-        if Helper.get_ovs_type() != 'MASTER':
+        if OpenvStorageHealthCheck.LOCAL_SR.node_type != 'MASTER':
             result_handler.skip('RabbitMQ is not running/active on this server!')
             return
         result_handler.info('Checking Celery.', add_to_result=False)
@@ -453,7 +421,7 @@ class OpenvStorageHealthCheck(object):
         """
         # RabbitMQ check: cluster verification
         result_handler.info('Pre-check: verification of RabbitMQ cluster.', add_to_result=False)
-        if Helper.get_ovs_type() == 'MASTER':
+        if OpenvStorageHealthCheck.LOCAL_SR.node_type == 'MASTER':
             r = RabbitMQ(ip=OpenvStorageHealthCheck.LOCAL_SR.ip)
             partitions = r.partition_status()
             if len(partitions) == 0:
