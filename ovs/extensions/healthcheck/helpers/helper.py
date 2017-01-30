@@ -20,6 +20,8 @@
 Helper module
 """
 import json
+import platform
+import socket
 import subprocess
 from ovs.extensions.generic.system import System
 from ovs.extensions.generic.sshclient import SSHClient
@@ -35,6 +37,8 @@ class Helper(object):
     MODULE = "utils"
     SETTINGS_LOC = "/opt/OpenvStorage/config/healthcheck/settings.json"
     RAW_INIT_MANAGER = str(subprocess.check_output('cat /proc/1/comm', shell=True)).strip()
+    LOCAL_SR = System.get_my_storagerouter()
+    LOCAL_ID = System.get_my_machine_id()
 
     with open(SETTINGS_LOC) as settings_file:
         settings = json.load(settings_file)
@@ -61,17 +65,22 @@ class Helper(object):
         return packages.get(package_name, 'unknown')
 
     @staticmethod
-    def get_ovs_type():
+    def get_local_settings():
         """
-        Gets the TYPE of the Open vStorage local node
-
-        :return: TYPE of openvstorage local node
-            * MASTER
-            * EXTRA
-        :rtype: str
+        Fetch settings of the local Open vStorage node
+        :return: local settings of the node
+        :rtype: dict
         """
-
-        return System.get_my_storagerouter().node_type
+        ovs_version = Helper.get_ovs_version()
+        # Fetch all details
+        local_settings = {'cluster_id': Configuration.get("/ovs/framework/cluster_id"),
+                          'hostname': socket.gethostname(),
+                          'storagerouter_id': Helper.LOCAL_ID,
+                          'storagerouter_type': Helper.LOCAL_SR.node_type,
+                          'environment_release': ovs_version[0],
+                          'environment_branch': ovs_version[1].title(),
+                          'environment os': ' '.join(platform.linux_distribution())}
+        return local_settings
 
     @staticmethod
     def get_ovs_version():
@@ -81,23 +90,13 @@ class Helper(object):
         :rtype: tuple
         """
 
-        with open("/opt/OpenvStorage/webapps/frontend/locales/en-US/ovs.json") as ovs_json1:
-            ovs_releasename = json.load(ovs_json1)["support"]["release_name"]
+        with open("/opt/OpenvStorage/webapps/frontend/locales/en-US/ovs.json") as ovs_json:
+            ovs_releasename = json.load(ovs_json)["support"]["release_name"]
 
-        with open("/etc/apt/sources.list.d/ovsaptrepo.list") as ovs_json2:
-            ovs_current_version = ovs_json2.read().split()[2]
+        with open("/etc/apt/sources.list.d/ovsaptrepo.list") as ovs_json:
+            ovs_current_version = ovs_json.read().split()[2]
 
         return ovs_releasename, ovs_current_version
-
-    @staticmethod
-    def get_cluster_id():
-        """
-        Gets the cluster ID of the Open vStorage cluster
-        :return: cluster id of openvstorage cluster
-        :rtype: str
-        """
-
-        return Configuration.get("/ovs/framework/cluster_id")
 
     @staticmethod
     def check_status_of_service(service_name):
@@ -111,13 +110,3 @@ class Helper(object):
         local_machine = System.get_my_storagerouter()
         client = SSHClient(local_machine.ip, username='root')
         return ServiceManager.get_service_status(str(service_name), client)
-
-    @staticmethod
-    def check_os():
-        """
-        Fetches the OS description
-        :return: OS description
-        :rtype: str
-        """
-        return subprocess.check_output("cat /etc/lsb-release | grep DISTRIB_DESCRIPTION | "
-                                       "cut -d '=' -f 2 | sed 's/\"//g'", shell=True).strip()
