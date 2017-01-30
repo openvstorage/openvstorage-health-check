@@ -25,6 +25,7 @@ from ovs.extensions.generic.system import System
 from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.services.service import ServiceManager
 from ovs.extensions.generic.configuration import Configuration
+from ovs.extensions.packages.package import PackageManager
 
 
 class Helper(object):
@@ -46,6 +47,18 @@ class Helper(object):
     rights_dirs = settings["healthcheck"]["rights_dirs"]
     owners_files = settings["healthcheck"]["owners_files"]
     max_hours_zero_disk_safety = settings["healthcheck"]["max_hours_zero_disk_safety"]
+
+    @staticmethod
+    def get_healthcheck_version():
+        """
+        Gets the installed healthcheck version
+        :return: version number of the installed healthcheck
+        :rtype: str
+        """
+        client = SSHClient(System.get_my_storagerouter())
+        package_name = 'openvstorage-health-check'
+        packages = PackageManager.get_installed_versions(client=client, package_names=[package_name])
+        return packages.get(package_name, 'unknown')
 
     @staticmethod
     def get_ovs_type():
