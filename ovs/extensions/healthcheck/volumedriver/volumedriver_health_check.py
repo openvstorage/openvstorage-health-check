@@ -125,7 +125,7 @@ class VolumedriverHealthCheck(object):
                 return True
 
     @staticmethod
-    @expose_to_cli(MODULE, 'volumedrivers-test', HealthCheckCLIRunner.ADDON_TYPE)
+    # @expose_to_cli(MODULE, 'volumedrivers-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_volumedrivers(result_handler):
         """
         Checks if the VOLUMEDRIVERS work on a local machine (compatible with multiple vPools)
@@ -295,7 +295,7 @@ class VolumedriverHealthCheck(object):
         return not os.path.exists('/mnt/{0}/ovs-healthcheck-test-*.xml'.format(vp_name))
 
     @staticmethod
-    @expose_to_cli(MODULE, 'filedrivers-test', HealthCheckCLIRunner.ADDON_TYPE)
+    # @expose_to_cli(MODULE, 'filedrivers-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_filedrivers(result_handler):
         """
         Checks if the file drivers work on a local machine (compatible with multiple vPools)
