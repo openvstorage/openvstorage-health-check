@@ -84,9 +84,9 @@ class Helper(object):
     @staticmethod
     def get_ovs_release_name():
         """
-        Gets the RELEASE Open vStorage cluster
-        :return: RELEASE openvstorage cluster
-        :rtype: string
+        Gets the RELEASE of Open vStorage cluster
+        :return: RELEASE of openvstorage cluster
+        :rtype: str
         """
         release_name = 'Unknown'
         # This file should always exist if ovs is installed. Without it, the GUI should not work
