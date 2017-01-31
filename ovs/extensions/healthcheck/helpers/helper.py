@@ -21,6 +21,7 @@ Helper module
 """
 import json
 import platform
+import os
 import socket
 import subprocess
 from ovs.extensions.generic.system import System
@@ -71,32 +72,30 @@ class Helper(object):
         :return: local settings of the node
         :rtype: dict
         """
-        ovs_version = Helper.get_ovs_version()
         # Fetch all details
         local_settings = {'cluster_id': Configuration.get("/ovs/framework/cluster_id"),
                           'hostname': socket.gethostname(),
                           'storagerouter_id': Helper.LOCAL_ID,
                           'storagerouter_type': Helper.LOCAL_SR.node_type,
-                          'environment_release': ovs_version[0],
-                          'environment_branch': ovs_version[1].title(),
+                          'environment_release': Helper.get_ovs_release_name(),
                           'environment os': ' '.join(platform.linux_distribution())}
         return local_settings
 
     @staticmethod
-    def get_ovs_version():
+    def get_ovs_release_name():
         """
-        Gets the RELEASE & BRANCH of the Open vStorage cluster
-        :return: RELEASE & BRANCH of openvstorage cluster
-        :rtype: tuple
+        Gets the RELEASE of Open vStorage cluster
+        :return: RELEASE of openvstorage cluster
+        :rtype: str
         """
+        release_name = 'Unknown'
+        # This file should always exist if ovs is installed. Without it, the GUI should not work
+        file_loc = '/opt/OpenvStorage/webapps/frontend/locales/en-US/ovs.json'
+        if os.path.isfile(file_loc):
+            with open(file_loc) as ovs_json:
+                release_name = json.load(ovs_json)["support"]["release_name"]
 
-        with open("/opt/OpenvStorage/webapps/frontend/locales/en-US/ovs.json") as ovs_json:
-            ovs_releasename = json.load(ovs_json)["support"]["release_name"]
-
-        with open("/etc/apt/sources.list.d/ovsaptrepo.list") as ovs_json:
-            ovs_current_version = ovs_json.read().split()[2]
-
-        return ovs_releasename, ovs_current_version
+        return release_name
 
     @staticmethod
     def check_status_of_service(service_name):
