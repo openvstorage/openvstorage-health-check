@@ -77,15 +77,14 @@ class Helper(object):
                           'hostname': socket.gethostname(),
                           'storagerouter_id': Helper.LOCAL_ID,
                           'storagerouter_type': Helper.LOCAL_SR.node_type,
-                          'environment_release': ovs_version[0],
-                          'environment_branch': ovs_version[1].title(),
+                          'environment_release': ovs_version,
                           'environment os': ' '.join(platform.linux_distribution())}
         return local_settings
 
     @staticmethod
     def get_ovs_version():
         """
-        Gets the RELEASE & BRANCH of the Open vStorage cluster
+        Gets the RELEASE Open vStorage cluster
         :return: RELEASE & BRANCH of openvstorage cluster
         :rtype: tuple
         """
@@ -93,10 +92,7 @@ class Helper(object):
         with open("/opt/OpenvStorage/webapps/frontend/locales/en-US/ovs.json") as ovs_json:
             ovs_releasename = json.load(ovs_json)["support"]["release_name"]
 
-        with open("/etc/apt/sources.list.d/ovsaptrepo.list") as ovs_json:
-            ovs_current_version = ovs_json.read().split()[2]
-
-        return ovs_releasename, ovs_current_version
+        return ovs_releasename
 
     @staticmethod
     def check_status_of_service(service_name):
