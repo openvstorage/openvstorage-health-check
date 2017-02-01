@@ -4,7 +4,7 @@
     "source_contents": "--transform 's,^,{0}-{1}/,' --exclude='ovs/lib/__init__.py' --exclude='ovs/__init__.py' --exclude='ovs/extensions/__init__.py' --exclude='ovs/log/__init__.py' config/healthcheck ovs scripts *.txt",
     "version": {
         "major": 3,
-        "minor": 1,
-        "patch": 5
+        "minor": 2,
+        "patch": 1
     }
 }
