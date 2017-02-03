@@ -306,9 +306,7 @@ class AlbaHealthCheck(object):
             for stack in alba_backend.local_stack.values():
                 for osds in stack.values():
                     for asd in osds['asds'].values():
-                        if 'alba_backend_guid' not in asd:
-                            continue
-                        if alba_backend.guid != asd['alba_backend_guid']:
+                        if alba_backend.guid != asd.get('alba_backend_guid'):
                             continue
                         asd_id = asd['asd_id']
                         arakoon_path = '/ovs/alba/asds/{0}/config|port'.format(asd_id)
