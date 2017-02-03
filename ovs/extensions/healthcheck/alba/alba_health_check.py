@@ -45,7 +45,7 @@ class AlbaHealthCheck(object):
     A healthcheck for Alba storage layer
     """
     MODULE = 'alba'
-    TEMP_FILE_SIZE = 1048576
+    TEMP_FILE_SIZE = 1024 ** 2
     LOCAL_SR = System.get_my_storagerouter()
     # to be put in alba file
     TEMP_FILE_LOC = '/tmp/ovs-hc.xml'
@@ -306,6 +306,8 @@ class AlbaHealthCheck(object):
             for stack in alba_backend.local_stack.values():
                 for osds in stack.values():
                     for asd in osds['asds'].values():
+                        if 'alba_backend_guid' not in asd:
+                            continue
                         if alba_backend.guid != asd['alba_backend_guid']:
                             continue
                         asd_id = asd['asd_id']
