@@ -236,7 +236,8 @@ class AlbaHealthCheck(object):
                 if len(osd.get('ips')) > 0:
                     osd_mapping[osd.get('long_id')] = osd.get('ips')[0]
                     continue
-                result_handler.failure('The osd is not bound to any ip! Please validate your asd-manager install!')
+                # @todo check with other ops for this logging
+                result_handler.warning('The osd is not bound to any ip! Please validate your asd-manager install!')
         except AlbaException as ex:
             result_handler.failure('Could not fetch osd list from Alba. Got {0}'.format(str(ex)))
             raise
@@ -246,7 +247,8 @@ class AlbaHealthCheck(object):
             value = str(time.time())
             if asd['status'] == 'error':
                 broken_disks.append(disk_asd_id)
-                result_handler.failure('ASD test with DISK_ID {0} failed because: {1}'.format(disk_asd_id, asd['status_detail']))
+                # @todo check with other ops for this logging. Perhaps filter on status_details
+                result_handler.warning('ASD test with DISK_ID {0} failed because: {1}'.format(disk_asd_id, asd['status_detail']))
                 continue
             # Fetch ip of the asd with list-asds
             ip_address = osd_mapping.get(disk_asd_id)
@@ -278,10 +280,12 @@ class AlbaHealthCheck(object):
                             extra_params=[key])
             except ObjectNotFoundException:
                 broken_disks.append(disk_asd_id)
-                result_handler.failure('ASD test with disk-id {0} failed on node {1}!'.format(disk_asd_id, ip_address))
+                # @todo validate with other ops. #asds is important
+                result_handler.warning('ASD test with disk-id {0} failed on node {1}!'.format(disk_asd_id, ip_address))
             except (AlbaException, DiskNotFoundException) as ex:
+                # @todo validate with other ops. #asds is important
                 broken_disks.append(disk_asd_id)
-                result_handler.failure('ASD test with DISK_ID {0} failed  on node {1} with {2}'.format(disk_asd_id, ip_address, str(ex)))
+                result_handler.warning('ASD test with DISK_ID {0} failed  on node {1} with {2}'.format(disk_asd_id, ip_address, str(ex)))
         return result
 
     @staticmethod
@@ -363,7 +367,7 @@ class AlbaHealthCheck(object):
                 try:
                     result_disks = AlbaHealthCheck._check_backend_asds(result_handler, backend['disks'], backend_name, config)
                 except Exception:
-                    result_handler.failure('Could not fetch the asd information for alba backend {0}'.format(backend_name))
+                    result_handler.warning('Could not fetch the asd information for alba backend {0}'.format(backend_name))
                     continue
                 working_disks = result_disks['working']
                 defective_disks = result_disks['broken']
