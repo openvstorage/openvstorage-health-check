@@ -32,7 +32,6 @@ class VDiskHelper(object):
     def get_vdisk_by_name(vdisk_name, vpool_name):
         """
         Fetch disk partitions by disk guid
-
         :param vdisk_name: location of a vdisk on a vpool
                            (e.g. /mnt/vpool/test.raw = test.raw, /mnt/vpool/volumes/test.raw = volumes/test.raw )
         :type vdisk_name: str
@@ -41,7 +40,6 @@ class VDiskHelper(object):
         :return: a vdisk object
         :rtype: ovs.dal.hybrids.vdisk.VDisk
         """
-
         vpool = VPoolList.get_vpool_by_name(vpool_name)
         if vpool:
             vdisk = VDiskList.get_by_devicename_and_vpool('/{0}'.format(vdisk_name), vpool)
@@ -56,21 +54,10 @@ class VDiskHelper(object):
     def get_vdisk_by_guid(vdisk_guid):
         """
         Fetch vdisk object by vdisk guid
-
         :param vdisk_guid: guid of a existing vdisk
         :type vdisk_guid: str
         :return: a vdisk object
         :rtype: ovs.dal.hybrids.vdisk.VDisk
         """
-
         return VDisk(vdisk_guid)
 
-    @staticmethod
-    def get_vdisks():
-        """
-        Fetch all vdisks
-
-        :return: List of vdisks
-        :rtype: ovs.dal.lists.vdisklist.VDiskList
-        """
-        return VDiskList.get_vdisks()

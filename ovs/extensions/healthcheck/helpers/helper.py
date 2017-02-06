@@ -19,14 +19,16 @@
 """
 Helper module
 """
-
 import json
+import platform
+import os
 import socket
 import subprocess
 from ovs.extensions.generic.system import System
 from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.services.service import ServiceManager
 from ovs.extensions.generic.configuration import Configuration
+from ovs.extensions.packages.package import PackageManager
 
 
 class Helper(object):
@@ -36,6 +38,8 @@ class Helper(object):
     MODULE = "utils"
     SETTINGS_LOC = "/opt/OpenvStorage/config/healthcheck/settings.json"
     RAW_INIT_MANAGER = str(subprocess.check_output('cat /proc/1/comm', shell=True)).strip()
+    LOCAL_SR = System.get_my_storagerouter()
+    LOCAL_ID = System.get_my_machine_id()
 
     with open(SETTINGS_LOC) as settings_file:
         settings = json.load(settings_file)
@@ -47,49 +51,51 @@ class Helper(object):
     extra_ports = settings["healthcheck"]["extra_ports"]
     rights_dirs = settings["healthcheck"]["rights_dirs"]
     owners_files = settings["healthcheck"]["owners_files"]
-    check_logs = settings["healthcheck"]["check_logs"]
     max_hours_zero_disk_safety = settings["healthcheck"]["max_hours_zero_disk_safety"]
 
     @staticmethod
-    def get_ovs_type():
+    def get_healthcheck_version():
         """
-        Gets the TYPE of the Open vStorage local node
-
-        :return: TYPE of openvstorage local node
-            * MASTER
-            * EXTRA
+        Gets the installed healthcheck version
+        :return: version number of the installed healthcheck
         :rtype: str
         """
-
-        return System.get_my_storagerouter().node_type
-
-    @staticmethod
-    def get_ovs_version():
-        """
-        Gets the RELEASE & BRANCH of the Open vStorage cluster
-
-        :return: RELEASE & BRANCH of openvstorage cluster
-        :rtype: tuple
-        """
-
-        with open("/opt/OpenvStorage/webapps/frontend/locales/en-US/ovs.json") as ovs_json1:
-            ovs_releasename = json.load(ovs_json1)["support"]["release_name"]
-
-        with open("/etc/apt/sources.list.d/ovsaptrepo.list") as ovs_json2:
-            ovs_current_version = ovs_json2.read().split()[2]
-
-        return ovs_releasename, ovs_current_version
+        client = SSHClient(System.get_my_storagerouter())
+        package_name = 'openvstorage-health-check'
+        packages = PackageManager.get_installed_versions(client=client, package_names=[package_name])
+        return packages.get(package_name, 'unknown')
 
     @staticmethod
-    def get_cluster_id():
+    def get_local_settings():
         """
-        Gets the cluster ID of the Open vStorage cluster
+        Fetch settings of the local Open vStorage node
+        :return: local settings of the node
+        :rtype: dict
+        """
+        # Fetch all details
+        local_settings = {'cluster_id': Configuration.get("/ovs/framework/cluster_id"),
+                          'hostname': socket.gethostname(),
+                          'storagerouter_id': Helper.LOCAL_ID,
+                          'storagerouter_type': Helper.LOCAL_SR.node_type,
+                          'environment_release': Helper.get_ovs_release_name(),
+                          'environment os': ' '.join(platform.linux_distribution())}
+        return local_settings
 
-        :return: cluster id of openvstorage cluster
+    @staticmethod
+    def get_ovs_release_name():
+        """
+        Gets the RELEASE of Open vStorage cluster
+        :return: RELEASE of openvstorage cluster
         :rtype: str
         """
+        release_name = 'Unknown'
+        # This file should always exist if ovs is installed. Without it, the GUI should not work
+        file_loc = '/opt/OpenvStorage/webapps/frontend/locales/en-US/ovs.json'
+        if os.path.isfile(file_loc):
+            with open(file_loc) as ovs_json:
+                release_name = json.load(ovs_json)["support"]["release_name"]
 
-        return Configuration.get("/ovs/framework/cluster_id")
+        return release_name
 
     @staticmethod
     def check_status_of_service(service_name):
@@ -103,47 +109,3 @@ class Helper(object):
         local_machine = System.get_my_storagerouter()
         client = SSHClient(local_machine.ip, username='root')
         return ServiceManager.get_service_status(str(service_name), client)
-
-    @staticmethod
-    def check_port_connection(port_number, ip):
-        """
-        Checks the port connection on a IP address
-
-        :param port_number: Port number of a service that is running on the local machine. (Public or loopback)
-        :type port_number: int
-        :param ip: ip address to try
-        :type ip: str
-        :return: True if the port is available; False if the port is NOT available
-        :rtype: bool
-        """
-
-        # check if port is open
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        result = sock.connect_ex((ip, int(port_number)))
-        if result == 0:
-            return True
-        else:
-            # double check because some services run on localhost
-            result = sock.connect_ex(('127.0.0.1', int(port_number)))
-            if result == 0:
-                return True
-            else:
-                return False
-
-    @staticmethod
-    def check_os():
-        """
-        Fetches the OS description
-
-        :return: OS description
-        :rtype: str
-        """
-
-        return subprocess.check_output("cat /etc/lsb-release | grep DISTRIB_DESCRIPTION | "
-                                       "cut -d '=' -f 2 | sed 's/\"//g'", shell=True).strip()
-
-
-class InitManagerSupported(object):
-
-    INIT = "init"
-    SYSTEMD = "systemd"
