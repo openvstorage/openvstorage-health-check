@@ -9,13 +9,13 @@ The health check is classified as a monitoring, detection tool for Open vStorage
 ## 2. Adding the package server
 ### 2.1. Stable
 ```
-echo "deb http://apt.openvstorage.org fargo main" > /etc/apt/sources.list.d/ovsaptrepo.list
+echo "deb http://apt.openvstorage.com fargo main" > /etc/apt/sources.list.d/ovsaptrepo.list
 apt-get update
 ```
 
 ### 2.2. Unstable
 ```
-echo "deb http://apt.openvstorage.org unstable main" > /etc/apt/sources.list.d/ovsaptrepo.list
+echo "deb http://apt.openvstorage.com unstable main" > /etc/apt/sources.list.d/ovsaptrepo.list
 apt-get update
 ```
 
