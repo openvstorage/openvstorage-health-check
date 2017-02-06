@@ -243,7 +243,7 @@ class ArakoonHealthCheck(object):
                 try:
                     oldest_tlx_stats = os.stat('{0}/{1}'.format(tlog_dir, oldest_file))
                 except OSError as ex:
-                    result_handler.failure('Could not inspect {0}/{1}. Got {2}'.format(tlog_dir, oldest_file, str(ex)))
+                    result_handler.warning('Could not inspect {0}/{1}. Got {2}'.format(tlog_dir, oldest_file, str(ex)))
                     nok_arakoons.append(cluster_name)
                     continue
 
@@ -252,13 +252,13 @@ class ArakoonHealthCheck(object):
                     ok_arakoons.append(cluster_name)
                     continue
                 else:
-                    result_handler.failure('Oldest tlx file for Arakoon {0} is not older than {1}.'.format(cluster_name, max_collapse_age))
+                    result_handler.warning('Oldest tlx file for Arakoon {0} is not older than {1}.'.format(cluster_name, max_collapse_age))
 
                 nok_arakoons.append(cluster_name)
 
         # Testing conditions
         if len(nok_arakoons) > 0:
-            result_handler.failure('{0} Arakoon(s) having issues with collapsing: {1}'.format(len(nok_arakoons), ','.join(nok_arakoons)))
+            result_handler.warning('{0} Arakoon(s) having issues with collapsing: {1}'.format(len(nok_arakoons), ','.join(nok_arakoons)))
         elif len(ok_arakoons) > 0:
             result_handler.success('ALL Arakoon(s) are collapsed.')
 

@@ -62,11 +62,11 @@ class VolumedriverHealthCheck(object):
             except TimeoutError:
                 result_handler.warning('VDisk {0}s DTL has a timeout status: {1}.'.format(vdisk.name, vdisk.dtl_status))
             if vdisk.dtl_status == 'ok_standalone':
-                result_handler.warning('VDisk {0}s DTL is disabled'.format(vdisk.name))
+                result_handler.success('VDisk {0}s DTL is disabled'.format(vdisk.name))
             elif vdisk.dtl_status == 'ok_sync':
                 result_handler.success('VDisk {0}s DTL is enabled and running.'.format(vdisk.name))
             elif vdisk.dtl_status == 'degraded':
-                result_handler.failure('VDisk {0}s DTL is degraded.'.format(vdisk.name))
+                result_handler.warning('VDisk {0}s DTL is degraded.'.format(vdisk.name))
             elif vdisk.dtl_status == 'catch_up':
                 result_handler.warning('VDisk {0}s DTL is enabled but still syncing.'.format(vdisk.name))
             else:
@@ -238,8 +238,7 @@ class VolumedriverHealthCheck(object):
                         haltedvolumes.append(volume)
                 result_handler.success('Volumedriver {0} is up and running.'.format(vp.name))
             except (ClusterNotReachableException, RuntimeError) as ex:
-                result_handler.failure(
-                    'Seems like the Volumedriver {0} is not running.'.format(vp.name, ex.message))
+                result_handler.failure('Seems like the Volumedriver {0} is not running.'.format(vp.name, ex.message))
                 continue
 
             # print all results

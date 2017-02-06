@@ -81,7 +81,7 @@ class OpenvStorageHealthCheck(object):
                 result_handler.warning('Logfile {0} is larger than {0} MB!'.format(c_files, max_log_size))
 
         if len(too_big) != 0:
-            result_handler.failure('The following log files are too big: {0}.'.format(', '.join(too_big)))
+            result_handler.warning('The following log files are too big: {0}.'.format(', '.join(too_big)))
         else:
             result_handler.success('All log files are ok!')
 
@@ -186,7 +186,7 @@ class OpenvStorageHealthCheck(object):
             if version:
                 result_handler.success('Package {0} is installed with version {1}'.format(package, version.replace('\n', '')))
             else:
-                result_handler.failure('Package {0} is not installed.'.format(package))
+                result_handler.warning('Package {0} is not installed.'.format(package))
         while len(extra_packages) > 0:
             package = extra_packages.pop()
             version = installed.get(package, '')
@@ -239,7 +239,6 @@ class OpenvStorageHealthCheck(object):
     def check_ovs_workers(result_handler):
         """
         Extended check of the Open vStorage workers; When the simple check fails, it will execute a full/deep check.
-
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
         :return: None
@@ -263,7 +262,6 @@ class OpenvStorageHealthCheck(object):
     def check_required_dirs(result_handler):
         """
         Checks the directories their rights and owners for mistakes
-
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
         :return: None
@@ -277,9 +275,7 @@ class OpenvStorageHealthCheck(object):
                         and owner_settings.get('group') == FilesystemHelper.get_group_of_file(dirname):
                     result_handler.success('Directory {0} has correct owners!'.format(dirname))
                 else:
-                    result_handler.failure(
-                        'Directory {0} has INCORRECT owners! It must be OWNED by USER={1} and GROUP={2}'
-                        .format(dirname, owner_settings.get('user'), owner_settings.get('group')))
+                    result_handler.warning('Directory {0} has INCORRECT owners! It must be OWNED by USER={1} and GROUP={2}'.format(dirname, owner_settings.get('user'), owner_settings.get('group')))
             else:
                 result_handler.skip('Directory {0} does not exists!'.format(dirname))
 
@@ -290,7 +286,7 @@ class OpenvStorageHealthCheck(object):
                 if FilesystemHelper.check_rights_of_file(dirname, rights):
                     result_handler.success('Directory {0} has correct rights!'.format(dirname))
                 else:
-                    result_handler.failure('Directory {0} has INCORRECT rights! It must be CHMOD={1} '.format(dirname, rights))
+                    result_handler.warning('Directory {0} has INCORRECT rights! It must be CHMOD={1} '.format(dirname, rights))
             else:
                 result_handler.skip('Directory {0} does not exists!'.format(dirname))
 
@@ -299,7 +295,6 @@ class OpenvStorageHealthCheck(object):
     def check_if_dns_resolves(result_handler, fqdn='google.com'):
         """
         Checks if DNS resolving works on a local machine
-
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
         :param fqdn: the absolute pathname of the file
@@ -312,7 +307,7 @@ class OpenvStorageHealthCheck(object):
         if result is True:
             result_handler.success('DNS resolving works!')
         else:
-            result_handler.failure('DNS resolving doesnt work, please check /etc/resolv.conf or add correct DNS server and make it immutable: "sudo chattr +i /etc/resolv.conf"!')
+            result_handler.warning('DNS resolving doesnt work, please check /etc/resolv.conf or add correct DNS server and make it immutable: "sudo chattr +i /etc/resolv.conf"!')
 
     @staticmethod
     @expose_to_cli(MODULE, 'zombie-processes-test', HealthCheckCLIRunner.ADDON_TYPE)
@@ -352,7 +347,7 @@ class OpenvStorageHealthCheck(object):
         if len(dead_processes) == 0:
             result_handler.success('There are no dead processes on this node!')
         else:
-            result_handler.failure('We DETECTED dead processes on this node: {0}'.format(', '.join(dead_processes)))
+            result_handler.warning('We DETECTED dead processes on this node: {0}'.format(', '.join(dead_processes)))
 
     @staticmethod
     @expose_to_cli(MODULE, 'model-test', HealthCheckCLIRunner.ADDON_TYPE)
@@ -380,7 +375,7 @@ class OpenvStorageHealthCheck(object):
                 # noinspection PyArgumentList
                 voldrv_volume_list = voldrv_client.list_volumes()
             except (ClusterNotReachableException, RuntimeError) as ex:
-                result_handler.failure('Seems like the volumedriver {0} is not running. Got {1}'.format(vp.name, ex.message))
+                result_handler.warning('Seems like the volumedriver {0} is not running. Got {1}'.format(vp.name, ex.message))
                 continue
 
             vdisk_volume_ids = []
