@@ -25,6 +25,7 @@ import uuid
 import time
 import hashlib
 import subprocess
+from decimal import Decimal
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 from ovs.extensions.generic.configuration import Configuration, NotFoundException
 from ovs.extensions.generic.sshclient import SSHClient
@@ -466,16 +467,24 @@ class AlbaHealthCheck(object):
                 if not preset['in_use']:
                     continue
                 for policy in preset['policies']:
-                    disk_safety_overview[alba_backend.name]['{0},{1}'.format(str(policy[0]), str(policy[1]))] = {'current_disk_safety': {}, 'max_disk_safety': policy[1]}
+                    disk_safety_overview[alba_backend.name]['{0},{1}'.format(str(policy[0]), str(policy[1]))] = \
+                        {'current_disk_safety': {}, 'max_disk_safety': policy[1]}
 
             # collect namespaces
             for namespace in namespaces:
+                # calc total objects in namespace
+                total_count = 0
+                for bucket_safety in namespace['bucket_safety']:
+                    total_count += bucket_safety['count']
+
                 for bucket_safety in namespace['bucket_safety']:
                     # calc safety bucket
                     calculated_disk_safety = bucket_safety['remaining_safety']
                     safety = '{0},{1}'.format(str(bucket_safety['bucket'][0]), str(bucket_safety['bucket'][1]))
                     current_disk_safety = disk_safety_overview[alba_backend.name][safety]['current_disk_safety']
-                    to_be_added_namespace = {'namespace': namespace['namespace'], 'amount_in_bucket': (bucket_safety['count'] / namespace['safety_count']) * 100}
+                    to_be_added_namespace = \
+                        {'namespace': namespace['namespace'],
+                         'amount_in_bucket': "%.5f" % Decimal((float(bucket_safety['count'])/float(total_count))*100)}
                     if calculated_disk_safety in current_disk_safety:
                         current_disk_safety[calculated_disk_safety].append(to_be_added_namespace)
                     else:
