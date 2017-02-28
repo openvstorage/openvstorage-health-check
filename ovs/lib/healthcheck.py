@@ -23,5 +23,4 @@ if __name__ == '__main__':
     arguments = sys.argv
     # Remove filename
     del arguments[0]
-    # arguments = ['X', 'proxy-port-test']
     HealthCheckCLIRunner.run_method(*arguments)

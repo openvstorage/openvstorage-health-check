@@ -48,7 +48,6 @@ def cluster_check(func):
     Decorator to separate cluster checks
     :return:
     """
-
     def set_result_success(*args, **kwargs):
         """
         :return:

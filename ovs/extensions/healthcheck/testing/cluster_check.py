@@ -58,7 +58,6 @@ class ClusterCheckTester(unittest.TestCase):
                 thread.join()
         # Start all threads
         self.assertEqual(len(self.threads), self.concurreny_amount)
-        print self.shared
         self.assertEqual(len(self.shared['callbacks'].keys()), self.concurreny_amount - 1)
 
 
@@ -69,8 +68,3 @@ def suite():
     test_suite = unittest.TestSuite()
     test_suite.addTest(unittest.makeSuite(ClusterCheckTester))
     return test_suite
-
-# if __name__ == "__main__":
-#     mySuit = suite()
-#     runner = unittest.TextTestRunner()
-#     runner.run(mySuit)
