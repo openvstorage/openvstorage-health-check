@@ -24,41 +24,59 @@ class CacheHelper(object):
     prefix = 'health-check_'
 
     @staticmethod
-    def set(item, key=None):
+    def add(item, key=None, expire_time=0):
         """
         Store the information to the config management
         :param item: item to set
         :param key: key to use
+        :param expire_time: nr of seconds to keep the key. 0 = forever
+        :return: Nonzero on success.
+        :rtype: int
+        """
+        _key = CacheHelper._generate_key(key=key)
+        timestamp = int(time.time())
+        value = {'item': item, 'time_added': timestamp, 'time_updated': timestamp}
+        return CacheHelper.client.add(key=_key, value=value, time=expire_time)
+
+    @staticmethod
+    def set(item, key=None, expire_time=0):
+        """
+        Store the information to the config management
+        :param item: item to set
+        :param key: key to use
+        :param expire_time: nr of seconds to keep the key. 0 = forever
         :return: True if successful, False if not
         """
         _key = CacheHelper._generate_key(key=key)
         timestamp = int(time.time())
         value = {'item': item, 'time_added': timestamp, 'time_updated': timestamp}
-        CacheHelper.client.set(key=_key, value=value)
+        CacheHelper.client.set(key=_key, value=value, time=expire_time)
         return CacheHelper.get(key=key) == item
 
     @staticmethod
-    def update(item, key):
+    def update(item, key, expire_time=0):
         """
         Store the information to the config management
         :param item: item to update
         :param key: key to update
+        :param expire_time: nr of seconds to keep the key. 0 = forever
         :return: True if successful, False if not
         """
         _key = CacheHelper._generate_key(key=key)
         retrieved_value = CacheHelper.get(key=key, raw=True)
         timestamp = int(time.time())
         value = {'item': item, 'time_added': retrieved_value['time_added'], 'time_updated': timestamp}
-        CacheHelper.client.set(key=_key, value=value)
+        CacheHelper.client.set(key=_key, value=value, time=expire_time)
         return CacheHelper.get(key=key) == item
 
     @staticmethod
-    def append(item, key=None):
+    def append(item, key=None, expire_time=0):
         """
         Appends the information to the value
         Supports dicts, lists
         :param item: item to set
         :param key: key to use
+        :param expire_time: nr of seconds to keep the key. 0 = forever
         :return: True if successful, False if not
         """
         supported_types = [dict, list]
@@ -66,10 +84,10 @@ class CacheHelper(object):
         for item_type in supported_types:
             if isinstance(item, item_type) and isinstance(retrieved_value, item_type):
                 if item_type == list:
-                    return CacheHelper.update(key=key, item=retrieved_value + item)
+                    return CacheHelper.update(key=key, item=retrieved_value + item, expire_time=expire_time)
                 if item_type == dict:
                     item.update(retrieved_value)
-                    return CacheHelper.update(key=key, item=item)
+                    return CacheHelper.update(key=key, item=item, expire_time=expire_time)
         raise TypeError("{0} is not supported for appending to type {1}.".format(type(item), type(retrieved_value)))
 
     @staticmethod
