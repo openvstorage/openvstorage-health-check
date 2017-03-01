@@ -31,6 +31,7 @@ from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.generic.filemutex import file_mutex
 from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
+from ovs.extensions.healthcheck.cluster_check import cluster_check
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
 from ovs.extensions.healthcheck.helpers.storagerouter import StoragerouterHelper
@@ -145,7 +146,6 @@ class ArakoonHealthCheck(object):
         else:
             result_handler.success('No items have changed.')
 
-    # @todo: separate cluster-wide-check
     @staticmethod
     @expose_to_cli('arakoon', 'ports-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_local_arakoon_ports(result_handler):
@@ -167,7 +167,6 @@ class ArakoonHealthCheck(object):
                 else:
                     result_handler.failure('Connection FAILED to service {0} on {1}:{2}'.format(service.name, ip, port))
 
-    # @todo: separate cluster-wide-check
     @staticmethod
     @expose_to_cli('arakoon', 'collapse-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_collapse(result_handler, arakoon_clusters=None, max_collapse_age=MAX_COLLAPSE_AGE):
@@ -262,8 +261,8 @@ class ArakoonHealthCheck(object):
         elif len(ok_arakoons) > 0:
             result_handler.success('ALL Arakoon(s) are collapsed.')
 
-    # @todo: separate cluster-wide-check
     @staticmethod
+    @cluster_check
     @expose_to_cli('arakoon', 'integrity-test', HealthCheckCLIRunner.ADDON_TYPE)
     def verify_integrity(result_handler, arakoon_clusters=None):
         """
@@ -297,8 +296,8 @@ class ArakoonHealthCheck(object):
                 except Exception as ex:
                     result_handler.exception('Arakoon {0} could not process a nop. Got {1}'.format(cluster_name, str(ex)))
 
-    # @todo: separate cluster-wide-check
     @staticmethod
+    @cluster_check
     @expose_to_cli('arakoon', 'missing-node-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_missing_nodes(result_handler):
         """
