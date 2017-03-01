@@ -221,6 +221,7 @@ class CLIRunner(object):
         elif len(method_pointers) == 1:
             # Found only one method -> search term was module_name + method_name
             print method_pointers[0].__doc__
+            return
         print 'Possible optional arguments are:'
         # Multiple entries found means only the module_name was supplied
         print 'ovs healthcheck {0} {0} -- will run all checks'.format(CLIRunner._WILDCARD)
