@@ -23,6 +23,20 @@ from ovs.extensions.storage.volatilefactory import VolatileFactory
 from ovs.log.log_handler import LogHandler
 
 
+class ModuleNotRecognizedException(Exception):
+    """
+    Custom exception for when the expose to cli argument is not recognized
+    """
+    pass
+
+
+class MethodNotRecognizedException(Exception):
+    """
+    Custom exception for when the expose to cli argument is not recognized
+    """
+    pass
+
+
 # class decorator
 # noinspection PyPep8Naming
 class expose_to_cli(object):
@@ -51,7 +65,7 @@ class CLIRunner(object):
         pass
 
     @classmethod
-    def _get_methods(cls, module_name, method_name, addon_type=None):
+    def _get_methods(cls, module_name=_WILDCARD, method_name=_WILDCARD, addon_type=None):
         """
         Gets method by the specified values
         :param module_name: module to which the method belong
@@ -67,6 +81,8 @@ class CLIRunner(object):
         discovered_data = cls._discover_methods()
         module_names = discovered_data.keys() if module_name == cls._WILDCARD else [module_name]
         for module_name in module_names:
+            if module_name not in discovered_data:
+                raise ModuleNotRecognizedException()
             for function_data in discovered_data[module_name]:
                 if addon_type != function_data['addon_type'] or (method_name != cls._WILDCARD and method_name != function_data['method_name']):
                     continue
@@ -104,7 +120,14 @@ class CLIRunner(object):
         :rtype: NoneType
         """
         module_name, method_name, help_requested, args = cls.extract_arguments(*args)
-        found_method_pointers = cls._get_methods(module_name, method_name)
+        try:
+            found_method_pointers = cls._get_methods(module_name, method_name)
+        except ModuleNotRecognizedException:
+            cls.print_help(cls._get_methods(), error_help=True)
+            return
+        if len(found_method_pointers) == 0:  # Module found but no methods -> print help
+            cls.print_help(cls._get_methods(module_name), error_help=True)
+            return
         if help_requested is True:
             cls.print_help(found_method_pointers)
             return
@@ -180,37 +203,40 @@ class CLIRunner(object):
         return exposed_methods
 
     @classmethod
-    def print_help(cls, method_pointers):
+    def print_help(cls, method_pointers=None, error_help=False):
         """
         Prints the possible methods that are exposed to the CLI
         :param method_pointers: list of method pointers
         :type method_pointers: list[function]
+        :param error_help: print extra help incase wrong arguments were suppplied
+        :type error_help: bool
         :return: None
         :rtype: NoneType
         """
-        print 'Possible optional arguments are:'
+        if error_help is True:
+            print 'Could not process your arguments.'
         if len(method_pointers) == 0:
             # Nothing found for the search terms
             print 'Found no methods matching your search terms.'
         elif len(method_pointers) == 1:
             # Found only one method -> search term was module_name + method_name
             print method_pointers[0].__doc__
-        else:
-            # Multiple entries found means only the module_name was supplied
-            print 'ovs healthcheck {0} {0} -- will run all checks'.format(CLIRunner._WILDCARD)
-            print 'ovs healthcheck MODULE {0} -- will run all checks for module'.format(CLIRunner._WILDCARD)
-            # Sort based on module_name
-            print_dict = {}
-            for method_pointer in method_pointers:
-                module_name = method_pointer.expose_to_cli['module_name']
-                method_name = method_pointer.expose_to_cli['method_name']
-                if module_name in print_dict:
-                    print_dict[module_name].append(method_name)
-                    continue
-                print_dict[module_name] = [method_name]
-            for module_name, method_names in print_dict.iteritems():
-                for method_name in method_names:
-                    print "ovs healthcheck {0} {1}".format(module_name, method_name)
+        print 'Possible optional arguments are:'
+        # Multiple entries found means only the module_name was supplied
+        print 'ovs healthcheck {0} {0} -- will run all checks'.format(CLIRunner._WILDCARD)
+        print 'ovs healthcheck MODULE {0} -- will run all checks for module'.format(CLIRunner._WILDCARD)
+        # Sort based on module_name
+        print_dict = {}
+        for method_pointer in method_pointers:
+            module_name = method_pointer.expose_to_cli['module_name']
+            method_name = method_pointer.expose_to_cli['method_name']
+            if module_name in print_dict:
+                print_dict[module_name].append(method_name)
+                continue
+            print_dict[module_name] = [method_name]
+        for module_name, method_names in print_dict.iteritems():
+            for method_name in method_names:
+                print "ovs healthcheck {0} {1}".format(module_name, method_name)
 
 
 class HealthCheckCLIRunner(CLIRunner):
@@ -264,7 +290,14 @@ class HealthCheckCLIRunner(CLIRunner):
             to_json = True
         module_name, method_name, help_requested, args = HealthCheckCLIRunner.extract_arguments(*args)
         result_handler = HCResults(unattended, to_json)
-        found_method_pointers = HealthCheckCLIRunner._get_methods(module_name, method_name, HealthCheckCLIRunner.ADDON_TYPE)
+        try:
+            found_method_pointers = HealthCheckCLIRunner._get_methods(module_name, method_name, HealthCheckCLIRunner.ADDON_TYPE)
+        except ModuleNotRecognizedException:
+            HealthCheckCLIRunner.print_help(HealthCheckCLIRunner._get_methods(addon_type=HealthCheckCLIRunner.ADDON_TYPE), error_help=True)
+            return
+        if len(found_method_pointers) == 0:  # Module found but no methods -> print help
+            HealthCheckCLIRunner.print_help(HealthCheckCLIRunner._get_methods(module_name=module_name, addon_type=HealthCheckCLIRunner.ADDON_TYPE), error_help=True)
+            return
         if help_requested is True:
             HealthCheckCLIRunner.print_help(found_method_pointers)
             return
