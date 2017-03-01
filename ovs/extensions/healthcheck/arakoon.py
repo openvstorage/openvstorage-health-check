@@ -22,13 +22,13 @@ Arakoon Health Check module
 
 import os
 import time
+import timeout_decorator
 import ConfigParser
 from datetime import date, timedelta
 from StringIO import StringIO
 from ovs.extensions.db.arakoon.ArakoonInstaller import ArakoonClusterConfig
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 from ovs.extensions.generic.configuration import Configuration
-from ovs.extensions.generic.filemutex import file_mutex
 from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
 from ovs.extensions.healthcheck.cluster_check import cluster_check
@@ -36,6 +36,7 @@ from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
 from ovs.extensions.healthcheck.helpers.storagerouter import StoragerouterHelper
 from ovs.extensions.storage.persistent.pyrakoonstore import PyrakoonStore
+from timeout_decorator.timeout_decorator import TimeoutError
 
 
 class ArakoonHealthCheck(object):
@@ -46,6 +47,7 @@ class ArakoonHealthCheck(object):
     # oldest tlx files may not older than x days. If they are - failed collapse
     MAX_COLLAPSE_AGE = 2
     LOCAL_SR = System.get_my_storagerouter()
+    INTEGRITY_TIMEOUT = 10
 
     @staticmethod
     def _get_clusters_residing_on_local_node(result_handler):
@@ -274,6 +276,27 @@ class ArakoonHealthCheck(object):
         :return: None
         :rtype: NoneType
         """
+        @timeout_decorator.timeout(ArakoonHealthCheck.INTEGRITY_TIMEOUT)
+        def verify_arakoon(arakoon_cluster_name):
+            """
+            Tries a nop on a arakoon cluster
+            :param arakoon_cluster_name: name of the arakoon cluster
+            :return: None
+            """
+            try:
+                # determine if there is a healthy cluster
+                client = PyrakoonStore(str(arakoon_cluster_name))
+                client.nop()
+                result_handler.success('Arakoon {0} responded successfully.'.format(arakoon_cluster_name))
+            except ArakoonNotFound as ex:
+                result_handler.failure('Arakoon {0} seems to be down. Got {1}'.format(arakoon_cluster_name, str(ex)))
+            except (ArakoonNoMaster, ArakoonNoMasterResult) as ex:
+                result_handler.failure('Arakoon {0} cannot find a master. Got {1}'.format(arakoon_cluster_name, str(ex)))
+            except TimeoutError:
+                result_handler.warning('Arakoon {0} did not respond within {1}s'.format(arakoon_cluster_name, ArakoonHealthCheck.INTEGRITY_TIMEOUT))
+            except Exception as ex:
+                result_handler.exception('Arakoon {0} could not process a nop. Got {1}'.format(arakoon_cluster_name, str(ex)))
+
         if arakoon_clusters is None:
             arakoon_clusters = ArakoonHealthCheck._get_clusters_residing_on_local_node(result_handler)['present']
 
@@ -282,19 +305,7 @@ class ArakoonHealthCheck(object):
         for cluster_name, cluster_info in arakoon_clusters.iteritems():
             if ArakoonHealthCheck.LOCAL_SR.machine_id not in cluster_info:
                 continue
-
-            with file_mutex('ovs-healthcheck_arakoon-test_{0}'.format(cluster_name)):
-                try:
-                    # determine if there is a healthy cluster
-                    client = PyrakoonStore(str(cluster_name))
-                    client.nop()
-                    result_handler.success('Arakoon {0} responded successfully.'.format(cluster_name))
-                except ArakoonNotFound as ex:
-                    result_handler.failure('Arakoon {0} seems to be down. Got {1}'.format(cluster_name, str(ex)))
-                except (ArakoonNoMaster, ArakoonNoMasterResult) as ex:
-                    result_handler.failure('Arakoon {0} cannot find a master. Got {1}'.format(cluster_name, str(ex)))
-                except Exception as ex:
-                    result_handler.exception('Arakoon {0} could not process a nop. Got {1}'.format(cluster_name, str(ex)))
+            verify_arakoon(str(cluster_name))
 
     @staticmethod
     @cluster_check
