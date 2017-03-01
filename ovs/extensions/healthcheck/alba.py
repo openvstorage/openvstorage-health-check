@@ -336,8 +336,8 @@ class AlbaHealthCheck(object):
             })
         return result
 
-    # @todo: separate cluster-wide-check
     @staticmethod
+    @cluster_check
     @expose_to_cli(MODULE, 'backend-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_backends(result_handler):
         """
@@ -391,8 +391,8 @@ class AlbaHealthCheck(object):
         except (ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult) as e:
             result_handler.failure('Seems like a arakoon has some problems: {0}'.format(e))
 
-    # @todo: separate cluster-wide-check
     @staticmethod
+    @cluster_check
     @expose_to_cli(MODULE, 'disk-safety-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_disk_safety(result_handler):
         """
