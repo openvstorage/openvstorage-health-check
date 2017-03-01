@@ -78,7 +78,7 @@ class OpenvStorageHealthCheck(object):
                 result_handler.success('Logfile {0} size is fine!'.format(c_files))
             else:
                 too_big.append(c_files)
-                result_handler.warning('Logfile {0} is larger than {0} MB!'.format(c_files, max_log_size))
+                result_handler.warning('Logfile {0} is larger than {1} MB!'.format(c_files, max_log_size))
 
         if len(too_big) != 0:
             result_handler.warning('The following log files are too big: {0}.'.format(', '.join(too_big)))
