@@ -37,3 +37,15 @@ class AlbaTest(object):
                     '1,3': {'max_disk_safety': 3, 'current_disk_safety': {0: [{'namespace': 'e88c88c9-632c-4975-b39f-e9993e352560', 'amount_in_bucket': 100}]}}
                 },
             }
+
+    @staticmethod
+    def get_cache_eviction_mock():
+        return {"enable_auto_repair": True,
+                "auto_repair_timeout_seconds": 900.0,
+                "auto_repair_disabled_nodes": [],
+                "enable_rebalance": True,
+                "cache_eviction_prefix_preset_pairs": {"b4eef27e-ef54-4fe8-8658-cdfbda7ceae4": "ssdPreset"},
+                "redis_lru_cache_eviction": {"host": "10.100.199.171",
+                                             "port": 6379,
+                                             "key": "alba_lru_38ba0ec2-212f-4439-b13e-b33600376e79"}}
+
