@@ -25,7 +25,6 @@ import uuid
 import time
 import hashlib
 import subprocess
-from decimal import Decimal
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 from ovs.extensions.generic.configuration import Configuration, NotFoundException
 from ovs.extensions.generic.sshclient import SSHClient
@@ -412,6 +411,9 @@ class AlbaHealthCheck(object):
                 # '1,2' is policy_prefix and value is policy_details
                 # {'1,2': {'max_disk_safety': 2, 'current_disk_safety': {<namespaces in safety buckets>} }
                 result_handler.info('Checking policy {0} with max. disk safety {1}'.format(policy_prefix, policy_details['max_disk_safety']), add_to_result=False)
+                if len(policy_details['current_disk_safety'].values()) == 0:
+                    result_handler.skip('No data/namespaces found on backend {0}.'.format(backend_name))
+                    continue
                 # if there is only 1 bucket category that is equal to the max_disk_safety, all your data is safe
                 if len(policy_details['current_disk_safety']) == 1 and policy_details['max_disk_safety'] in policy_details['current_disk_safety']:
                     # all data is safe!
@@ -448,6 +450,28 @@ class AlbaHealthCheck(object):
         :return: Safety of every namespace in every backend
         :rtype: dict
         """
+        def get_testworthy_namespaces(all_namespaces, presets_to_evict):
+            """
+            # https://github.com/openvstorage/openvstorage-health-check/issues/292
+            Ignores cache eviction presets
+            :param all_namespaces: namespace collection
+            :type all_namespaces: list[dict]
+            :param presets_to_evict: list of presets to evict
+            :type presets_to_evict: list[str]
+            :return: namespaces to test
+            :rtype: dict
+            """
+            namespaces_to_test = all_namespaces
+            for index, namespace in enumerate(all_namespaces):
+                namespace_name = namespace['namespace']
+                matched = False
+                for preset_to_evict in presets_to_evict:
+                    if namespace_name.startswith(preset_to_evict):
+                        matched = True
+                if matched is True:
+                    namespaces_to_test.pop(index)
+            return namespaces_to_test
+
         disk_safety_overview = {}
         for alba_backend in BackendHelper.get_albabackends():
             disk_safety_overview[alba_backend.name] = {}
@@ -458,6 +482,7 @@ class AlbaHealthCheck(object):
                 # Ticket: https://github.com/openvstorage/alba/issues/441
                 # extra_params=['--include-errored-as-dead']
                 namespaces = AlbaCLI.run(command='get-disk-safety', config=config)
+                cache_eviction_prefix_preset_pairs = AlbaCLI.run(command='get-maintenance-config', config=config)['cache_eviction_prefix_preset_pairs']
                 presets = AlbaCLI.run(command='list-presets', config=config)
             except AlbaException as ex:
                 result_handler.exception('Could not fetch alba information for backend {0} Message: {1}'.format(alba_backend.name, ex))
@@ -469,11 +494,10 @@ class AlbaHealthCheck(object):
                 if not preset['in_use']:
                     continue
                 for policy in preset['policies']:
-                    disk_safety_overview[alba_backend.name]['{0},{1}'.format(str(policy[0]), str(policy[1]))] = \
-                        {'current_disk_safety': {}, 'max_disk_safety': policy[1]}
+                    disk_safety_overview[alba_backend.name]['{0},{1}'.format(str(policy[0]), str(policy[1]))] = {'current_disk_safety': {}, 'max_disk_safety': policy[1]}
 
             # collect namespaces
-            for namespace in namespaces:
+            for namespace in get_testworthy_namespaces(namespaces, cache_eviction_prefix_preset_pairs.keys()):
                 # calc total objects in namespace
                 total_count = 0
                 for bucket_safety in namespace['bucket_safety']:
@@ -486,7 +510,7 @@ class AlbaHealthCheck(object):
                     current_disk_safety = disk_safety_overview[alba_backend.name][safety]['current_disk_safety']
                     to_be_added_namespace = \
                         {'namespace': namespace['namespace'],
-                         'amount_in_bucket': "%.5f" % Decimal((float(bucket_safety['count'])/float(total_count))*100)}
+                         'amount_in_bucket': "%.5f" % (float(bucket_safety['count'])/float(total_count)*100)}
                     if calculated_disk_safety in current_disk_safety:
                         current_disk_safety[calculated_disk_safety].append(to_be_added_namespace)
                     else:
