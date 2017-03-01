@@ -167,7 +167,7 @@ class VolumedriverHealthCheck(object):
 
                 except TimeoutError:
                     # timeout occurred, action took too long
-                    result_handler.failure('Volumedriver of vPool {0} seems to timeout.'.format(vp.name))
+                    result_handler.warning('Volumedriver of vPool {0} seems to timeout.'.format(vp.name))
                 except IOError as ex:
                     # can be input/output error by volumedriver
                     result_handler.failure('Volumedriver of vPool {0} seems to have IO problems. Got `{1}` while executing.'.format(vp.name, ex.message))
@@ -324,7 +324,7 @@ class VolumedriverHealthCheck(object):
                         result_handler.failure('Filedriver for vPool {0} seems to have problems!'.format(vp.name))
                 except TimeoutError:
                     # timeout occurred, action took too long
-                    result_handler.failure('Filedriver of vPool {0} seems to have `timeout` problems'.format(vp.name))
+                    result_handler.warning('Filedriver of vPool {0} seems to have `timeout` problems'.format(vp.name))
                 except subprocess.CalledProcessError:
                     # can be input/output error by filedriver
                     result_handler.failure('Filedriver of vPool {0} seems to have `input/output` problems'.format(vp.name))
