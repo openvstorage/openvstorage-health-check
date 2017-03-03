@@ -258,7 +258,6 @@ class VolumedriverHealthCheck(object):
         :type volume_name: str
         :return: volumedriver volume object
         """
-
         # noinspection PyUnresolvedReferences
         return voldrv_client.info_volume(volume_name)
 
@@ -295,6 +294,7 @@ class VolumedriverHealthCheck(object):
 
     @staticmethod
     # @expose_to_cli(MODULE, 'filedrivers-test', HealthCheckCLIRunner.ADDON_TYPE)
+    # @todo replace fuse test with edge test
     def check_filedrivers(result_handler):
         """
         Checks if the file drivers work on a local machine (compatible with multiple vPools)

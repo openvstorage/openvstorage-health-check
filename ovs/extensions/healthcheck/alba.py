@@ -450,28 +450,6 @@ class AlbaHealthCheck(object):
         :return: Safety of every namespace in every backend
         :rtype: dict
         """
-        def get_testworthy_namespaces(all_namespaces, presets_to_evict):
-            """
-            # https://github.com/openvstorage/openvstorage-health-check/issues/292
-            Ignores cache eviction presets
-            :param all_namespaces: namespace collection
-            :type all_namespaces: list[dict]
-            :param presets_to_evict: list of presets to evict
-            :type presets_to_evict: list[str]
-            :return: namespaces to test
-            :rtype: dict
-            """
-            namespaces_to_test = all_namespaces
-            for index, namespace in enumerate(all_namespaces):
-                namespace_name = namespace['namespace']
-                matched = False
-                for preset_to_evict in presets_to_evict:
-                    if namespace_name.startswith(preset_to_evict):
-                        matched = True
-                if matched is True:
-                    namespaces_to_test.pop(index)
-            return namespaces_to_test
-
         disk_safety_overview = {}
         for alba_backend in BackendHelper.get_albabackends():
             disk_safety_overview[alba_backend.name] = {}
@@ -497,7 +475,8 @@ class AlbaHealthCheck(object):
                     disk_safety_overview[alba_backend.name]['{0},{1}'.format(str(policy[0]), str(policy[1]))] = {'current_disk_safety': {}, 'max_disk_safety': policy[1]}
 
             # collect namespaces
-            for namespace in get_testworthy_namespaces(namespaces, cache_eviction_prefix_preset_pairs.keys()):
+            test_worthy_namespaces = (item for item in namespaces if not item['namespace'].startswith(tuple(cache_eviction_prefix_preset_pairs.keys())))
+            for namespace in test_worthy_namespaces:
                 # calc total objects in namespace
                 total_count = 0
                 for bucket_safety in namespace['bucket_safety']:
