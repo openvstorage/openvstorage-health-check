@@ -61,7 +61,7 @@ class VolumedriverHealthCheck(object):
                 vdisk.invalidate_dynamics(['dtl_status', 'info'])
             except TimeoutError:
                 result_handler.warning('VDisk {0}s DTL has a timeout status: {1}.'.format(vdisk.name, vdisk.dtl_status))
-            if vdisk.dtl_status == 'ok_standalone':
+            if vdisk.dtl_status == 'ok_standalone' or vdisk.dtl_status == 'disabled':
                 result_handler.success('VDisk {0}s DTL is disabled'.format(vdisk.name))
             elif vdisk.dtl_status == 'ok_sync':
                 result_handler.success('VDisk {0}s DTL is enabled and running.'.format(vdisk.name))
