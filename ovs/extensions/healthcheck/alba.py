@@ -47,10 +47,9 @@ class AlbaHealthCheck(object):
     MODULE = 'alba'
     TEMP_FILE_SIZE = 1024 ** 2
     LOCAL_SR = System.get_my_storagerouter()
-    # to be put in alba file
-    TEMP_FILE_LOC = '/tmp/ovs-hc.xml'
-    # fetched (from alba) file location
-    TEMP_FILE_FETCHED_LOC = '/tmp/ovs-hc-fetched.xml'
+    LOCAL_ID = System.get_my_machine_id()
+    TEMP_FILE_LOC = '/tmp/ovs-hc.xml'  # to be put in alba file
+    TEMP_FILE_FETCHED_LOC = '/tmp/ovs-hc-fetched.xml'  # fetched (from alba) file location
 
     @staticmethod
     def _check_backend_asds(result_handler, asds, backend_name, config):
@@ -136,7 +135,6 @@ class AlbaHealthCheck(object):
         return result
 
     @staticmethod
-    @cluster_check
     @expose_to_cli(MODULE, 'proxy-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_if_proxies_work(result_handler):
         """
@@ -195,16 +193,30 @@ class AlbaHealthCheck(object):
                     # Encapsulation try for cleanup
                     try:
                         # Generate new namespace name using the preset
-                        namespace_key = 'ovs-healthcheck-ns-{0}'.format(preset_name)
+                        namespace_key = 'ovs-healthcheck-ns-{0}-{1}'.format(preset_name, AlbaHealthCheck.LOCAL_ID)
                         object_key = 'ovs-healthcheck-obj-{0}'.format(str(uuid.uuid4()))
-                        try:
-                            # Create namespace
-                            AlbaCLI.run(command='proxy-create-namespace',
-                                        named_params={'host': ip, 'port': service.ports[0]},
-                                        extra_params=[namespace_key, preset_name])
-                            result_handler.success('Namespace successfully created on proxy {0} with preset {1}!'.format(service.name, preset_name))
-                        except AlbaException:
-                            raise
+                        # Create namespace
+                        AlbaCLI.run(command='proxy-create-namespace',
+                                    named_params={'host': ip, 'port': service.ports[0]},
+                                    extra_params=[namespace_key, preset_name])
+                        # Wai until fully created
+                        namespace_start_time = time.time()
+                        while True:
+                            if time.time() - namespace_start_time > 30:
+                                raise RuntimeError('Creation namespace has timed out after {0}s'.format(time.time() - namespace_start_time))
+                            output = AlbaCLI.run(command='list-ns-osds', config=abm_config, extra_params=[namespace_key], to_json=False)
+                            # @todo https://github.com/openvstorage/alba/issues/634 -- replace with tojson instead of output processing
+                            search = 'Albamgr_protocol.Protocol.Osd.NamespaceLink'
+                            namespace_ready = True
+                            for line in output.splitlines():
+                                if line.strip():
+                                    state = [i for i in line.split(' ') if search in i][0].split(')')[0].rsplit('.', 1)[1]
+                                    if state == 'Adding':
+                                        namespace_ready = False
+                            if namespace_ready is True:
+                                break
+                            time.sleep(0.5)
+                        result_handler.success('Namespace successfully created on proxy {0} with preset {1}!'.format(service.name, preset_name))
                         namespace_info = AlbaCLI.run(command='show-namespace', config=abm_config, extra_params=[namespace_key])
                         Toolbox.verify_required_params(required_params=namespace_params, actual_params=namespace_info)
                         result_handler.success('Namespace successfully fetched on proxy {0} with preset {1}!'.format(service.name, preset_name))
@@ -229,29 +241,22 @@ class AlbaHealthCheck(object):
                         hash_fetched = hashlib.md5(open(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC, 'rb').read()).hexdigest()
 
                         if hash_original == hash_fetched:
-                            result_handler.success('Creation of a object in namespace {0} on proxy {1} with preset {2} succeeded!'
-                                                   .format(namespace_key, service.name, preset_name))
+                            result_handler.success('Fetched object {0} from namespace {1} on proxy {2} with preset {3} matches the created object!'.format(object_key, namespace_key, service.name, preset_name))
                         else:
-                            result_handler.failure('Creation of a object {0} in namespace {1} on proxy {2} with preset {3} failed!'
-                                                   .format(object_key, namespace_key, service.name, preset_name))
+                            result_handler.failure('Fetched object {0} from namespace {1} on proxy {2} with preset {3} does not match the created object!'.format(object_key, namespace_key, service.name, preset_name))
 
                     except ObjectNotFoundException as ex:
                         amount_of_presets_not_working.append(preset_name)
-                        result_handler.failure('Failed to put object on namespace {0} failed on proxy {1}with preset {2} With error {3}'
-                                               .format(namespace_key, service.name, preset_name, ex))
+                        result_handler.failure('Failed to put object on namespace {0} failed on proxy {1}with preset {2} With error {3}'.format(namespace_key, service.name, preset_name, ex))
                     except AlbaException as ex:
                         if ex.alba_command == 'proxy-create-namespace':
-                            result_handler.failure('Create namespace has failed with {0} on namespace {1} with proxy {2} with preset {3}'
-                                                   .format(str(ex), namespace_key, service.name, preset_name))
+                            result_handler.failure('Create namespace has failed with {0} on namespace {1} with proxy {2} with preset {3}'.format(str(ex), namespace_key, service.name, preset_name))
                         elif ex.alba_command == 'show-namespace':
-                            result_handler.failure('Show namespace has failed with {0} on namespace {1} with proxy {2} with preset {3}'
-                                                   .format(str(ex), namespace_key, service.name, preset_name))
+                            result_handler.failure('Show namespace has failed with {0} on namespace {1} with proxy {2} with preset {3}'.format(str(ex), namespace_key, service.name, preset_name))
                         elif ex.alba_command == 'proxy-upload-object':
-                            result_handler.failure('Uploading the object has failed with {0} on namespace {1} with proxy {2} with preset {3}'
-                                                   .format(str(ex), namespace_key, service.name, preset_name))
+                            result_handler.failure('Uploading the object has failed with {0} on namespace {1} with proxy {2} with preset {3}'.format(str(ex), namespace_key, service.name, preset_name))
                         elif ex.alba_command == 'proxy-download-object':
-                            result_handler.failure('Downloading the object has failed with {0} on namespace {1} with proxy {2} with preset {3}'
-                                                   .format(str(ex), namespace_key, service.name, preset_name))
+                            result_handler.failure('Downloading the object has failed with {0} on namespace {1} with proxy {2} with preset {3}'.format(str(ex), namespace_key, service.name, preset_name))
                     finally:
                         # Delete the created namespace and preset
                         try:
@@ -273,7 +278,16 @@ class AlbaHealthCheck(object):
                                             stderr=subprocess.STDOUT)
 
                             result_handler.info('Deleting namespace {0}.'.format(namespace_key))
-                            AlbaCLI.run(command='proxy-delete-namespace', named_params={'host': ip, 'port': service.ports[0]}, extra_params=[namespace_key])
+                            AlbaCLI.run(command='proxy-delete-namespace',
+                                        named_params={'host': ip, 'port': service.ports[0]},
+                                        extra_params=[namespace_key])
+                            namespace_delete_start = time.time()
+                            while True:
+                                namespaces = AlbaCLI.run(command='list-namespaces', config=abm_config)
+                                if namespace_key not in namespaces:
+                                    break
+                                if time.time() - namespace_delete_start > 30:
+                                    raise RuntimeError('Creation namespace has timed out after {0}s'.format(time.time() - namespace_start_time))
                         except subprocess.CalledProcessError:
                             raise
                         except AlbaException:
@@ -417,7 +431,7 @@ class AlbaHealthCheck(object):
                 # if there is only 1 bucket category that is equal to the max_disk_safety, all your data is safe
                 if len(policy_details['current_disk_safety']) == 1 and policy_details['max_disk_safety'] in policy_details['current_disk_safety']:
                     # all data is safe!
-                    result_handler.success('All data is safe on backend {0} with {1} namespace(s)'.format(backend_name, len(policy_details['current_disk_safety'])))
+                    result_handler.success('All data is safe on backend {0} with {1} namespace(s)'.format(backend_name, len(policy_details['current_disk_safety'][policy_details['max_disk_safety']])))
                 else:
                     # some data is not or less safe!
                     for disk_safety, namespaces in policy_details['current_disk_safety'].iteritems():
