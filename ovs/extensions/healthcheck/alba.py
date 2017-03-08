@@ -50,6 +50,7 @@ class AlbaHealthCheck(object):
     LOCAL_ID = System.get_my_machine_id()
     TEMP_FILE_LOC = '/tmp/ovs-hc.xml'  # to be put in alba file
     TEMP_FILE_FETCHED_LOC = '/tmp/ovs-hc-fetched.xml'  # fetched (from alba) file location
+    NAMESPACE_TIMEOUT = 30  # in seconds
 
     @staticmethod
     def _check_backend_asds(result_handler, asds, backend_name, config):
@@ -202,7 +203,7 @@ class AlbaHealthCheck(object):
                         # Wai until fully created
                         namespace_start_time = time.time()
                         while True:
-                            if time.time() - namespace_start_time > 30:
+                            if time.time() - namespace_start_time > AlbaHealthCheck.NAMESPACE_TIMEOUT:
                                 raise RuntimeError('Creation namespace has timed out after {0}s'.format(time.time() - namespace_start_time))
                             output = AlbaCLI.run(command='list-ns-osds', config=abm_config, extra_params=[namespace_key], to_json=False)
                             # @todo https://github.com/openvstorage/alba/issues/634 -- replace with tojson instead of output processing
@@ -215,7 +216,6 @@ class AlbaHealthCheck(object):
                                         namespace_ready = False
                             if namespace_ready is True:
                                 break
-                            time.sleep(0.5)
                         result_handler.success('Namespace successfully created on proxy {0} with preset {1}!'.format(service.name, preset_name))
                         namespace_info = AlbaCLI.run(command='show-namespace', config=abm_config, extra_params=[namespace_key])
                         Toolbox.verify_required_params(required_params=namespace_params, actual_params=namespace_info)
@@ -286,7 +286,7 @@ class AlbaHealthCheck(object):
                                 namespaces = AlbaCLI.run(command='list-namespaces', config=abm_config)
                                 if namespace_key not in namespaces:
                                     break
-                                if time.time() - namespace_delete_start > 30:
+                                if time.time() - namespace_delete_start > AlbaHealthCheck.NAMESPACE_TIMEOUT:
                                     raise RuntimeError('Creation namespace has timed out after {0}s'.format(time.time() - namespace_start_time))
                         except subprocess.CalledProcessError:
                             raise
