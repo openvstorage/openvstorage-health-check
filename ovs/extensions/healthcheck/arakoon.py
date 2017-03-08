@@ -248,12 +248,12 @@ class ArakoonHealthCheck(object):
                     nok_arakoons.append(cluster_name)
                     continue
 
-                if oldest_tlx_stats.st_mtime > max_age_timestamp:
-                    result_handler.success('Oldest tlx file for Arakoon {0} is not older than {1}.'.format(cluster_name, max_collapse_age))
+                if oldest_tlx_stats.st_mtime < max_age_timestamp:
+                    result_handler.success('Oldest tlx file for Arakoon {0} is not older than {1} days.'.format(cluster_name, max_collapse_age))
                     ok_arakoons.append(cluster_name)
                     continue
                 else:
-                    result_handler.warning('Oldest tlx file for Arakoon {0} is not older than {1}.'.format(cluster_name, max_collapse_age))
+                    result_handler.warning('Oldest tlx file for Arakoon {0} is older than {1} days.'.format(cluster_name, max_collapse_age))
 
                 nok_arakoons.append(cluster_name)
 
