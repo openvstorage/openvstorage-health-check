@@ -310,7 +310,12 @@ class HealthCheckCLIRunner(CLIRunner):
             result_handler.info("======================")
             for found_method in found_method_pointers:
                 test_name = '{0}-{1}'.format(found_method.expose_to_cli['module_name'], found_method.expose_to_cli['method_name'])
-                found_method(result_handler.HCResultCollector(result=result_handler, test_name=test_name))
+                try:
+                    found_method(result_handler.HCResultCollector(result=result_handler, test_name=test_name))
+                except KeyboardInterrupt:
+                    raise
+                except Exception as ex:
+                    result_handler.exception('Unhandled exception caught when executing {0}. Got {1}'.format(found_method.__name__, str(ex)))
             return HealthCheckCLIRunner.get_results(result_handler, module_name, method_name)
         except KeyboardInterrupt:
             HealthCheckCLIRunner.logger.warning('Caught keyboard interrupt. Output may be incomplete!')
