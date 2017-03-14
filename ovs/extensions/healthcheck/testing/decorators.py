@@ -20,7 +20,7 @@ import uuid
 from ovs.extensions.healthcheck.decorators import ensure_single_with_callback
 
 
-class ClusterCheckTester(unittest.TestCase):
+class CheckTester(unittest.TestCase):
 
     def tearDown(self):
         for thread in self.threads:
@@ -43,59 +43,38 @@ class ClusterCheckTester(unittest.TestCase):
 
     @staticmethod
     @ensure_single_with_callback(key='ovs_healthcheck_unit_testing', callback=concurrency_callback, lock_type='cluster')
-    def thread_for_testing(thread_index, thread_object, sleep_time=2):
+    def thread_for_testing_cluster(thread_index, thread_object, sleep_time=2):
         time.sleep(sleep_time)
         thread_object[thread_index]['called'] = True
 
-    def test_concurrency(self):
+    @staticmethod
+    @ensure_single_with_callback(key='ovs_healthcheck_unit_testing', callback=concurrency_callback, lock_type='local')
+    def thread_for_testing_local(thread_index, thread_object, sleep_time=2):
+        time.sleep(sleep_time)
+        thread_object[thread_index]['called'] = True
+
+    def test_concurrency_local(self):
         concurreny_amount = 5
         self.threads = []
         shared = {'callbacks': {}}
         for index in xrange(concurreny_amount):
             thread_object = {'called': False}
             shared[index] = thread_object
-            self.threads.append(ClusterCheckTester.start_thread(ClusterCheckTester.thread_for_testing, 'test_{}'.format(index), args=(index,), kwargs={'thread_object': shared}))
+            self.threads.append(CheckTester.start_thread(CheckTester.thread_for_testing_local, 'test_{}'.format(index), args=(index,), kwargs={'thread_object': shared}))
         for thread in self.threads:
             if thread.isAlive():
                 thread.join()
         # Start all threads
         self.assertEqual(len(shared['callbacks'].keys()), concurreny_amount - 1)
 
-
-class LocalCheckTester(unittest.TestCase):
-    def tearDown(self):
-        for thread in self.threads:
-            if thread.isAlive():
-                thread.join()
-
-    @staticmethod
-    def start_thread(target, name, args=(), kwargs=None):
-        if kwargs is None:
-            kwargs = {}
-        thread = threading.Thread(target=target, args=tuple(args), kwargs=kwargs)
-        thread.setName(str(name))
-        thread.start()
-        return thread
-
-    @staticmethod
-    def concurrency_callback(*args, **kwargs):
-        thread_object = kwargs.get('thread_object')
-        thread_object['callbacks'][str(uuid.uuid4())] = 'Called at {0}'.format(time.time())
-
-    @staticmethod
-    @ensure_single_with_callback(key='ovs_healthcheck_unit_testing', callback=concurrency_callback, lock_type='local')
-    def thread_for_testing(thread_index, thread_object, sleep_time=2):
-        time.sleep(sleep_time)
-        thread_object[thread_index]['called'] = True
-
-    def test_concurrency(self):
+    def test_concurrency_cluster(self):
         concurreny_amount = 5
         self.threads = []
         shared = {'callbacks': {}}
         for index in xrange(concurreny_amount):
             thread_object = {'called': False}
             shared[index] = thread_object
-            self.threads.append(ClusterCheckTester.start_thread(ClusterCheckTester.thread_for_testing, 'test_{}'.format(index), args=(index,), kwargs={'thread_object': shared}))
+            self.threads.append(CheckTester.start_thread(CheckTester.thread_for_testing_cluster, 'test_{}'.format(index), args=(index,), kwargs={'thread_object': shared}))
         for thread in self.threads:
             if thread.isAlive():
                 thread.join()
@@ -108,6 +87,5 @@ def suite():
     Gather all the tests from this module in a test suite.
     """
     test_suite = unittest.TestSuite()
-    test_suite.addTest(unittest.makeSuite(ClusterCheckTester))
-    test_suite.addTest(unittest.makeSuite(LocalCheckTester))
+    test_suite.addTest(unittest.makeSuite(CheckTester))
     return test_suite

@@ -14,6 +14,7 @@
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
 import inspect
+import time
 from functools import wraps
 from ovs.extensions.generic.filemutex import file_mutex
 from ovs.extensions.generic.filemutex import NoLockAvailableException as NoFileLockAvailableException
@@ -27,6 +28,9 @@ from ovs.extensions.healthcheck.result import HCResults
 def ensure_single_with_callback(key, callback=None, lock_type='local'):
     """
     Ensure only a single execution of the method
+    The cluster check could have some raceconditions when the following conditions are met:
+    - Decorated method takes longer than 60s (volatilemutex limit is 60s) (memcache is unstable in keeping data);
+    - The second acquire enters the callback and fetches the key from memcache while the key has not been set by the first (see below for fix).
     """
     def wrapper(func):
         @wraps(func)
@@ -46,9 +50,21 @@ def ensure_single_with_callback(key, callback=None, lock_type='local'):
                 if callback is None:
                     return
                 else:
+                    executor_info = None
+                    start = time.time()
+                    while executor_info is None:
+                        # Calculated guesswork. If a callback function would be expected, the acquire has happened for another executor  the volatilekey should be set eventually
+                        # However by setting it after the acquire, the callback executor and original method executor can race between fetch and set
+                        # A better implementation would be relying on the fwk ensure_single_decorator as they check for various races themselves
+                        # This is just a poor mans, temporary implementation
+                        if start - time.time() > 5:
+                            raise ValueError('Timed out after 5 seconds while fetching the information about the executor.')
+                        try:
+                            executor_info = CacheHelper.get(key=key)
+                        except:
+                            pass
                     callback_func = callback.__func__ if isinstance(callback, staticmethod) else callback
                     argnames = inspect.getargspec(callback_func)[0]
-                    executor_info = CacheHelper.get(key=key)
                     arguments = list(args)
                     kwargs.update({'test_name': func.__name__})
                     if executor_info is not None:
