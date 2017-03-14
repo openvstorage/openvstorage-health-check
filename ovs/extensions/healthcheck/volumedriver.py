@@ -18,7 +18,6 @@ import subprocess
 import timeout_decorator
 from ovs.dal.exceptions import ObjectNotFoundException
 from ovs.extensions.generic.configuration import Configuration
-from ovs.extensions.generic.filemutex import file_mutex
 from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
 from ovs.extensions.healthcheck.helpers.exceptions import VDiskNotFoundError
@@ -141,48 +140,47 @@ class VolumedriverHealthCheck(object):
             return
         for vp in vpools:
             name = 'ovs-healthcheck-test-{0}.raw'.format(VolumedriverHealthCheck.LOCAL_ID)
-            with file_mutex('ovs-healthcheck_check-volumedrivers'):
-                if vp.guid not in VolumedriverHealthCheck.LOCAL_SR.vpools_guids:
-                    result_handler.skip('Skipping vPool {0} because it is not living here.'.format(vp.name))
-                    continue
-                try:
-                    # delete if previous vdisk with this name exists
-                    storagedriver_guid = next((storagedriver.guid for storagedriver in vp.storagedrivers
-                                               if storagedriver.storagedriver_id == vp.name +
-                                               VolumedriverHealthCheck.LOCAL_ID))
-                    # create a new one
-                    volume = VolumedriverHealthCheck._check_volumedriver(name, storagedriver_guid, result_handler)
+            if vp.guid not in VolumedriverHealthCheck.LOCAL_SR.vpools_guids:
+                result_handler.skip('Skipping vPool {0} because it is not living here.'.format(vp.name))
+                continue
+            try:
+                # delete if previous vdisk with this name exists
+                storagedriver_guid = next((storagedriver.guid for storagedriver in vp.storagedrivers
+                                           if storagedriver.storagedriver_id == vp.name +
+                                           VolumedriverHealthCheck.LOCAL_ID))
+                # create a new one
+                volume = VolumedriverHealthCheck._check_volumedriver(name, storagedriver_guid, result_handler)
 
-                    if volume is True:
-                        # delete the recently created
-                        try:
-                            VolumedriverHealthCheck._check_volumedriver_remove(vpool_name=vp.name, vdisk_name=name)
-                        except Exception as ex:
-                            raise RuntimeError('Could not delete the created volume. Got {0}'.format(str(ex)))
-                        # Working at this point
-                        result_handler.success('Volumedriver of vPool {0} is working fine!'.format(vp.name))
-                    else:
-                        # not working
-                        result_handler.failure('Something went wrong during vdisk creation on vpool {0}.'.format(vp.name))
-
-                except TimeoutError:
-                    # timeout occurred, action took too long
-                    result_handler.warning('Volumedriver of vPool {0} seems to timeout.'.format(vp.name))
-                except IOError as ex:
-                    # can be input/output error by volumedriver
-                    result_handler.failure('Volumedriver of vPool {0} seems to have IO problems. Got `{1}` while executing.'.format(vp.name, ex.message))
-                except RuntimeError as ex:
-                    result_handler.failure('Volumedriver of vPool {0} seems to have problems. Got `{1}` while executing.'.format(vp.name, ex))
-                except VDiskNotFoundError:
-                    result_handler.warning('Volume on vPool {0} was not found, please retry again'.format(vp.name))
-                except Exception as ex:
-                    result_handler.failure('Uncaught exception for Volumedriver of vPool {0}.Got {1} while executing.'.format(vp.name, ex))
-                finally:
-                    # Attempt to delete the created vdisk
+                if volume is True:
+                    # delete the recently created
                     try:
-                        VolumedriverHealthCheck._check_volumedriver_remove(vpool_name=vp.name, vdisk_name=name, present=False)
-                    except:
-                        pass
+                        VolumedriverHealthCheck._check_volumedriver_remove(vpool_name=vp.name, vdisk_name=name)
+                    except Exception as ex:
+                        raise RuntimeError('Could not delete the created volume. Got {0}'.format(str(ex)))
+                    # Working at this point
+                    result_handler.success('Volumedriver of vPool {0} is working fine!'.format(vp.name))
+                else:
+                    # not working
+                    result_handler.failure('Something went wrong during vdisk creation on vpool {0}.'.format(vp.name))
+
+            except TimeoutError:
+                # timeout occurred, action took too long
+                result_handler.warning('Volumedriver of vPool {0} seems to timeout.'.format(vp.name))
+            except IOError as ex:
+                # can be input/output error by volumedriver
+                result_handler.failure('Volumedriver of vPool {0} seems to have IO problems. Got `{1}` while executing.'.format(vp.name, ex.message))
+            except RuntimeError as ex:
+                result_handler.failure('Volumedriver of vPool {0} seems to have problems. Got `{1}` while executing.'.format(vp.name, ex))
+            except VDiskNotFoundError:
+                result_handler.warning('Volume on vPool {0} was not found, please retry again'.format(vp.name))
+            except Exception as ex:
+                result_handler.failure('Uncaught exception for Volumedriver of vPool {0}.Got {1} while executing.'.format(vp.name, ex))
+            finally:
+                # Attempt to delete the created vdisk
+                try:
+                    VolumedriverHealthCheck._check_volumedriver_remove(vpool_name=vp.name, vdisk_name=name, present=False)
+                except:
+                    pass
 
     @staticmethod
     @expose_to_cli(MODULE, 'halted-volumes-test', HealthCheckCLIRunner.ADDON_TYPE)
@@ -309,22 +307,21 @@ class VolumedriverHealthCheck(object):
             return
         for vp in vpools:
             name = 'ovs-healthcheck-test-{0}'.format(VolumedriverHealthCheck.LOCAL_ID)
-            with file_mutex('ovs-healthcheck_filedrivers-test'):
-                if vp.guid not in VolumedriverHealthCheck.LOCAL_SR.vpools_guids:
-                    result_handler.skip('Skipping vPool {0} because it is not living here.'.format(vp.name))
-                    continue
-                try:
-                    VolumedriverHealthCheck._check_filedriver(vp.name, name)
-                    if os.path.exists('/mnt/{0}/{1}.xml'.format(vp.name, name)):
-                        # working
-                        VolumedriverHealthCheck._check_filedriver_remove(vp.name)
-                        result_handler.success('Filedriver for vPool {0} is working fine!'.format(vp.name))
-                    else:
-                        # not working
-                        result_handler.failure('Filedriver for vPool {0} seems to have problems!'.format(vp.name))
-                except TimeoutError:
-                    # timeout occurred, action took too long
-                    result_handler.warning('Filedriver of vPool {0} seems to have `timeout` problems'.format(vp.name))
-                except subprocess.CalledProcessError:
-                    # can be input/output error by filedriver
-                    result_handler.failure('Filedriver of vPool {0} seems to have `input/output` problems'.format(vp.name))
+            if vp.guid not in VolumedriverHealthCheck.LOCAL_SR.vpools_guids:
+                result_handler.skip('Skipping vPool {0} because it is not living here.'.format(vp.name))
+                continue
+            try:
+                VolumedriverHealthCheck._check_filedriver(vp.name, name)
+                if os.path.exists('/mnt/{0}/{1}.xml'.format(vp.name, name)):
+                    # working
+                    VolumedriverHealthCheck._check_filedriver_remove(vp.name)
+                    result_handler.success('Filedriver for vPool {0} is working fine!'.format(vp.name))
+                else:
+                    # not working
+                    result_handler.failure('Filedriver for vPool {0} seems to have problems!'.format(vp.name))
+            except TimeoutError:
+                # timeout occurred, action took too long
+                result_handler.warning('Filedriver of vPool {0} seems to have `timeout` problems'.format(vp.name))
+            except subprocess.CalledProcessError:
+                # can be input/output error by filedriver
+                result_handler.failure('Filedriver of vPool {0} seems to have `input/output` problems'.format(vp.name))

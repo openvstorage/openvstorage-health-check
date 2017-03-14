@@ -32,7 +32,7 @@ from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
 from ovs.extensions.healthcheck.helpers.albacli import AlbaCLI
 from ovs.extensions.healthcheck.helpers.backend import BackendHelper
-from ovs.extensions.healthcheck.cluster_check import cluster_check
+from ovs.extensions.healthcheck.decorators import cluster_check
 from ovs.extensions.healthcheck.helpers.exceptions import AlbaException, ConfigNotMatchedException, ConnectionFailedException, DiskNotFoundException, ObjectNotFoundException
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
@@ -260,22 +260,8 @@ class AlbaHealthCheck(object):
                     finally:
                         # Delete the created namespace and preset
                         try:
-                            # Remove object first
-                            result_handler.info('Deleting created object {0} on {1}.'.format(object_key, namespace_key), add_to_result=False)
-                            try:
-                                AlbaCLI.run(command='proxy-delete-object',
-                                            named_params={'host': ip, 'port': service.ports[0]},
-                                            extra_params=[namespace_key, object_key])
-                            except AlbaException as ex:
-                                # Ignore object not found
-                                if 'Proxy exception: Proxy_protocol.Protocol.Error.ObjectDoesNotExist' in str(ex):
-                                    pass
-                                else:
-                                    raise
-                            subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_LOC)], stdout=fnull,
-                                            stderr=subprocess.STDOUT)
-                            subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC)], stdout=fnull,
-                                            stderr=subprocess.STDOUT)
+                            subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_LOC)], stdout=fnull, stderr=subprocess.STDOUT)
+                            subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC)], stdout=fnull, stderr=subprocess.STDOUT)
 
                             result_handler.info('Deleting namespace {0}.'.format(namespace_key))
                             AlbaCLI.run(command='proxy-delete-namespace',
@@ -287,7 +273,7 @@ class AlbaHealthCheck(object):
                                 if namespace_key not in namespaces:
                                     break
                                 if time.time() - namespace_delete_start > AlbaHealthCheck.NAMESPACE_TIMEOUT:
-                                    raise RuntimeError('Creation namespace has timed out after {0}s'.format(time.time() - namespace_start_time))
+                                    raise RuntimeError('Delete namespace has timed out after {0}s'.format(time.time() - namespace_start_time))
                         except subprocess.CalledProcessError:
                             raise
                         except AlbaException:

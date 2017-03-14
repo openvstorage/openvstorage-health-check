@@ -18,6 +18,7 @@ import os
 import inspect
 from datetime import datetime, timedelta
 from ovs.extensions.healthcheck.helpers.helper import Helper
+from ovs.extensions.healthcheck.decorators import node_check
 from ovs.extensions.healthcheck.result import HCResults
 from ovs.extensions.storage.volatilefactory import VolatileFactory
 from ovs.log.log_handler import LogHandler
@@ -311,7 +312,7 @@ class HealthCheckCLIRunner(CLIRunner):
             for found_method in found_method_pointers:
                 test_name = '{0}-{1}'.format(found_method.expose_to_cli['module_name'], found_method.expose_to_cli['method_name'])
                 try:
-                    found_method(result_handler.HCResultCollector(result=result_handler, test_name=test_name))
+                    node_check(found_method)(result_handler.HCResultCollector(result=result_handler, test_name=test_name))  # Wrapped in nodecheck for callback
                 except KeyboardInterrupt:
                     raise
                 except Exception as ex:
