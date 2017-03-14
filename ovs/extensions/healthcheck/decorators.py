@@ -15,73 +15,39 @@
 # but WITHOUT ANY WARRANTY of any kind.
 import inspect
 from functools import wraps
-from ovs.extensions.healthcheck.helpers.cache import CacheHelper
-from ovs.extensions.healthcheck.result import HCResults
+from ovs.extensions.generic.filemutex import file_mutex
+from ovs.extensions.generic.filemutex import NoLockAvailableException as NoFileLockAvailableException
 from ovs.extensions.generic.system import System
 from ovs.extensions.generic.volatilemutex import volatile_mutex
 from ovs.extensions.generic.volatilemutex import NoLockAvailableException as NoVolatileLockAvailableException
-from ovs.extensions.generic.filemutex import file_mutex
-from ovs.extensions.generic.filemutex import NoLockAvailableException as NoFileLockAvailableException
+from ovs.extensions.healthcheck.helpers.cache import CacheHelper
+from ovs.extensions.healthcheck.result import HCResults
 
 
-def ensure_single_with_callback_cluster(key, callback=None):
+def ensure_single_with_callback(key, callback=None, lock_type='local'):
     """
     Ensure only a single execution of the method
     """
     def wrapper(func):
         @wraps(func)
         def wrapped(*args, **kwargs):
-            _mutex = volatile_mutex(key)
+            if lock_type == 'local':
+                _mutex = file_mutex(key)
+            elif lock_type == 'cluster':
+                _mutex = volatile_mutex(key)
+            else:
+                raise ValueError('Lock type {0} is not supported!'.format(lock_type))
             try:
                 _mutex.acquire(wait=0.005)
                 local_sr = System.get_my_storagerouter()
                 CacheHelper.set(key=key, item={'ip': local_sr.ip, 'hostname': local_sr.name}, expire_time=60)
                 return func(*args, **kwargs)
-            except NoVolatileLockAvailableException:
+            except (NoFileLockAvailableException, NoVolatileLockAvailableException):
                 if callback is None:
                     return
                 else:
                     callback_func = callback.__func__ if isinstance(callback, staticmethod) else callback
-                    argnames, _, _, _ = inspect.getargspec(callback_func)
-                    executor_info = CacheHelper.get(key=key)
-                    arguments = list(args)
-                    if executor_info is not None:
-                        kwargs.update(executor_info)
-                        if 'result_handler' in argnames:
-                            result_handler = kwargs.get('result_handler')
-                            for index, arg in enumerate(arguments):
-                                if isinstance(arg, HCResults.HCResultCollector):
-                                    result_handler = arguments.pop(index)
-                                    break
-                            if result_handler is None:
-                                raise TypeError('Expected an instance of {}'.format(type(HCResults.HCResultCollector)))
-                            kwargs['result_handler'] = result_handler
-                    return callback_func(*tuple(arguments), **kwargs)
-            finally:
-                _mutex.release()
-        return wrapped
-    return wrapper
-
-
-def ensure_single_with_callback_local(key, callback=None):
-    """
-    Ensure only a single execution of the method
-    """
-    def wrapper(func):
-        @wraps(func)
-        def wrapped(*args, **kwargs):
-            _mutex = file_mutex(key)
-            try:
-                _mutex.acquire(wait=0.005)
-                local_sr = System.get_my_storagerouter()
-                CacheHelper.set(key=key, item={'ip': local_sr.ip, 'hostname': local_sr.name}, expire_time=60)
-                return func(*args, **kwargs)
-            except NoFileLockAvailableException:
-                if callback is None:
-                    return
-                else:
-                    callback_func = callback.__func__ if isinstance(callback, staticmethod) else callback
-                    argnames, _, _, _ = inspect.getargspec(callback_func)
+                    argnames = inspect.getargspec(callback_func)[0]
                     executor_info = CacheHelper.get(key=key)
                     arguments = list(args)
                     kwargs.update({'test_name': func.__name__})
@@ -114,7 +80,7 @@ def cluster_check(func):
         """
         result_handler.success('Call is being executed by {0} - {1}.'.format(hostname, ip))
 
-    @ensure_single_with_callback_cluster('ovs-healthcheck_cluster_wide_{0}'.format(func.__name__), callback=set_result_success)
+    @ensure_single_with_callback('ovs-healthcheck_cluster_wide_{0}'.format(func.__name__), callback=set_result_success, lock_type='cluster')
     @wraps(func)
     def wrapped(*args, **kwargs):
         return func(*args, **kwargs)
@@ -133,7 +99,7 @@ def node_check(func):
         """
         result_handler.success('Test {0} is already being executed on this node.'.format(test_name))
 
-    @ensure_single_with_callback_local('ovs-healthcheck_node_wide_{0}'.format(func.__name__), callback=set_result_success)
+    @ensure_single_with_callback('ovs-healthcheck_node_wide_{0}'.format(func.__name__), callback=set_result_success, lock_type='local')
     @wraps(func)
     def wrapped(*args, **kwargs):
         return func(*args, **kwargs)
