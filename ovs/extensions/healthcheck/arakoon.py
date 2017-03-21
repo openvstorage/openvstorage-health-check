@@ -72,8 +72,7 @@ class ArakoonHealthCheck(object):
 
         # add arakoon clusters
         for cluster in arakoon_clusters:
-            arakoon_config = ArakoonClusterConfig(str(cluster), filesystem=False)
-            arakoon_config.load_config()
+            arakoon_config = ArakoonClusterConfig(str(cluster))
             master_node_ids = [node.name for node in arakoon_config.nodes]
 
             if ArakoonHealthCheck.LOCAL_SR.machine_id not in master_node_ids:
