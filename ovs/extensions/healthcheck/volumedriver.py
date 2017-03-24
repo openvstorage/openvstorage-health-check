@@ -64,7 +64,7 @@ class VolumedriverHealthCheck(object):
                 result_handler.success('VDisk {0}s DTL is disabled'.format(vdisk.name))
             elif vdisk.dtl_status == 'ok_sync':
                 result_handler.success('VDisk {0}s DTL is enabled and running.'.format(vdisk.name))
-            elif vdisk.dtl_status == 'degraded':
+            elif vdisk.dtl_status == 'degraded' or vdisk.dtl_status == 'checkup_required':
                 result_handler.warning('VDisk {0}s DTL is degraded.'.format(vdisk.name))
             elif vdisk.dtl_status == 'catch_up':
                 result_handler.warning('VDisk {0}s DTL is enabled but still syncing.'.format(vdisk.name))
