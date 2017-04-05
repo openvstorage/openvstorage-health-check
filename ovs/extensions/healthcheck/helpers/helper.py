@@ -77,25 +77,8 @@ class Helper(object):
                           'hostname': socket.gethostname(),
                           'storagerouter_id': Helper.LOCAL_ID,
                           'storagerouter_type': Helper.LOCAL_SR.node_type,
-                          'environment_release': Helper.get_ovs_release_name(),
                           'environment os': ' '.join(platform.linux_distribution())}
         return local_settings
-
-    @staticmethod
-    def get_ovs_release_name():
-        """
-        Gets the RELEASE of Open vStorage cluster
-        :return: RELEASE of openvstorage cluster
-        :rtype: str
-        """
-        release_name = 'Unknown'
-        # This file should always exist if ovs is installed. Without it, the GUI should not work
-        file_loc = '/opt/OpenvStorage/webapps/frontend/locales/en-US/ovs.json'
-        if os.path.isfile(file_loc):
-            with open(file_loc) as ovs_json:
-                release_name = json.load(ovs_json)["support"]["release_name"]
-
-        return release_name
 
     @staticmethod
     def check_status_of_service(service_name):
