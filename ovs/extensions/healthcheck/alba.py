@@ -169,13 +169,13 @@ class AlbaHealthCheck(object):
                     # Determine what to what backend the proxy is connected
                     proxy_client_cfg = AlbaCLI.run(command='proxy-client-cfg', named_params={'host': ip, 'port': service.ports[0]})
                 except AlbaException:
-                    result_handler.failure('Fetching proxy info has failed. Please verify if {0}:{1} is the correct address for the proxy.'.format(ip, service.ports[0]))
+                    result_handler.failure('Fetching proxy info has failed. Please verify if {0}:{1} is the correct address for proxy {2}.'.format(ip, service.ports[0], service.name))
                     continue
                 # Fetch arakoon information
                 abm_name = proxy_client_cfg.get('cluster_id')
                 # Check if proxy config is correctly setup
                 if abm_name is None:
-                    raise ConfigNotMatchedException('Proxy config does not have the correct format on node {0} with port {1}.'.format(ip, service.ports[0]))
+                    raise ConfigNotMatchedException('Proxy config for proxy {0} does not have the correct format on node {1} with port {2}.'.format(service.name, ip, service.ports[0]))
                 abm_config = Configuration.get_configuration_path('/ovs/arakoon/{0}-abm/config' .format(service.alba_proxy.storagedriver.vpool.metadata['backend']['backend_info']['name']))
 
                 # Determine presets / backend
