@@ -210,15 +210,13 @@ class AlbaHealthCheck(object):
                         while True:
                             if time.time() - namespace_start_time > AlbaHealthCheck.NAMESPACE_TIMEOUT:
                                 raise RuntimeError('Creation namespace has timed out after {0}s'.format(time.time() - namespace_start_time))
-                            output = AlbaCLI.run(command='list-ns-osds', config=abm_config, extra_params=[namespace_key], to_json=False)
-                            # @todo https://github.com/openvstorage/alba/issues/634 -- replace with tojson instead of output processing
-                            search = 'Albamgr_protocol.Protocol.Osd.NamespaceLink'
+                            list_ns_osds_output = AlbaCLI.run(command='list-ns-osds', config=abm_config, extra_params=[namespace_key])
+                            # Example output: [[0, [u'Active']], [3, [u'Active']]]
                             namespace_ready = True
-                            for line in output.splitlines():
-                                if line.strip():
-                                    state = [i for i in line.split(' ') if search in i][0].split(')')[0].rsplit('.', 1)[1]
-                                    if state == 'Adding':
-                                        namespace_ready = False
+                            for osd_info in list_ns_osds_output:  # If there are no osd_info records, uploading will fail so covered by HC
+                                osd_state = osd_info[1][0]
+                                if osd_state != 'Active':
+                                    namespace_ready = False
                             if namespace_ready is True:
                                 break
                         result_handler.success('Namespace successfully created on proxy {0} with preset {1}!'.format(service.name, preset_name))
