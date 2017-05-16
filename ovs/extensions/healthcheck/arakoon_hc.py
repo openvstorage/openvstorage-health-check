@@ -82,7 +82,7 @@ class ArakoonHealthCheck(object):
             missing_nodes_per_cluster = {}
             missing_tlog_per_cluster = {}
 
-            tlog_dir = arakoon_config.export()[ArakoonHealthCheck.LOCAL_SR.machine_id]['tlog_dir']
+            tlog_dir = arakoon_config.export_dict()[ArakoonHealthCheck.LOCAL_SR.machine_id]['tlog_dir']
             for node_id in master_node_ids:
                 machine = StoragerouterHelper.get_by_machine_id(node_id)
                 if machine is None:
