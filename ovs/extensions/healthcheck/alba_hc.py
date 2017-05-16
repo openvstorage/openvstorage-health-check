@@ -169,13 +169,13 @@ class AlbaHealthCheck(object):
                     # Determine what to what backend the proxy is connected
                     proxy_client_cfg = AlbaCLI.run(command='proxy-client-cfg', named_params={'host': ip, 'port': service.ports[0]})
                 except AlbaException:
-                    result_handler.failure('Fetching proxy info has failed. Please verify if {0}:{1} is the correct address for the proxy.'.format(ip, service.ports[0]))
+                    result_handler.failure('Fetching proxy info has failed. Please verify if {0}:{1} is the correct address for proxy {2}.'.format(ip, service.ports[0], service.name))
                     continue
                 # Fetch arakoon information
                 abm_name = proxy_client_cfg.get('cluster_id')
                 # Check if proxy config is correctly setup
                 if abm_name is None:
-                    raise ConfigNotMatchedException('Proxy config does not have the correct format on node {0} with port {1}.'.format(ip, service.ports[0]))
+                    raise ConfigNotMatchedException('Proxy config for proxy {0} does not have the correct format on node {1} with port {2}.'.format(service.name, ip, service.ports[0]))
                 abm_config = Configuration.get_configuration_path('/ovs/arakoon/{0}-abm/config' .format(service.alba_proxy.storagedriver.vpool.metadata['backend']['backend_info']['name']))
 
                 # Determine presets / backend
@@ -210,15 +210,13 @@ class AlbaHealthCheck(object):
                         while True:
                             if time.time() - namespace_start_time > AlbaHealthCheck.NAMESPACE_TIMEOUT:
                                 raise RuntimeError('Creation namespace has timed out after {0}s'.format(time.time() - namespace_start_time))
-                            output = AlbaCLI.run(command='list-ns-osds', config=abm_config, extra_params=[namespace_key], to_json=False)
-                            # @todo https://github.com/openvstorage/alba/issues/634 -- replace with tojson instead of output processing
-                            search = 'Albamgr_protocol.Protocol.Osd.NamespaceLink'
+                            list_ns_osds_output = AlbaCLI.run(command='list-ns-osds', config=abm_config, extra_params=[namespace_key])
+                            # Example output: [[0, [u'Active']], [3, [u'Active']]]
                             namespace_ready = True
-                            for line in output.splitlines():
-                                if line.strip():
-                                    state = [i for i in line.split(' ') if search in i][0].split(')')[0].rsplit('.', 1)[1]
-                                    if state == 'Adding':
-                                        namespace_ready = False
+                            for osd_info in list_ns_osds_output:  # If there are no osd_info records, uploading will fail so covered by HC
+                                osd_state = osd_info[1][0]
+                                if osd_state != 'Active':
+                                    namespace_ready = False
                             if namespace_ready is True:
                                 break
                         result_handler.success('Namespace successfully created on proxy {0} with preset {1}!'.format(service.name, preset_name))
