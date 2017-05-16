@@ -26,7 +26,7 @@ import timeout_decorator
 import ConfigParser
 from datetime import date, timedelta
 from StringIO import StringIO
-from ovs.extensions.db.arakoon.ArakoonInstaller import ArakoonClusterConfig
+from ovs.extensions.db.arakoon.arakooninstaller import ArakoonClusterConfig
 from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.generic.system import System
