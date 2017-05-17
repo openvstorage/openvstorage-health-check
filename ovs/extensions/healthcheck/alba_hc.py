@@ -520,7 +520,7 @@ class AlbaHealthCheck(object):
             result_handler.skip('Found no LOCAL ALBA services.')
             return
         for service_name in services:
-            if ServiceManager.get_service_status(service_name, client)[0] is True:
+            if ServiceManager.get_service_status(service_name, client) == 'active':
                 result_handler.success('Service {0} is running!'.format(service_name))
             else:
                 result_handler.failure('Service {0} is NOT running! '.format(service_name))

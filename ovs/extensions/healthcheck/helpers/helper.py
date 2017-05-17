@@ -21,12 +21,10 @@ Helper module
 """
 import json
 import platform
-import os
 import socket
 import subprocess
 from ovs.extensions.generic.system import System
 from ovs.extensions.generic.sshclient import SSHClient
-from ovs.extensions.services.service import ServiceManager
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.packages.package import PackageManager
 
@@ -79,16 +77,3 @@ class Helper(object):
                           'storagerouter_type': Helper.LOCAL_SR.node_type,
                           'environment os': ' '.join(platform.linux_distribution())}
         return local_settings
-
-    @staticmethod
-    def check_status_of_service(service_name):
-        """
-        Gets the status of a linux service
-        :param service_name: name of a linux service
-        :type service_name: str
-        :return: status of the service
-        :rtype: bool
-        """
-        local_machine = System.get_my_storagerouter()
-        client = SSHClient(local_machine.ip, username='root')
-        return ServiceManager.get_service_status(str(service_name), client)
