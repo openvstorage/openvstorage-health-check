@@ -177,19 +177,25 @@ class OpenvStorageHealthCheck(object):
         result_handler.info('Checking OVS packages: ', add_to_result=False)
         client = SSHClient(OpenvStorageHealthCheck.LOCAL_SR)
         # PackageManager.SDM_PACKAGE_NAMES for sdm
-        required_packages = list(PackageManager.OVS_PACKAGE_NAMES)
+        all_packages = list(PackageManager.OVS_PACKAGE_NAMES)
         extra_packages = list(Helper.packages)
+        ee_relation = {'alba': 'alba-ee', 'arakoon': 'arakoon', 'volumedriver-no-dedup-server': 'volumedriver-ee-server'}  # Key = non-ee, value = ee
+        if OpenvStorageHealthCheck.LOCAL_SR.features['alba']['edition'] == 'community':
+            required_packages = [package_name for package_name in all_packages if package_name in ee_relation.keys()]
+        else:
+            required_packages = [package_name for package_name in all_packages if package_name in ee_relation.values()]
         installed = PackageManager.get_installed_versions(client=client, package_names=list(required_packages + extra_packages))
+
         while len(required_packages) > 0:
             package = required_packages.pop()
-            version = installed.get(package, '')
+            version = installed.get(package)
             if version:
                 result_handler.success('Package {0} is installed with version {1}'.format(package, version.replace('\n', '')))
             else:
                 result_handler.warning('Package {0} is not installed.'.format(package))
         while len(extra_packages) > 0:
             package = extra_packages.pop()
-            version = installed.get(package, '')
+            version = installed.get(package)
             if version:
                 result_handler.success('Package {0} is installed with version {1}'.format(package, version.replace('\n', '')))
             else:
@@ -211,7 +217,7 @@ class OpenvStorageHealthCheck(object):
         if len(services) == 0:
             logger.warning('Found no local ovs services.')
         for service_name in services:
-            if ServiceManager.get_service_status(service_name, client)[0] is True:
+            if ServiceManager.get_service_status(service_name, client) == 'active':
                 logger.success('Service {0} is running!'.format(service_name))
             else:
                 logger.failure('Service {0} is not running, please check this.'.format(service_name))
