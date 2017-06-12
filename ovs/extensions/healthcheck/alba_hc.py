@@ -176,7 +176,7 @@ class AlbaHealthCheck(object):
                 # Check if proxy config is correctly setup
                 if abm_name is None:
                     raise ConfigNotMatchedException('Proxy config for proxy {0} does not have the correct format on node {1} with port {2}.'.format(service.name, ip, service.ports[0]))
-                abm_config = Configuration.get_configuration_path('/ovs/arakoon/{0}-abm/config' .format(service.alba_proxy.storagedriver.vpool.metadata['backend']['backend_info']['name']))
+                abm_config = Configuration.get_configuration_path('/ovs/vpools/{0}/proxies/{1}/config/abm' .format(service.alba_proxy.storagedriver.vpool.guid, service.alba_proxy.guid))
 
                 # Determine presets / backend
                 try:
