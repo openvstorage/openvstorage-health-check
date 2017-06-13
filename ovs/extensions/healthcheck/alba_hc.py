@@ -201,7 +201,7 @@ class AlbaHealthCheck(object):
                         AlbaCLI.run(command='proxy-create-namespace',
                                     named_params={'host': ip, 'port': service.ports[0]},
                                     extra_params=[namespace_key, preset_name])
-                        # Wai until fully created
+                        # Wait until fully created
                         namespace_start_time = time.time()
                         for index in xrange(2):
                             # Running twice because the first one could give a false positive as the osds will alert the nsm
