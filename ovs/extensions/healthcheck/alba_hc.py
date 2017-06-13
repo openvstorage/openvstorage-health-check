@@ -277,8 +277,8 @@ class AlbaHealthCheck(object):
                                 result_handler.warning('Deleting namespace {0} which was leftover from a previous run.'.format(namespace_name))
 
                             AlbaCLI.run(command='proxy-delete-namespace',
-                                        named_params = proxy_named_params,
-                                        extra_params = [namespace_name])
+                                        named_params=proxy_named_params,
+                                        extra_params=[namespace_name])
 
                             namespace_delete_start = time.time()
                             while True:
@@ -292,12 +292,11 @@ class AlbaHealthCheck(object):
 
                             # be tidy, and make the proxy forget the namespace
                             try:
-                                AlbaCLI.run(command = 'proxy-statistics',
-                                            named_params = proxy_named_params,
-                                            extra_params = ['--forget', namespace_name]
-                                )
+                                AlbaCLI.run(command='proxy-statistics',
+                                            named_params=proxy_named_params,
+                                            extra_params=['--forget', namespace_name])
                             except:
-                                pass
+                                result_handler.warning('failed to make proxy forget namespace {0}.'.format(namespace_name)
             except subprocess.CalledProcessError as ex:
                 # this should stay for the deletion of the remaining files
                 amount_of_presets_not_working.append(service.name)
