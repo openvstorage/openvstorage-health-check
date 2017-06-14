@@ -296,7 +296,8 @@ class AlbaHealthCheck(object):
                                             named_params=proxy_named_params,
                                             extra_params=['--forget', namespace_name])
                             except:
-                                result_handler.warning('failed to make proxy forget namespace {0}.'.format(namespace_name)
+                                result_handler.warning('Failed to make proxy forget namespace {0}.'.format(namespace_name))
+
             except subprocess.CalledProcessError as ex:
                 # this should stay for the deletion of the remaining files
                 amount_of_presets_not_working.append(service.name)
