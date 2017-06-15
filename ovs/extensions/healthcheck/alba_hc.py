@@ -51,9 +51,10 @@ class AlbaHealthCheck(object):
     TEMP_FILE_LOC = '/tmp/ovs-hc.xml'  # to be put in alba file
     TEMP_FILE_FETCHED_LOC = '/tmp/ovs-hc-fetched.xml'  # fetched (from alba) file location
     NAMESPACE_TIMEOUT = 30  # in seconds
+    BASE_NAMESPACE_KEY = 'ovs-healthcheck-'
 
-    @staticmethod
-    def _check_backend_asds(result_handler, asds, backend_name, config):
+    @classmethod
+    def _check_backend_asds(cls, result_handler, asds, backend_name, config):
         """
         Checks if Alba ASDs work
         :param result_handler: logging object
@@ -89,7 +90,7 @@ class AlbaHealthCheck(object):
             result_handler.failure('Could not fetch osd list from Alba. Got {0}'.format(str(ex)))
             raise
         for asd in asds:
-            key = 'ovs-healthcheck-{0}'.format(str(uuid.uuid4()))
+            key = '{0}{1}'.format(cls.BASE_NAMESPACE_KEY, str(uuid.uuid4()))
             disk_asd_id = asd['asd_id']
             value = str(time.time())
             if asd['status'] == 'error':
@@ -453,8 +454,8 @@ class AlbaHealthCheck(object):
                             output = ',\n'.join(['{0} with {1}% of its objects'.format(ns['namespace'], str(ns['amount_in_bucket'])) for ns in namespaces])
                             result_handler.failure('The disk safety of {0} namespace(s) is/are ZERO: \n{1}'.format(len(namespaces), output))
 
-    @staticmethod
-    def get_disk_safety(result_handler):
+    @classmethod
+    def get_disk_safety(cls, result_handler):
         """
         Fetch safety of every namespace in every backend
         - amount_in_bucket is in %
@@ -495,7 +496,8 @@ class AlbaHealthCheck(object):
                     disk_safety_overview[alba_backend.name]['{0},{1}'.format(str(policy[0]), str(policy[1]))] = {'current_disk_safety': {}, 'max_disk_safety': policy[1]}
 
             # collect namespaces
-            test_worthy_namespaces = (item for item in namespaces if not item['namespace'].startswith(tuple(cache_eviction_prefix_preset_pairs.keys())))
+            ignorable_namespaces = [cls.BASE_NAMESPACE_KEY] + cache_eviction_prefix_preset_pairs.keys()
+            test_worthy_namespaces = (item for item in namespaces if not item['namespace'].startswith(tuple(ignorable_namespaces)))
             for namespace in test_worthy_namespaces:
                 # calc total objects in namespace
                 total_count = 0
@@ -507,9 +509,8 @@ class AlbaHealthCheck(object):
                     calculated_disk_safety = bucket_safety['remaining_safety']
                     safety = '{0},{1}'.format(str(bucket_safety['bucket'][0]), str(bucket_safety['bucket'][1]))
                     current_disk_safety = disk_safety_overview[alba_backend.name][safety]['current_disk_safety']
-                    to_be_added_namespace = \
-                        {'namespace': namespace['namespace'],
-                         'amount_in_bucket': "%.5f" % (float(bucket_safety['count'])/float(total_count)*100)}
+                    to_be_added_namespace = {'namespace': namespace['namespace'],
+                                             'amount_in_bucket': "%.5f" % (float(bucket_safety['count'])/float(total_count)*100)}
                     if calculated_disk_safety in current_disk_safety:
                         current_disk_safety[calculated_disk_safety].append(to_be_added_namespace)
                     else:
