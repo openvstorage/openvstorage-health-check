@@ -51,9 +51,10 @@ class AlbaHealthCheck(object):
     TEMP_FILE_LOC = '/tmp/ovs-hc.xml'  # to be put in alba file
     TEMP_FILE_FETCHED_LOC = '/tmp/ovs-hc-fetched.xml'  # fetched (from alba) file location
     NAMESPACE_TIMEOUT = 30  # in seconds
+    BASE_NAMESPACE_KEY = 'ovs-healthcheck-'
 
-    @staticmethod
-    def _check_backend_asds(result_handler, asds, backend_name, config):
+    @classmethod
+    def _check_backend_asds(cls, result_handler, asds, backend_name, config):
         """
         Checks if Alba ASDs work
         :param result_handler: logging object
@@ -89,7 +90,7 @@ class AlbaHealthCheck(object):
             result_handler.failure('Could not fetch osd list from Alba. Got {0}'.format(str(ex)))
             raise
         for asd in asds:
-            key = 'ovs-healthcheck-{0}'.format(str(uuid.uuid4()))
+            key = '{0}{1}'.format(cls.BASE_NAMESPACE_KEY, str(uuid.uuid4()))
             disk_asd_id = asd['asd_id']
             value = str(time.time())
             if asd['status'] == 'error':
@@ -201,7 +202,7 @@ class AlbaHealthCheck(object):
                         AlbaCLI.run(command='proxy-create-namespace',
                                     named_params={'host': ip, 'port': service.ports[0]},
                                     extra_params=[namespace_key, preset_name])
-                        # Wai until fully created
+                        # Wait until fully created
                         namespace_start_time = time.time()
                         for index in xrange(2):
                             # Running twice because the first one could give a false positive as the osds will alert the nsm
@@ -266,6 +267,7 @@ class AlbaHealthCheck(object):
                         subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC)], stdout=fnull, stderr=subprocess.STDOUT)
                         namespaces = AlbaCLI.run(command='list-namespaces', config=abm_config)
                         namespaces_to_remove = []
+                        proxy_named_params = {'host': ip, 'port': service.ports[0]}
                         for namespace in namespaces:
                             if namespace['name'].startswith(namespace_key_prefix):
                                 namespaces_to_remove.append(namespace['name'])
@@ -274,7 +276,11 @@ class AlbaHealthCheck(object):
                                 result_handler.info('Deleting namespace {0}.'.format(namespace_name))
                             else:
                                 result_handler.warning('Deleting namespace {0} which was leftover from a previous run.'.format(namespace_name))
-                            AlbaCLI.run(command='proxy-delete-namespace', named_params={'host': ip, 'port': service.ports[0]}, extra_params=[namespace_name])
+
+                            AlbaCLI.run(command='proxy-delete-namespace',
+                                        named_params=proxy_named_params,
+                                        extra_params=[namespace_name])
+
                             namespace_delete_start = time.time()
                             while True:
                                 try:
@@ -284,6 +290,15 @@ class AlbaHealthCheck(object):
                                     break
                                 if time.time() - namespace_delete_start > AlbaHealthCheck.NAMESPACE_TIMEOUT:
                                     raise RuntimeError('Delete namespace has timed out after {0}s'.format(time.time() - namespace_start_time))
+
+                            # be tidy, and make the proxy forget the namespace
+                            try:
+                                AlbaCLI.run(command='proxy-statistics',
+                                            named_params=proxy_named_params,
+                                            extra_params=['--forget', namespace_name])
+                            except:
+                                result_handler.warning('Failed to make proxy forget namespace {0}.'.format(namespace_name))
+
             except subprocess.CalledProcessError as ex:
                 # this should stay for the deletion of the remaining files
                 amount_of_presets_not_working.append(service.name)
@@ -439,8 +454,8 @@ class AlbaHealthCheck(object):
                             output = ',\n'.join(['{0} with {1}% of its objects'.format(ns['namespace'], str(ns['amount_in_bucket'])) for ns in namespaces])
                             result_handler.failure('The disk safety of {0} namespace(s) is/are ZERO: \n{1}'.format(len(namespaces), output))
 
-    @staticmethod
-    def get_disk_safety(result_handler):
+    @classmethod
+    def get_disk_safety(cls, result_handler):
         """
         Fetch safety of every namespace in every backend
         - amount_in_bucket is in %
@@ -481,7 +496,8 @@ class AlbaHealthCheck(object):
                     disk_safety_overview[alba_backend.name]['{0},{1}'.format(str(policy[0]), str(policy[1]))] = {'current_disk_safety': {}, 'max_disk_safety': policy[1]}
 
             # collect namespaces
-            test_worthy_namespaces = (item for item in namespaces if not item['namespace'].startswith(tuple(cache_eviction_prefix_preset_pairs.keys())))
+            ignorable_namespaces = [cls.BASE_NAMESPACE_KEY] + cache_eviction_prefix_preset_pairs.keys()
+            test_worthy_namespaces = (item for item in namespaces if not item['namespace'].startswith(tuple(ignorable_namespaces)))
             for namespace in test_worthy_namespaces:
                 # calc total objects in namespace
                 total_count = 0
@@ -493,9 +509,8 @@ class AlbaHealthCheck(object):
                     calculated_disk_safety = bucket_safety['remaining_safety']
                     safety = '{0},{1}'.format(str(bucket_safety['bucket'][0]), str(bucket_safety['bucket'][1]))
                     current_disk_safety = disk_safety_overview[alba_backend.name][safety]['current_disk_safety']
-                    to_be_added_namespace = \
-                        {'namespace': namespace['namespace'],
-                         'amount_in_bucket': "%.5f" % (float(bucket_safety['count'])/float(total_count)*100)}
+                    to_be_added_namespace = {'namespace': namespace['namespace'],
+                                             'amount_in_bucket': "%.5f" % (float(bucket_safety['count'])/float(total_count)*100)}
                     if calculated_disk_safety in current_disk_safety:
                         current_disk_safety[calculated_disk_safety].append(to_be_added_namespace)
                     else:
