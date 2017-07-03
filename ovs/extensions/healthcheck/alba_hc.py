@@ -25,7 +25,7 @@ import uuid
 import time
 import hashlib
 import subprocess
-from ovs.extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
+from ovs_extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 from ovs.extensions.generic.configuration import Configuration, NotFoundException
 from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.generic.system import System
@@ -36,7 +36,7 @@ from ovs.extensions.healthcheck.decorators import cluster_check
 from ovs.extensions.healthcheck.helpers.exceptions import AlbaException, ConfigNotMatchedException, ConnectionFailedException, DiskNotFoundException, ObjectNotFoundException
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
-from ovs.extensions.services.service import ServiceManager
+from ovs.extensions.services.servicefactory import ServiceFactory
 from ovs.lib.helpers.toolbox import Toolbox
 
 
@@ -530,12 +530,13 @@ class AlbaHealthCheck(object):
         """
         result_handler.info('Checking LOCAL ALBA services: ', add_to_result=False)
         client = SSHClient(AlbaHealthCheck.LOCAL_SR)
-        services = [service for service in ServiceManager.list_services(client=client) if service.startswith(AlbaHealthCheck.MODULE)]
+        service_manager = ServiceFactory.get_manager()
+        services = [service for service in service_manager.list_services(client=client) if service.startswith(AlbaHealthCheck.MODULE)]
         if len(services) == 0:
             result_handler.skip('Found no LOCAL ALBA services.')
             return
         for service_name in services:
-            if ServiceManager.get_service_status(service_name, client) == 'active':
+            if service_manager.get_service_status(service_name, client) == 'active':
                 result_handler.success('Service {0} is running!'.format(service_name))
             else:
                 result_handler.failure('Service {0} is NOT running! '.format(service_name))
