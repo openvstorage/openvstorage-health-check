@@ -23,7 +23,7 @@ from StringIO import StringIO
 from ovs.dal.lists.storagerouterlist import StorageRouterList
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.generic.sshclient import SSHClient
-from ovs.extensions.services.service import ServiceManager
+from ovs.extensions.services.servicefactory import ServiceFactory
 
 
 class RabbitMQ(object):
@@ -51,6 +51,8 @@ class RabbitMQ(object):
 
         if not self.check_management_plugin():
             self.enable_management_plugin()
+
+        self._service_manager = ServiceFactory.get_manager()
 
     def list_queues(self):
         """
@@ -125,7 +127,7 @@ class RabbitMQ(object):
         """
         api_output = self.api_request('/api/overview')
         if api_output[0] == 404 and RabbitMQ.INTERNAL:
-            status = ServiceManager.get_service_status('rabbitmq-server', self._client)[0]
+            status = self._service_manager.get_service_status('rabbitmq-server', self._client)[0]
             if not self.check_management_plugin():
                 if status:
                     return 'RUNNING', 'RabbitMQ is running. Restart RabbitMQ to enable the management plugin.'
@@ -223,7 +225,7 @@ class RabbitMQ(object):
             return status[0], "RabbitMQ already running."
         if not RabbitMQ.INTERNAL:
             return 'UNKNOWN', "Unable to start, this is not an internal RabbitMQ from ovs."
-        ServiceManager.start_service('rabbitmq-server', self._client)
+        self._service_manager.start_service('rabbitmq-server', self._client)
         return self.status()
 
     def stop(self):
@@ -238,7 +240,7 @@ class RabbitMQ(object):
             return status[0], "RabbitMQ is not running."
         if not RabbitMQ.INTERNAL:
             return 'UNKNOWN', "Unable to stop, this is not an internal RabbitMQ from ovs."
-        ServiceManager.stop_service('rabbitmq-server', self._client)
+        self._service_manager.stop_service('rabbitmq-server', self._client)
         return self.status()
 
     def restart(self):
@@ -253,5 +255,5 @@ class RabbitMQ(object):
             print "RabbitMQ is not running. Trying to restart the service."
         if not RabbitMQ.INTERNAL:
             return 'UNKNOWN', "Unable to restart, this is not an internal RabbitMQ from ovs."
-        ServiceManager.restart_service('rabbitmq-server', self._client)
+        self._service_manager.restart_service('rabbitmq-server', self._client)
         return self.status()
