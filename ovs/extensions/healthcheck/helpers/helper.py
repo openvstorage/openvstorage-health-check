@@ -26,7 +26,7 @@ import subprocess
 from ovs.extensions.generic.system import System
 from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.generic.configuration import Configuration
-from ovs.extensions.packages.package import PackageManager
+from ovs.extensions.packages.packagefactory import PackageFactory
 
 
 class Helper(object):
@@ -60,7 +60,8 @@ class Helper(object):
         """
         client = SSHClient(System.get_my_storagerouter())
         package_name = 'openvstorage-health-check'
-        packages = PackageManager.get_installed_versions(client=client, package_names=[package_name])
+        package_manager = PackageFactory.get_manager()
+        packages = package_manager.get_installed_versions(client=client, package_names=[package_name])
         return packages.get(package_name, 'unknown')
 
     @staticmethod
