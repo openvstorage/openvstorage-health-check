@@ -8,6 +8,6 @@ Build-Depends: python-all (>= 2.7.2), debhelper (>= 9)
 Package: openvstorage-health-check
 Architecture: amd64
 Pre-Depends: python (>= 2.7.2)
-Depends: python-psutil (>= 4.3.0), python-timeout-decorator (>= 0.3.2), openvstorage (>= 2.7.10), openvstorage (<< 2.10)
+Depends: python-psutil (>= 4.3.0), python-timeout-decorator (>= 0.3.2), openvstorage (>= 2.7.10)
 Description: Open vStorage HealthCheck
  monitoring, detection and healing tool for the Open vStorage product
