@@ -191,6 +191,7 @@ class OpenvStorageHealthCheck(object):
             package = required_packages.pop()
             version = installed.get(package)
             if version:
+                version = str(version)
                 result_handler.success('Package {0} is installed with version {1}'.format(package, version.replace('\n', '')))
             else:
                 result_handler.warning('Package {0} is not installed.'.format(package))
@@ -198,6 +199,7 @@ class OpenvStorageHealthCheck(object):
             package = extra_packages.pop()
             version = installed.get(package)
             if version:
+                version = str(version)
                 result_handler.success('Package {0} is installed with version {1}'.format(package, version.replace('\n', '')))
             else:
                 result_handler.skip('Package {0} is not installed.'.format(package))

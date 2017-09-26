@@ -318,6 +318,7 @@ class HealthCheckCLIRunner(CLIRunner):
                     raise
                 except Exception as ex:
                     result_handler.exception('Unhandled exception caught when executing {0}. Got {1}'.format(found_method.__name__, str(ex)))
+                    HealthCheckCLIRunner.logger.exception('Unhandled exception caught when executing {0}'.format(found_method.__name__))
             return HealthCheckCLIRunner.get_results(result_handler, module_name, method_name)
         except KeyboardInterrupt:
             HealthCheckCLIRunner.logger.warning('Caught keyboard interrupt. Output may be incomplete!')
