@@ -86,7 +86,7 @@ All the checks will still log by printing but the return value can be captured i
 * We'd love to have your contributions, read [Community Information](CONTRIBUTION.md) and [Rules of conduct](RULES.md) for notes on how to get started.
 
 ## 7. File a bug
-Open vStorage and it's automation is quality checked to the highest level.
+Open vStorage and its automation is quality checked to the highest level.
 Unfortunately we might have overlooked some tiny topics here or there.
 The Open vStorage HEALTH CHECK Project maintains a [public issue tracker](https://github.com/openvstorage/openvstorage-health-check/issues)
 where you can report bugs and request features.
