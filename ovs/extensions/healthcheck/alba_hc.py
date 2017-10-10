@@ -325,24 +325,13 @@ class AlbaHealthCheck(object):
                 for preset in alba_backend.presets:
                     if preset.get('is_available'):
                         available = True
-
                 # collect ASDs connected to a backend
                 asds = []
                 for stack in alba_backend.local_stack.values():
                     for osds in stack.values():
-                        for asd in osds['asds'].values():
-                            if alba_backend.guid != asd.get('alba_backend_guid'):
+                        for asd in osds['osds'].values():
+                            if alba_backend.guid != asd.get('claimed_by'):
                                 continue
-                            asd_id = asd['asd_id']
-                            arakoon_path = '/ovs/alba/asds/{0}/config|port'.format(asd_id)
-                            try:
-                                asd['port'] = Configuration.get(arakoon_path)
-                            except NotFoundException as ex:
-                                result_handler.failure('Could not find {0} in Arakoon. Got {1}'.format(arakoon_path, str(ex)))
-                                raise
-                            except Exception as ex:
-                                result_handler.failure('Could not connect to the Arakoon due to an uncaught exception: {0}.'.format(str(ex)))
-                                raise ConnectionFailedException(str(ex))
                             else:
                                 asds.append(asd)
                 # create result
