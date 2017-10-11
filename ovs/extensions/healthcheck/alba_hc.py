@@ -321,42 +321,28 @@ class AlbaHealthCheck(object):
         for alba_backend in BackendHelper.get_albabackends():
             # check if backend would be available for vpool
             try:
-                available = False
-                for preset in alba_backend.presets:
-                    if preset.get('is_available'):
-                        available = True
-
-                # collect ASDs connected to a backend
-                asds = []
-                for stack in alba_backend.local_stack.values():
-                    for osds in stack.values():
-                        for asd in osds['asds'].values():
-                            if alba_backend.guid != asd.get('alba_backend_guid'):
+                # collect OSDs connected to a backend
+                osds = []
+                for local_stack in alba_backend.local_stack.itervalues():
+                    for osd_stack in local_stack.itervalues():
+                        for osd in osd_stack['osds'].itervalues():
+                            if alba_backend.guid != osd.get('claimed_by'):
                                 continue
-                            asd_id = asd['asd_id']
-                            arakoon_path = '/ovs/alba/asds/{0}/config|port'.format(asd_id)
-                            try:
-                                asd['port'] = Configuration.get(arakoon_path)
-                            except NotFoundException as ex:
-                                result_handler.failure('Could not find {0} in Arakoon. Got {1}'.format(arakoon_path, str(ex)))
-                                raise
-                            except Exception as ex:
-                                result_handler.failure('Could not connect to the Arakoon due to an uncaught exception: {0}.'.format(str(ex)))
-                                raise ConnectionFailedException(str(ex))
                             else:
-                                asds.append(asd)
+                                osds.append(osd)
+
                 # create result
                 result.append({
                     'name': alba_backend.name,
                     'alba_id': alba_backend.alba_id,
-                    'is_available_for_vpool': available,
+                    'is_available_for_vpool': any(preset for preset in alba_backend.presets if preset.get('is_available') is True),
                     'guid': alba_backend.guid,
                     'backend_guid': alba_backend.backend_guid,
-                    'disks': asds,
+                    'disks': osds,
                     'type': alba_backend.scaling
                 })
             except RuntimeError as ex:
-                result_handler.warning('Error occurred while unpacking alba backend {0}. Got {1}.'.format(alba_backend.name, str(ex)))
+                result_handler.warning('Error occurred while unpacking alba backend {0}. Got {1}.'.format(alba_backend.name, ex))
         return result
 
     @staticmethod
