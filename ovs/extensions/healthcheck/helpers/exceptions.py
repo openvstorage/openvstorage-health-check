@@ -178,3 +178,11 @@ class AlbaException(Exception):
 
     def __str__(self):
         return "Command '{0}' failed with '{1}'.".format(self.alba_command, self.EXCEPTION_MAPPING.get(self.message, self.message))
+
+
+class AlbaTimeOutException(AlbaException):
+    def __init__(self, *args):
+        super(AlbaTimeOutException, self).__init__(*args)
+
+    def __str__(self):
+        return "Command '{0}' has timed out with '{1}'.".format(self.alba_command, self.EXCEPTION_MAPPING.get(self.message, self.message))

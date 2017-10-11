@@ -33,7 +33,8 @@ from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckC
 from ovs.extensions.healthcheck.helpers.albacli import AlbaCLI
 from ovs.extensions.healthcheck.helpers.backend import BackendHelper
 from ovs.extensions.healthcheck.decorators import cluster_check
-from ovs.extensions.healthcheck.helpers.exceptions import AlbaException, ConfigNotMatchedException, ConnectionFailedException, DiskNotFoundException, ObjectNotFoundException
+from ovs.extensions.healthcheck.helpers.exceptions import AlbaException, AlbaTimeOutException,  ConfigNotMatchedException,\
+    ConnectionFailedException, DiskNotFoundException, ObjectNotFoundException
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
 from ovs.extensions.services.servicefactory import ServiceFactory
@@ -210,7 +211,7 @@ class AlbaHealthCheck(object):
                             AlbaCLI.run(command='deliver-messages', config=abm_config)
                         while True:
                             if time.time() - namespace_start_time > AlbaHealthCheck.NAMESPACE_TIMEOUT:
-                                raise RuntimeError('Creation namespace has timed out after {0}s'.format(time.time() - namespace_start_time))
+                                raise AlbaTimeOutException('Creating namespace has timed out after {0}s'.format(time.time() - namespace_start_time), 'deliver-messages')
                             list_ns_osds_output = AlbaCLI.run(command='list-ns-osds', config=abm_config, extra_params=[namespace_key])
                             # Example output: [[0, [u'Active']], [3, [u'Active']]]
                             namespace_ready = True
@@ -252,6 +253,8 @@ class AlbaHealthCheck(object):
                     except ObjectNotFoundException as ex:
                         amount_of_presets_not_working.append(preset_name)
                         result_handler.failure('Failed to put object on namespace {0} failed on proxy {1}with preset {2} With error {3}'.format(namespace_key, service.name, preset_name, ex))
+                    except AlbaTimeOutException as ex:
+                        result_handler.failure(str(ex))
                     except AlbaException as ex:
                         if ex.alba_command == 'proxy-create-namespace':
                             result_handler.failure('Create namespace has failed with {0} on namespace {1} with proxy {2} with preset {3}'.format(str(ex), namespace_key, service.name, preset_name))
@@ -265,39 +268,49 @@ class AlbaHealthCheck(object):
                         # Delete the created namespace and preset
                         subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_LOC)], stdout=fnull, stderr=subprocess.STDOUT)
                         subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC)], stdout=fnull, stderr=subprocess.STDOUT)
-                        namespaces = AlbaCLI.run(command='list-namespaces', config=abm_config)
-                        namespaces_to_remove = []
-                        proxy_named_params = {'host': ip, 'port': service.ports[0]}
-                        for namespace in namespaces:
-                            if namespace['name'].startswith(namespace_key_prefix):
-                                namespaces_to_remove.append(namespace['name'])
-                        for namespace_name in namespaces_to_remove:
-                            if namespace_name == namespace_key:
-                                result_handler.info('Deleting namespace {0}.'.format(namespace_name))
-                            else:
-                                result_handler.warning('Deleting namespace {0} which was leftover from a previous run.'.format(namespace_name))
+                        try:
+                            namespaces = AlbaCLI.run(command='list-namespaces', config=abm_config)
+                            namespaces_to_remove = []
+                            proxy_named_params = {'host': ip, 'port': service.ports[0]}
+                            for namespace in namespaces:
+                                if namespace['name'].startswith(namespace_key_prefix):
+                                    namespaces_to_remove.append(namespace['name'])
+                            for namespace_name in namespaces_to_remove:
+                                if namespace_name == namespace_key:
+                                    result_handler.info('Deleting namespace {0}.'.format(namespace_name))
+                                else:
+                                    result_handler.warning('Deleting namespace {0} which was leftover from a previous run.'.format(namespace_name))
 
-                            AlbaCLI.run(command='proxy-delete-namespace',
-                                        named_params=proxy_named_params,
-                                        extra_params=[namespace_name])
-
-                            namespace_delete_start = time.time()
-                            while True:
-                                try:
-                                    AlbaCLI.run(command='show-namespace', config=abm_config, extra_params=[namespace_name])  # Will fail if the namespace does not exist
-                                except AlbaException:
-                                    result_handler.success('Namespace {0} successfully removed.'.format(namespace_name))
-                                    break
-                                if time.time() - namespace_delete_start > AlbaHealthCheck.NAMESPACE_TIMEOUT:
-                                    raise RuntimeError('Delete namespace has timed out after {0}s'.format(time.time() - namespace_start_time))
-
-                            # be tidy, and make the proxy forget the namespace
-                            try:
-                                AlbaCLI.run(command='proxy-statistics',
+                                AlbaCLI.run(command='proxy-delete-namespace',
                                             named_params=proxy_named_params,
-                                            extra_params=['--forget', namespace_name])
-                            except:
-                                result_handler.warning('Failed to make proxy forget namespace {0}.'.format(namespace_name))
+                                            extra_params=[namespace_name])
+
+                                namespace_delete_start = time.time()
+                                while True:
+                                    try:
+                                        AlbaCLI.run(command='show-namespace', config=abm_config, extra_params=[namespace_name])  # Will fail if the namespace does not exist
+                                    except AlbaException:
+                                        result_handler.success('Namespace {0} successfully removed.'.format(namespace_name))
+                                        break
+                                    if time.time() - namespace_delete_start > AlbaHealthCheck.NAMESPACE_TIMEOUT:
+                                        raise AlbaTimeOutException('Delete namespace has timed out after {0}s'.format(time.time() - namespace_start_time), 'show-namespace')
+
+                                # be tidy, and make the proxy forget the namespace
+                                try:
+                                    AlbaCLI.run(command='proxy-statistics',
+                                                named_params=proxy_named_params,
+                                                extra_params=['--forget', namespace_name])
+                                except:
+                                    result_handler.warning('Failed to make proxy forget namespace {0}.'.format(namespace_name))
+                        except AlbaException as ex:
+                            if ex.alba_command == 'list-namespaces':
+                                result_handler.failure(
+                                    'list namespaces has failed with {0} on namespace {1} with proxy {2} with preset {3}'.format(
+                                        str(ex), namespace_key, service.name, preset_name))
+                            elif ex.alba_command == 'proxy-delete-namespace':
+                                result_handler.failure(
+                                    'Delete namespace has failed with {0} on namespace {1} with proxy {2} with preset {3}'.format(
+                                        str(ex), namespace_key, service.name, preset_name))
 
             except subprocess.CalledProcessError as ex:
                 # this should stay for the deletion of the remaining files
