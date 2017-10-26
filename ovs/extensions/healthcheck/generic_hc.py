@@ -87,23 +87,23 @@ class OpenvStorageHealthCheck(object):
 
     @staticmethod
     @expose_to_cli(MODULE, 'port-ranges-test',HealthCheckCLIRunner.ADDON_TYPE)
-    def check_port_ranges(result_handler, minimal_number_of_ports=20):
+    def check_port_ranges(result_handler, requested_ports=20):
         """
         Checks whether the expected amount of ports is available for the requested amount of ports
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
-        :param minimal_number_of_ports: minimal number of ports without warning
-        :type minimal_number_of_ports: int
+        :param requested_ports: minimal number of ports without warning
+        :type requested_ports: int
         :return: None
         :rtype: NoneType
         """
         # @todo: check other port ranges too
         port_range = Configuration.get('/ovs/framework/hosts/{0}/ports|storagedriver'.format(OpenvStorageHealthCheck.LOCAL_ID))
-        number_of_ports = System.get_free_ports(selected_range=port_range, nr=0)
-        if len(number_of_ports) >= minimal_number_of_ports:
-            result_handler.success('{} ports free'.format(len(number_of_ports)))
+        expected_ports = System.get_free_ports(selected_range=port_range, nr=0)
+        if len(expected_ports) >= requested_ports:
+            result_handler.success('{} ports free'.format(len(expected_ports)))
         else:
-            result_handler.warning('{} ports found, less than {}'.format(len(number_of_ports), minimal_number_of_ports))
+            result_handler.warning('{} ports found, less than {}'.format(len(expected_ports), requested_ports))
 
     @staticmethod
     @expose_to_cli(MODULE, 'nginx-ports-test', HealthCheckCLIRunner.ADDON_TYPE)
