@@ -86,7 +86,7 @@ class OpenvStorageHealthCheck(object):
             result_handler.success('All log files are ok!')
 
     @staticmethod
-    @expose_to_cli(MODULE, 'port-ranges-test',HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'port-ranges-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_port_ranges(result_handler, requested_ports=20):
         """
         Checks whether the expected amount of ports is available for the requested amount of ports
