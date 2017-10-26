@@ -86,6 +86,27 @@ class OpenvStorageHealthCheck(object):
             result_handler.success('All log files are ok!')
 
     @staticmethod
+    @expose_to_cli('ovs','port-ranges-test',HealthCheckCLIRunner.ADDON_TYPE)
+    def check_port_ranges(result_handler, requested_number_of_ports=2, minimal_number_of_ports=2):
+        """
+        Checks the port range that is available
+        :param result_handler: logging object
+        :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :param requested_number_of_ports: number of ports required
+        :type int
+        :param minimal_number_of_ports: minimal number of ports without warning
+        :type int
+        :return: None
+        :rtype: NoneType
+        """
+        port_range = Configuration.get('/ovs/framework/hosts/{0}/ports|storagedriver'.format(System.get_my_machine_id()))
+        number_of_ports = System.get_free_ports(selected_range=port_range, nr=requested_number_of_ports, return_available_ports=True)
+        if len(number_of_ports) >= minimal_number_of_ports:
+            result_handler.success('{} ports free'.format(len(number_of_ports)))
+        else:
+            result_handler.warning('{} ports found, less than {}'.format(len(number_of_ports), minimal_number_of_ports))
+
+    @staticmethod
     @expose_to_cli('ovs', 'nginx-ports-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_nginx_ports(result_handler):
         """
