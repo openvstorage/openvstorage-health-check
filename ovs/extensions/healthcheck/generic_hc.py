@@ -196,33 +196,21 @@ class OpenvStorageHealthCheck(object):
         """
         result_handler.info('Checking OVS packages: ', add_to_result=False)
         client = SSHClient(OpenvStorageHealthCheck.LOCAL_SR)
-        # PackageManager.SDM_PACKAGE_NAMES for sdm
         package_manager = PackageFactory.get_manager()
-        all_packages = list(package_manager.package_names)
+        base_packages = package_manager.package_names
         extra_packages = list(Helper.packages)
-        ee_relation = {'alba': 'alba-ee', 'arakoon': 'arakoon', 'volumedriver-no-dedup-server': 'volumedriver-ee-server'}  # Key = non-ee, value = ee
-        if OpenvStorageHealthCheck.LOCAL_SR.features['alba']['edition'] == 'community':
-            required_packages = [package_name for package_name in all_packages if package_name in ee_relation.keys()]
-        else:
-            required_packages = [package_name for package_name in all_packages if package_name in ee_relation.values()]
-        installed = package_manager.get_installed_versions(client=client, package_names=list(required_packages + extra_packages))
-
-        while len(required_packages) > 0:
-            package = required_packages.pop()
+        all_packages = list(base_packages + extra_packages)
+        installed = package_manager.get_installed_versions(client=client, package_names=all_packages)
+        for package in all_packages:
             version = installed.get(package)
             if version:
                 version = str(version)
-                result_handler.success('Package {0} is installed with version {1}'.format(package, version.replace('\n', '')))
+                result_handler.success('Package {0} is installed with version {1}'.format(package, version))
             else:
-                result_handler.warning('Package {0} is not installed.'.format(package))
-        while len(extra_packages) > 0:
-            package = extra_packages.pop()
-            version = installed.get(package)
-            if version:
-                version = str(version)
-                result_handler.success('Package {0} is installed with version {1}'.format(package, version.replace('\n', '')))
-            else:
-                result_handler.skip('Package {0} is not installed.'.format(package))
+                if package in base_packages:
+                    result_handler.warning('Package {0} is not installed.'.format(package))
+                elif package in extra_packages:
+                    result_handler.skip('Package {0} is not installed.'.format(package))
 
     @staticmethod
     @expose_to_cli(MODULE, 'processes-test', HealthCheckCLIRunner.ADDON_TYPE)
