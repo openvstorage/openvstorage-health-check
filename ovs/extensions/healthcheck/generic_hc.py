@@ -199,7 +199,7 @@ class OpenvStorageHealthCheck(object):
         package_manager = PackageFactory.get_manager()
         base_packages = package_manager.package_names
         extra_packages = list(Helper.packages)
-        all_packages = list(base_packages + extra_packages)
+        all_packages = base_packages + extra_packages
         installed = package_manager.get_installed_versions(client=client, package_names=all_packages)
         for package in all_packages:
             version = installed.get(package)
