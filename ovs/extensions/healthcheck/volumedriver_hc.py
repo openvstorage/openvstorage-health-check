@@ -337,20 +337,20 @@ class VolumedriverHealthCheck(object):
         :param critical_vol_number: maximal number of volumes that result in a warning
         :type critical_vol_number: int
         """
-        if isinstance(critical_vol_number,int):
-            for std in VolumedriverHealthCheck.LOCAL_SR.storagedrivers:
-                try:
-                    std_config = StorageDriverConfiguration(std.vpool_guid, std.storagedriver_id)
-                    client = src.LocalStorageRouterClient(std_config.remote_path)
-                    vol_potential = client.volume_potential(str(std.storagedriver_id))
-                    if vol_potential >= critical_vol_number:
-                        log_level = 'success'
-                    elif critical_vol_number > vol_potential > 0:
-                        log_level = 'warning'
-                    else:
-                        log_level = 'failure'
-                    getattr(result_handler, log_level)('Volume potential of local storage driver: {0}: {1} (potential at: {2})'.format(std.storagedriver_id, log_level.upper(), vol_potential))
-                except RuntimeError:
-                    result_handler.exception('Runtime error: unable to retrieve storagedriver {0}'.format(std.storagedriver_id))
-        else:
-            result_handler.exception('Critical volume number should be an integer')
+        if not isinstance(critical_vol_number, int):
+            raise ValueError('Critical volume number should be an integer')
+
+        for std in VolumedriverHealthCheck.LOCAL_SR.storagedrivers:
+            try:
+                std_config = StorageDriverConfiguration(std.vpool_guid, std.storagedriver_id)
+                client = src.LocalStorageRouterClient(std_config.remote_path)
+                vol_potential = client.volume_potential(str(std.storagedriver_id))
+                if vol_potential >= critical_vol_number:
+                    log_level = 'success'
+                elif critical_vol_number > vol_potential > 0:
+                    log_level = 'warning'
+                else:
+                    log_level = 'failure'
+                getattr(result_handler, log_level)('Volume potential of local storage driver: {0}: {1} (potential at: {2})'.format(std.storagedriver_id, log_level.upper(), vol_potential))
+            except RuntimeError:
+                result_handler.exception('Unable to retrieve configuration for storagedriver {0}'.format(std.storagedriver_id))
