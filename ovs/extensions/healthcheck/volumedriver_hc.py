@@ -331,14 +331,14 @@ class VolumedriverHealthCheck(object):
 
     @staticmethod
     @expose_to_cli(MODULE, 'volume-potential-test', HealthCheckCLIRunner.ADDON_TYPE)
-    def check_volume_potential(result_handler, critical_volume_number=25):
+    def check_volume_potential(result_handler, critical_vol_number=25):
         """
         Checks all local storage drivers from a volume driver. Results in a success if enough volumes are available, a warning if the number of volumes is
         lower then a threshold value (critical_volume_number) and a failure if the nr of volumes ==0)
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
-        :param critical_volume_number: maximal number of volumes that result in a warning
-        :type critical_volume_number: int
+        :param critical_vol_number: maximal number of volumes that result in a warning
+        :type critical_vol_number: int
         """
 
         for std in VolumedriverHealthCheck.LOCAL_SR.storagedrivers:
@@ -346,9 +346,9 @@ class VolumedriverHealthCheck(object):
                 std_config = StorageDriverConfiguration(std.vpool.guid, std.storagedriver_id)
                 client = src.LocalStorageRouterClient(std_config.remote_path)
                 vol_potential = client.volume_potential(str(std.storagedriver_id))
-                if vol_potential >= critical_volume_number:
+                if vol_potential >= critical_vol_number:
                     log_level = 'success'
-                elif critical_volume_number > vol_potential > 0:
+                elif critical_vol_number > vol_potential > 0:
                     log_level = 'warning'
                 else:
                     log_level = 'failure'
