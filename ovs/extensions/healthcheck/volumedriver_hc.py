@@ -23,6 +23,7 @@ from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckC
 from ovs.extensions.healthcheck.helpers.exceptions import VDiskNotFoundError
 from ovs.extensions.healthcheck.helpers.vdisk import VDiskHelper
 from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
+from ovs.extensions.storageserver.storagedriver import StorageDriverConfiguration
 from ovs.lib.vdisk import VDiskController
 from timeout_decorator.timeout_decorator import TimeoutError
 from volumedriver.storagerouter import storagerouterclient as src
@@ -339,20 +340,18 @@ class VolumedriverHealthCheck(object):
         :param critical_volume_number: maximal number of volumes that result in a warning
         :type critical_volume_number: int
         """
-        from ovs.extensions.storageserver.storagedriver import StorageDriverConfiguration
-        import volumedriver.storagerouter.storagerouterclient as src
 
         for std in VolumedriverHealthCheck.LOCAL_SR.storagedrivers:
-            std_driver_log_string = 'Volume potential of local storage driver {0}'.format(std.storagedriver_id)
             try:
                 std_config = StorageDriverConfiguration(std.vpool.guid, std.storagedriver_id)
                 client = src.LocalStorageRouterClient(std_config.remote_path)
                 vol_potential = client.volume_potential(str(std.storagedriver_id))
                 if vol_potential >= critical_volume_number:
-                    result_handler.success('{0} exceeds critical volume limit ({1}>>>{2})'.format(std_driver_log_string, vol_potential, critical_volume_number))
-                elif critical_volume_number>vol_potential>0:
-                    result_handler.warning('{0} is critically low ({1} volumes left)'.format(std_driver_log_string, vol_potential))
-                elif critical_volume_number <=0:
-                    result_handler.failure('{0} has no more spare volumes'.format(std_driver_log_string))
+                    log_level = 'success'
+                elif critical_volume_number > vol_potential > 0:
+                    log_level = 'warning'
+                else:
+                    log_level = 'failure'
+                getattr(result_handler, log_level)('Volume potential of local storage driver: {0}: {1} (Potential at: {2})'.format(std.storagedriver_id, log_level.upper(), vol_potential))
             except RuntimeError:
                 result_handler.exception('Unable to retrieve {0}'.format(std.storagedriver_id.lower()))
