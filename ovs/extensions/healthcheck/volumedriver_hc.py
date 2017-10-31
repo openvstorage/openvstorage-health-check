@@ -348,6 +348,6 @@ class VolumedriverHealthCheck(object):
                     log_level = 'warning'
                 else:
                     log_level = 'failure'
-                getattr(result_handler, log_level)('Volume potential of local storage driver: {0}: {1} (Potential at: {2})'.format(std.storagedriver_id, log_level.upper(), vol_potential))
+                getattr(result_handler, log_level)('Volume potential of local storage driver: {0}: {1} (potential at: {2})'.format(std.storagedriver_id, log_level.upper(), vol_potential))
             except RuntimeError:
                 result_handler.exception('Unable to retrieve {0}'.format(std.storagedriver_id.lower()))
