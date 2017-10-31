@@ -23,6 +23,7 @@ from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckC
 from ovs.extensions.healthcheck.helpers.exceptions import VDiskNotFoundError
 from ovs.extensions.healthcheck.helpers.vdisk import VDiskHelper
 from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
+from ovs.extensions.storageserver.storagedriver import StorageDriverConfiguration
 from ovs.lib.vdisk import VDiskController
 from timeout_decorator.timeout_decorator import TimeoutError
 from volumedriver.storagerouter import storagerouterclient as src
@@ -33,7 +34,6 @@ class VolumedriverHealthCheck(object):
     """
     A healthcheck for the volumedriver components
     """
-
     MODULE = 'volumedriver'
     LOCAL_SR = System.get_my_storagerouter()
     LOCAL_ID = System.get_my_machine_id()
@@ -274,7 +274,6 @@ class VolumedriverHealthCheck(object):
         :return: True if succeeded, False if failed
         :rtype: bool
         """
-
         return subprocess.check_output('touch /mnt/{0}/{1}.xml'.format(vp_name, test_name), stderr=subprocess.STDOUT, shell=True)
 
     @staticmethod
@@ -288,7 +287,6 @@ class VolumedriverHealthCheck(object):
         :return: True if succeeded, False if failed
         :rtype: bool
         """
-
         subprocess.check_output('rm -f /mnt/{0}/ovs-healthcheck-test-*.xml'.format(vp_name), stderr=subprocess.STDOUT, shell=True)
         return not os.path.exists('/mnt/{0}/ovs-healthcheck-test-*.xml'.format(vp_name))
 
@@ -327,3 +325,32 @@ class VolumedriverHealthCheck(object):
             except subprocess.CalledProcessError:
                 # can be input/output error by filedriver
                 result_handler.failure('Filedriver of vPool {0} seems to have `input/output` problems'.format(vp.name))
+
+    @staticmethod
+    @expose_to_cli(MODULE, 'volume-potential-test', HealthCheckCLIRunner.ADDON_TYPE)
+    def check_volume_potential(result_handler, critical_vol_number=25):
+        """
+        Checks all local storage drivers from a volume driver. Results in a success if enough volumes are available, a warning if the number of volumes is
+        lower then a threshold value (critical_volume_number) and a failure if the nr of volumes ==0)
+        :param result_handler: logging object
+        :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :param critical_vol_number: maximal number of volumes that result in a warning
+        :type critical_vol_number: int
+        """
+        if not isinstance(critical_vol_number, int) or critical_vol_number < 0:
+            raise ValueError('Critical volume number should be a positive integer')
+
+        for std in VolumedriverHealthCheck.LOCAL_SR.storagedrivers:
+            try:
+                std_config = StorageDriverConfiguration(std.vpool_guid, std.storagedriver_id)
+                client = src.LocalStorageRouterClient(std_config.remote_path)
+                vol_potential = client.volume_potential(str(std.storagedriver_id))
+                if vol_potential >= critical_vol_number:
+                    log_level = 'success'
+                elif critical_vol_number > vol_potential > 0:
+                    log_level = 'warning'
+                else:
+                    log_level = 'failure'
+                getattr(result_handler, log_level)('Volume potential of local storage driver: {0}: {1} (potential at: {2})'.format(std.storagedriver_id, log_level.upper(), vol_potential))
+            except RuntimeError:
+                result_handler.exception('Unable to retrieve configuration for storagedriver {0}'.format(std.storagedriver_id))
