@@ -340,7 +340,6 @@ class VolumedriverHealthCheck(object):
         if not isinstance(critical_vol_number, int) or critical_vol_number < 0:
             raise ValueError('Critical volume number should be a positive integer')
 
-        result_handler.warning(len(VolumedriverHealthCheck.LOCAL_SR.storagedrivers))
         for std in VolumedriverHealthCheck.LOCAL_SR.storagedrivers:
             try:
                 std_config = StorageDriverConfiguration(std.vpool_guid, std.storagedriver_id)
