@@ -34,7 +34,6 @@ class VolumedriverHealthCheck(object):
     """
     A healthcheck for the volumedriver components
     """
-
     MODULE = 'volumedriver'
     LOCAL_SR = System.get_my_storagerouter()
     LOCAL_ID = System.get_my_machine_id()
@@ -275,7 +274,6 @@ class VolumedriverHealthCheck(object):
         :return: True if succeeded, False if failed
         :rtype: bool
         """
-
         return subprocess.check_output('touch /mnt/{0}/{1}.xml'.format(vp_name, test_name), stderr=subprocess.STDOUT, shell=True)
 
     @staticmethod
@@ -289,7 +287,6 @@ class VolumedriverHealthCheck(object):
         :return: True if succeeded, False if failed
         :rtype: bool
         """
-
         subprocess.check_output('rm -f /mnt/{0}/ovs-healthcheck-test-*.xml'.format(vp_name), stderr=subprocess.STDOUT, shell=True)
         return not os.path.exists('/mnt/{0}/ovs-healthcheck-test-*.xml'.format(vp_name))
 
@@ -340,7 +337,6 @@ class VolumedriverHealthCheck(object):
         :param critical_vol_number: maximal number of volumes that result in a warning
         :type critical_vol_number: int
         """
-
         for std in VolumedriverHealthCheck.LOCAL_SR.storagedrivers:
             try:
                 std_config = StorageDriverConfiguration(std.vpool.guid, std.storagedriver_id)
