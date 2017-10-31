@@ -337,8 +337,8 @@ class VolumedriverHealthCheck(object):
         :param critical_vol_number: maximal number of volumes that result in a warning
         :type critical_vol_number: int
         """
-        if not isinstance(critical_vol_number, int):
-            raise ValueError('Critical volume number should be an integer')
+        if not isinstance(critical_vol_number, int) and critical_vol_number >= 0:
+            raise ValueError('Critical volume number should be a positive integer')
 
         for std in VolumedriverHealthCheck.LOCAL_SR.storagedrivers:
             try:
