@@ -327,3 +327,32 @@ class VolumedriverHealthCheck(object):
             except subprocess.CalledProcessError:
                 # can be input/output error by filedriver
                 result_handler.failure('Filedriver of vPool {0} seems to have `input/output` problems'.format(vp.name))
+
+    @staticmethod
+    @expose_to_cli(MODULE, 'volume-potential-test', HealthCheckCLIRunner.ADDON_TYPE)
+    def check_volume_potential(result_handler, critical_volume_number=25):
+        """
+        Checks all local storage drivers from a volume driver. Results in a success if enough volumes are available, a warning if the number of volumes is
+        lower then a threshold value (critical_volume_number) and a failure if the nr of volumes ==0)
+        :param result_handler: logging object
+        :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :param critical_volume_number: maximal number of volumes that result in a warning
+        :type critical_volume_number: int
+        """
+        from ovs.extensions.storageserver.storagedriver import StorageDriverConfiguration
+        import volumedriver.storagerouter.storagerouterclient as src
+
+        for std in VolumedriverHealthCheck.LOCAL_SR.storagedrivers:
+            std_driver_log_string = 'Volume potential of local storage driver {0}'.format(std.storagedriver_id)
+            try:
+                std_config = StorageDriverConfiguration(std.vpool.guid, std.storagedriver_id)
+                client = src.LocalStorageRouterClient(std_config.remote_path)
+                vol_potential = client.volume_potential(str(std.storagedriver_id))
+                if vol_potential >= critical_volume_number:
+                    result_handler.success('{0} exceeds critical volume limit ({1}>>>{2})'.format(std_driver_log_string, vol_potential, critical_volume_number))
+                elif critical_volume_number>vol_potential>0:
+                    result_handler.warning('{0} is critically low ({1} volumes left)'.format(std_driver_log_string, vol_potential))
+                elif critical_volume_number <=0:
+                    result_handler.failure('{0} has no more spare volumes'.format(std_driver_log_string))
+            except RuntimeError:
+                result_handler.exception('Unable to retrieve {0}'.format(std.storagedriver_id.lower()))
