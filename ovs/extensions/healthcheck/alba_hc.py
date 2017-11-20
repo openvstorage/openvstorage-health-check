@@ -51,6 +51,7 @@ class AlbaHealthCheck(object):
     TEMP_FILE_LOC = '/tmp/ovs-hc.xml'  # to be put in alba file
     TEMP_FILE_FETCHED_LOC = '/tmp/ovs-hc-fetched.xml'  # fetched (from alba) file location
     NAMESPACE_TIMEOUT = 30  # in seconds
+    NAMESPACE_MIN_ACTIVE_OSDS_PCT = 90
     BASE_NAMESPACE_KEY = 'ovs-healthcheck-'
 
     @classmethod
@@ -213,12 +214,11 @@ class AlbaHealthCheck(object):
                                 raise RuntimeError('Creation namespace has timed out after {0}s'.format(time.time() - namespace_start_time))
                             list_ns_osds_output = AlbaCLI.run(command='list-ns-osds', config=abm_config, extra_params=[namespace_key])
                             # Example output: [[0, [u'Active']], [3, [u'Active']]]
-                            namespace_ready = True
-                            for osd_info in list_ns_osds_output:  # If there are no osd_info records, uploading will fail so covered by HC
-                                osd_state = osd_info[1][0]
-                                if osd_state != 'Active':
-                                    namespace_ready = False
-                            if namespace_ready is True:
+                            num_active_osds = 0
+                            for osd_info in list_ns_osds_output:
+                                if osd_info[1][0] == 'Active':
+                                    num_active_osds += 1
+                            if (float(num_active_osds) / len(list_ns_osds_output) * 100) > AlbaHealthCheck.NAMESPACE_MIN_ACTIVE_OSDS_PCT:
                                 break
                         result_handler.success('Namespace successfully created on proxy {0} with preset {1}!'.format(service.name, preset_name))
                         namespace_info = AlbaCLI.run(command='show-namespace', config=abm_config, extra_params=[namespace_key])
