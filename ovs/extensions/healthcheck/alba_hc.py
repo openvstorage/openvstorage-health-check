@@ -25,6 +25,7 @@ import uuid
 import time
 import hashlib
 import subprocess
+from ovs_extensions.api.client import OVSClient
 from ovs_extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 from ovs.extensions.generic.configuration import Configuration, NotFoundException
 from ovs.extensions.generic.sshclient import SSHClient
@@ -51,7 +52,6 @@ class AlbaHealthCheck(object):
     TEMP_FILE_LOC = '/tmp/ovs-hc.xml'  # to be put in alba file
     TEMP_FILE_FETCHED_LOC = '/tmp/ovs-hc-fetched.xml'  # fetched (from alba) file location
     NAMESPACE_TIMEOUT = 30  # in seconds
-    NAMESPACE_MIN_ACTIVE_OSDS_PCT = 90
     BASE_NAMESPACE_KEY = 'ovs-healthcheck-'
 
     @classmethod
@@ -214,12 +214,30 @@ class AlbaHealthCheck(object):
                                 raise RuntimeError('Creation namespace has timed out after {0}s'.format(time.time() - namespace_start_time))
                             list_ns_osds_output = AlbaCLI.run(command='list-ns-osds', config=abm_config, extra_params=[namespace_key])
                             # Example output: [[0, [u'Active']], [3, [u'Active']]]
-                            num_active_osds = 0
+                            namespace_ready = True
                             for osd_info in list_ns_osds_output:
-                                if osd_info[1][0] == 'Active':
-                                    num_active_osds += 1
-                            if (float(num_active_osds) / len(list_ns_osds_output) * 100) > AlbaHealthCheck.NAMESPACE_MIN_ACTIVE_OSDS_PCT:
+                                if osd_info[1][0] != 'Active':
+                                    # If we found an OSD not Active, check if preset is satisfiable
+                                    namespace_ready = False
+                                    break
+                            if namespace_ready is True:
                                 break
+                            else:
+                                try:
+                                    vpool = service.alba_proxy.storagedriver.vpool
+                                    alba_backend_guid = vpool.metadata['backend']['backend_info']['alba_backend_guid']
+                                    connection_info = vpool.metadata['backend']['connection_info']
+                                    api_client = OVSClient(connection_info['host'], connection_info['port'], (connection_info['client_id'], connection_info['client_secret']))
+                                    _presets = api_client.get('alba/backends/{0}'.format(alba_backend_guid), params={'contents': 'presets'})['presets']
+                                    _preset = filter(lambda p: p['name'] == preset_name, _presets)[0]
+                                    if _preset['is_available'] is True:
+                                        # Preset satisfiable, don't care about osds availability
+                                        result_handler.info('Requested preset is available, skipping \'deliver_messages\'')
+                                        break
+                                except Exception:
+                                    msg = 'Could not query the preset data. Checking the preset might timeout'
+                                    result_handler.warning(msg)
+
                         result_handler.success('Namespace successfully created on proxy {0} with preset {1}!'.format(service.name, preset_name))
                         namespace_info = AlbaCLI.run(command='show-namespace', config=abm_config, extra_params=[namespace_key])
                         Toolbox.verify_required_params(required_params=namespace_params, actual_params=namespace_info)
