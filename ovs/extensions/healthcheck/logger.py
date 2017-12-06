@@ -18,5 +18,8 @@ from ovs.extensions.generic.logger import Logger as _Logger
 
 
 class Logger(_Logger):
+    """
+    Logger for the healthcheck which forces to log to a file
+    """
     def __init__(self, name):
         super(Logger, self).__init__(name, forced_target_type='file')
