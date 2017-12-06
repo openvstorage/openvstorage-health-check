@@ -13,6 +13,7 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
+from operator import itemgetter
 
 
 class ErrorCode(object):
@@ -74,3 +75,63 @@ class ErrorCodes(object):
         'volume_dtl_checkup_required': ErrorCode('VOL1013', 'The volumes DTL should be configured', 'Configure the DTL for this volume'),
         'volume_dtl_degraded': ErrorCode('VOL1014', 'The volumes DTL is degraded', 'Perform the DTL checkup for this volume')
         }
+
+    @classmethod
+    def print_md(cls):
+        """
+        Prints generated documentation about all codes in md table format
+        :return: None
+        :rtype: NoneType
+        """
+        headings = ['Error code', 'Information', 'Solution']
+        row_data = []
+
+        for error_code in cls._internal_codes.values():
+            row_data.append([error_code.error_code, error_code.information, error_code.solution])
+        row_data.sort(key=itemgetter(0))
+        print MarkDownGenerator.generate_table(headings, row_data)
+
+    @staticmethod
+    def _generate_table_header():
+        """
+        Generate an md table header
+        :return:
+        """
+        pass
+
+
+class MarkDownGenerator(object):
+    """
+    Class which generates a table in markdown format
+    """
+    @staticmethod
+    def generate_table(headings, rows_data):
+        """
+        Generate an md table based on the provided data
+        :param headings: List of column headings
+        :type headings: list[str]
+        :param rows_data: List with iterables which contain the data
+        A requirement for aligning everything nicely is that iterable is sorted
+        The inner list entries will be matched with the columns
+        Example: columns: ['test', 'test'1], records: [['my_test_value', 'my_test1_value']]
+        :type rows_data: list[iterable(any)]
+        """
+        # Compute the table cell data
+        rows = [headings] + rows_data
+        columns = [list(x) for x in zip(*rows)]  # Transpose our rows
+        columns_widths = [len(max(column, key=len)) for column in columns]
+        heading_separator = [':{0}'.format('-' * (width - 1)) for width in columns_widths]
+        rows.insert(1, heading_separator)
+        columns = [list(x) for x in zip(*rows)]  # Transpose our rows again
+        # Center it all for an even table
+        even_columns = []
+        for index, column in enumerate(columns):
+            even_column = []
+            for cell in column:
+                even_column.append(str(cell).center(columns_widths[index]))
+            even_columns.append(even_column)
+        rows = [list(x) for x in zip(*even_columns)]  # Transpose our columns
+        md_table = ''
+        for row in rows:
+            md_table += ' | ' + ' | '.join(row) + ' | \n'
+        return md_table
