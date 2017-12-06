@@ -33,7 +33,7 @@ from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckC
 from ovs.extensions.healthcheck.helpers.albacli import AlbaCLI
 from ovs.extensions.healthcheck.helpers.backend import BackendHelper
 from ovs.extensions.healthcheck.decorators import cluster_check
-from ovs.extensions.healthcheck.helpers.exceptions import AlbaException, ConfigNotMatchedException, ConnectionFailedException, DiskNotFoundException, ObjectNotFoundException
+from ovs.extensions.healthcheck.helpers.exceptions import AlbaException, AlbaTimeOutException,  ConfigNotMatchedException, DiskNotFoundException, ObjectNotFoundException
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
 from ovs.extensions.services.servicefactory import ServiceFactory
@@ -395,8 +395,6 @@ class AlbaHealthCheck(object):
                                                'defective asds!'.format(backend_name, len(working_disks), len(defective_disks)))
         except NotFoundException as ex:
             result_handler.failure('Failed to fetch the object with exception: {0}'.format(ex))
-        except ConnectionFailedException as ex:
-            result_handler.failure('Failed to connect to configuration master with exception: {0}'.format(ex))
         except (ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult) as e:
             result_handler.failure('Seems like a arakoon has some problems: {0}'.format(e))
 
