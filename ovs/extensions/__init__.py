@@ -16,6 +16,12 @@
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
 
-"""
-This package contains all check python logic
-"""
+from ovs.extensions.generic.logger import Logger as _Logger
+
+
+class Logger(_Logger):
+    """
+    Logger for the healthcheck which forces to log to a file
+    """
+    def __init__(self, name):
+        super(Logger, self).__init__(name, forced_target_type='file')

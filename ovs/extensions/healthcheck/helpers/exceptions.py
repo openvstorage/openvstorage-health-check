@@ -35,48 +35,6 @@ class HealthCheckException(Exception):
         self.error_code = error_code
 
 
-class SectionNotFoundError(Exception):
-    """
-    Raised when an object was queries that doesn't exist
-    """
-    pass
-
-
-class DirectoryNotFoundError(Exception):
-    """
-    Raised when an object was queries that doesn't exist
-    """
-    pass
-
-
-class ArakoonClusterNotFoundError(Exception):
-    """
-    Raised when an object was queries that doesn't exist
-    """
-    pass
-
-
-class UnsupportedInitManager(Exception):
-    """
-    Raised when an object was queries that doesn't exist
-    """
-    pass
-
-
-class PresetNotFoundError(Exception):
-    """
-    Raised when an object was queries that doesn't exist
-    """
-    pass
-
-
-class AlbaBackendNotFoundError(Exception):
-    """
-    Raised when an object was queries that doesn't exist
-    """
-    pass
-
-
 class VPoolNotFoundError(Exception):
     """
     Raised when an object was queries that doesn't exist
@@ -91,44 +49,9 @@ class VDiskNotFoundError(Exception):
     pass
 
 
-class ImageConvertError(Exception):
-    """
-    Raised when an object was queries that doesn't exist
-    """
-    pass
-
-
 class ObjectNotFoundException(Exception):
     """
     Raised when an object was queries that doesn't exist
-    """
-    pass
-
-
-class CommandException(Exception):
-    """
-    Raised when an object was queries that returns non-zero
-    """
-    pass
-
-
-class UnsupportedPlatformException(Exception):
-    """
-    Raised when an platform is not supported
-    """
-    pass
-
-
-class ScrubberException(Exception):
-    """
-    Raised when scrubber failed
-    """
-    pass
-
-
-class ConnectionFailedException(Exception):
-    """
-    Raised when a connection is failed
     """
     pass
 
@@ -140,23 +63,9 @@ class DiskNotFoundException(Exception):
     pass
 
 
-class ConfigNotFoundException(Exception):
-    """
-    Raised when a config isn't found
-    """
-    pass
-
-
 class ConfigNotMatchedException(Exception):
     """
     Raised when a config isn't matched to the desired regex
-    """
-    pass
-
-
-class PlatformNotSupportedException(Exception):
-    """
-    Raised when the platform is not supported
     """
     pass
 

@@ -21,7 +21,7 @@ Result processing module for the health check
 """
 import inspect
 import collections
-from ovs.extensions.healthcheck.config.error_codes import ErrorCodes
+from ovs.extensions.healthcheck.config.error_codes import ErrorCode, ErrorCodes
 
 
 class Severity(object):
@@ -91,14 +91,6 @@ class HCResults(object):
             """
             return lambda *args, **kwargs: getattr(self._result, item)(test_name=self._test_name, *args, **kwargs)
 
-    # Statics
-    MODULE = "helper"
-    # Log types that need to be replaced before logging to file
-    LOG_CHANGING = {
-        "success": "info",
-        "skip": "info",
-        "custom": "info"
-    }
     LINE_COLOR = '\033[0m'
 
     def __init__(self, unattended=False, to_json=False):
@@ -124,16 +116,20 @@ class HCResults(object):
     def _call(self, add_to_result, message, code, severity, test_name=''):
         """
         Process a message with a certain short _test_name and type error message
+        :param add_to_result: Add the item to the internal result collection
+        :type add_to_result: bool
         :param message: Log message for attended run
         :type message: str
         :param test_name: name for monitoring output
         :type test_name: str
-        :param code: error code
-        :type code: str
+        :param code: Error code
+        :type code: str or ovs.extensions.healthcheck.config.error_codes.ErrorCode
         :param severity: Severity object
         :type severity: ovs.extensions.healthcheck.result.Severity
         :return:
         """
+        if isinstance(code, ErrorCode):
+            code = code.error_code
         print_value = severity.print_value
         if add_to_result is True and test_name:
             if severity.value != -1:
@@ -168,7 +164,7 @@ class HCResults(object):
             print json.dumps(self.result_dict, indent=4, sort_keys=True)
         return self.result_dict
 
-    def failure(self, msg, add_to_result=True, code=ErrorCodes.default.error_code, **kwargs):
+    def failure(self, msg, add_to_result=True, code=ErrorCodes.default, **kwargs):
         """
         Report a failure log
         :param msg: Log message for attended run
@@ -181,7 +177,7 @@ class HCResults(object):
         """
         self._call(message=msg, add_to_result=add_to_result, code=code, severity=Severities.error, **kwargs)
 
-    def success(self, msg, add_to_result=True, code=ErrorCodes.default.error_code, **kwargs):
+    def success(self, msg, add_to_result=True, code=ErrorCodes.default, **kwargs):
         """
         Report a success log
         :param msg: Log message for attended run
@@ -194,7 +190,7 @@ class HCResults(object):
         """
         self._call(message=msg, add_to_result=add_to_result, code=code, severity=Severities.success, **kwargs)
 
-    def warning(self, msg, add_to_result=True, code=ErrorCodes.default.error_code, **kwargs):
+    def warning(self, msg, add_to_result=True, code=ErrorCodes.default, **kwargs):
         """
         Report a warning log
         :param msg: Log message for attended run
@@ -207,7 +203,7 @@ class HCResults(object):
         """
         self._call(message=msg, add_to_result=add_to_result, code=code, severity=Severities.warning, **kwargs)
 
-    def info(self, msg, add_to_result=True, code=ErrorCodes.default.error_code, **kwargs):
+    def info(self, msg, add_to_result=True, code=ErrorCodes.default, **kwargs):
         """
         Report a info log
         :param msg: Log message for attended run
@@ -220,7 +216,7 @@ class HCResults(object):
         """
         self._call(message=msg, add_to_result=add_to_result, code=code, severity=Severities.info, **kwargs)
 
-    def exception(self, msg, add_to_result=True, code=ErrorCodes.default.error_code, **kwargs):
+    def exception(self, msg, add_to_result=True, code=ErrorCodes.default, **kwargs):
         """
         Report a exception log
         :param msg: Log message for attended run
@@ -233,7 +229,7 @@ class HCResults(object):
         """
         self._call(message=msg, add_to_result=add_to_result, code=code, severity=Severities.exception, **kwargs)
 
-    def skip(self, msg, add_to_result=True, code=ErrorCodes.default.error_code,  **kwargs):
+    def skip(self, msg, add_to_result=True, code=ErrorCodes.default,  **kwargs):
         """
         Report a skipped log
         :param msg: Log message for attended run
@@ -246,7 +242,7 @@ class HCResults(object):
         """
         self._call(message=msg, add_to_result=add_to_result, code=code, severity=Severities.skip, **kwargs)
 
-    def debug(self, msg, add_to_result=True, code=ErrorCodes.default.error_code, **kwargs):
+    def debug(self, msg, add_to_result=True, code=ErrorCodes.default, **kwargs):
         """
         Report a debug log
         :param msg: Log message for attended run

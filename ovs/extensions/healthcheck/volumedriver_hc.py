@@ -17,22 +17,25 @@ import os
 import subprocess
 import timeout_decorator
 from ovs.dal.exceptions import ObjectNotFoundException
-from ovs.extensions.generic.configuration import Configuration
+from ovs.dal.lists.vpoollist import VPoolList
+from ovs.dal.hybrids.vdisk import VDisk
+from ovs.extensions.healthcheck.logger import Logger
 from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
+from ovs.extensions.healthcheck.config.error_codes import ErrorCodes
 from ovs.extensions.healthcheck.helpers.exceptions import VDiskNotFoundError
 from ovs.extensions.healthcheck.helpers.vdisk import VDiskHelper
-from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
 from ovs.lib.vdisk import VDiskController
 from timeout_decorator.timeout_decorator import TimeoutError
 from volumedriver.storagerouter import storagerouterclient as src
-from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, ObjectNotFoundException, MaxRedirectsExceededException, FileExistsException
+from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, NodeNotReachableException, ObjectNotFoundException, MaxRedirectsExceededException, FileExistsException
 
 
 class VolumedriverHealthCheck(object):
     """
     A healthcheck for the volumedriver components
     """
+    logger = Logger("healthcheck-volumedriver_check")
 
     MODULE = 'volumedriver'
     LOCAL_SR = System.get_my_storagerouter()
@@ -51,27 +54,24 @@ class VolumedriverHealthCheck(object):
         :rtype: NoneType
         """
         # Fetch vdisks hosted on this machine
-        VolumedriverHealthCheck.LOCAL_SR.invalidate_dynamics('vdisks_guids')
-        if len(VolumedriverHealthCheck.LOCAL_SR.vdisks_guids) == 0:
+        local_sr = System.get_my_storagerouter()
+        if len(local_sr.vdisks_guids) == 0:
             return result_handler.skip('No VDisks present in cluster.')
-        for vdisk_guid in VolumedriverHealthCheck.LOCAL_SR.vdisks_guids:
-            try:
-                vdisk = VDiskHelper.get_vdisk_by_guid(vdisk_guid)
-                vdisk.invalidate_dynamics(['dtl_status', 'info'])
-            except TimeoutError:
-                result_handler.warning('VDisk {0}s DTL has a timeout status: {1}.'.format(vdisk.name, vdisk.dtl_status))
+        for vdisk_guid in local_sr.vdisks_guids:
+            vdisk = VDisk(vdisk_guid)
+            vdisk.invalidate_dynamics(['dtl_status', 'info'])
             if vdisk.dtl_status == 'ok_standalone' or vdisk.dtl_status == 'disabled':
                 result_handler.success('VDisk {0}s DTL is disabled'.format(vdisk.name))
             elif vdisk.dtl_status == 'ok_sync':
                 result_handler.success('VDisk {0}s DTL is enabled and running.'.format(vdisk.name))
             elif vdisk.dtl_status == 'degraded':
-                result_handler.warning('VDisk {0}s DTL is degraded.'.format(vdisk.name))
+                result_handler.warning('VDisk {0}s DTL is degraded.'.format(vdisk.name), code=ErrorCodes.volume_dtl_degraded)
             elif vdisk.dtl_status == 'checkup_required':
-                result_handler.warning('VDisk {0}s DTL should be configured.'.format(vdisk.name))
+                result_handler.warning('VDisk {0}s DTL should be configured.'.format(vdisk.name), code=ErrorCodes.volume_dtl_checkup_required)
             elif vdisk.dtl_status == 'catch_up':
-                result_handler.warning('VDisk {0}s DTL is enabled but still syncing.'.format(vdisk.name))
+                result_handler.warning('VDisk {0}s DTL is enabled but still syncing.'.format(vdisk.name), code=ErrorCodes.volume_dtl_catch_up)
             else:
-                result_handler.warning('VDisk {0}s DTL has an unknown status: {1}.'.format(vdisk.name, vdisk.dtl_status))
+                result_handler.warning('VDisk {0}s DTL has an unknown status: {1}.'.format(vdisk.name, vdisk.dtl_status), code=ErrorCodes.volume_dtl_unknown)
 
     @staticmethod
     @timeout_decorator.timeout(30)
@@ -136,7 +136,7 @@ class VolumedriverHealthCheck(object):
         :rtype: NoneType
         """
         result_handler.info('Checking volumedrivers.', add_to_result=False)
-        vpools = VPoolHelper.get_vpools()
+        vpools = VPoolList.get_vpools()
         if len(vpools) == 0:
             result_handler.skip('No vPools found!')
             return
@@ -184,9 +184,9 @@ class VolumedriverHealthCheck(object):
                 except:
                     pass
 
-    @staticmethod
+    @classmethod
     @expose_to_cli(MODULE, 'halted-volumes-test', HealthCheckCLIRunner.ADDON_TYPE)
-    def check_for_halted_volumes(result_handler):
+    def check_for_halted_volumes(cls, result_handler):
         """
         Checks for halted volumes on a single or multiple vPools
         :param result_handler: logging object
@@ -195,71 +195,83 @@ class VolumedriverHealthCheck(object):
         :rtype: NoneType
         """
         result_handler.info('Checking for halted volumes.', add_to_result=False)
-        vpools = VPoolHelper.get_vpools()
+        vpools = VPoolList.get_vpools()
+        local_sr = System.get_my_storagerouter()
 
         if len(vpools) == 0:
-            result_handler.skip('No vPools found!'.format(len(vpools)))
+            result_handler.skip('No vPools found!'.format(len(vpools)), code=ErrorCodes.vpools_none)
             return
-
-        for vp in vpools:
-            if vp.guid not in VolumedriverHealthCheck.LOCAL_SR.vpools_guids:
-                result_handler.skip('Skipping vPool {0} because it is not living here.'.format(vp.name))
+        for vpool in vpools:
+            if vpool.guid not in local_sr.vpools_guids:
+                result_handler.skip('Skipping vPool {0} because it is not living here.'.format(vpool.name), code=ErrorCodes.vpool_not_local)
                 continue
 
-            haltedvolumes = []
-            result_handler.info('Checking vPool {0}: '.format(vp.name), add_to_result=False)
-            if len(vp.storagedrivers) > 0:
-                config_file = Configuration.get_configuration_path('/ovs/vpools/{0}/hosts/{1}/config'.format(vp.guid, vp.storagedrivers[0].name))
-            else:
-                result_handler.failure('The vpool {0} does not have any storagedrivers associated to it!'.format(vp.name))
-                continue
+            result_handler.info('Checking vPool {0}'.format(vpool.name), add_to_result=False)
+            voldrv_client = vpool.storagedriver_client
+            storagedriver = None
+            for std in vpool.storagedrivers:
+                if std.storagerouter_guid == local_sr.guid:
+                    storagedriver = std
+                    break
 
+            if storagedriver is None:
+                result_handler.failure('Could not associate a storagedriver with this StorageRouter')
+                return
+
+            volume_states = {'max_redir': [], 'connection': [], 'not_found': [], 'halted': []}
+            no_volume_issues = True
             try:
-                voldrv_client = src.LocalStorageRouterClient(config_file)
-                # noinspection PyArgumentList
-                voldrv_volume_list = voldrv_client.list_volumes()
-                for volume in voldrv_volume_list:
-                    # check if volume is halted, returns: 0 or 1
+                result_handler.info('Checking volume states in vPool {0}'.format(vpool.name), add_to_result=False)
+                # Leveraging off the Volumedrivers list halted volumes (instead of info volume) as it detects stolen volumes
+                volume_states['halted'].extend(voldrv_client.list_halted_volumes(str(storagedriver.storagedriver_id)))
+                volumes = voldrv_client.list_volumes(str(storagedriver.storagedriver_id))
+                result_handler.info('Found the following volumes on this machine: {0}'.format(', '.join(volumes)))
+                for volume in volumes:
                     try:
-                        # noinspection PyTypeChecker
-                        if int(VolumedriverHealthCheck._info_volume(voldrv_client, volume).halted):
-                            haltedvolumes.append(volume)
-                    except ObjectNotFoundException:
-                        # ignore ovsdb invalid entrees
-                        # model consistency will handle it.
-                        continue
-                    except MaxRedirectsExceededException:
-                        # this means the volume is not halted but detached or unreachable for the volumedriver
-                        haltedvolumes.append(volume)
-                    except RuntimeError:
-                        haltedvolumes.append(volume)
-                    except TimeoutError:
-                        # timeout occurred
-                        haltedvolumes.append(volume)
-                result_handler.success('Volumedriver {0} is up and running.'.format(vp.name))
-            except (ClusterNotReachableException, RuntimeError) as ex:
-                result_handler.failure('Seems like the Volumedriver {0} is not running.'.format(vp.name, ex.message))
+                        # Check if the information can be retrieved about the volume
+                        voldrv_client.info_volume(volume, req_timeout_secs=5)
+                    except Exception as ex:
+                        cls.logger.exception('Exception occurred when fetching the info for volume {0} on vPool {1}'.format(volume, vpool.name))
+                        no_volume_issues = False
+                        if isinstance(ex, ObjectNotFoundException):
+                            # Ignore ovsdb invalid entrees as model consistency will handle it.
+                            volume_states['not_found'].append(volume)
+                        elif isinstance(ex, MaxRedirectsExceededException):
+                            # This means the volume is not halted but detached or unreachable for the Volumedriver
+                            volume_states['max_redir'].append(volume)
+                        elif any(isinstance(ex, exception) for exception in [ClusterNotReachableException, NodeNotReachableException]):
+                            # Timeout / connection problems
+                            volume_states['connection'].append(volume)
+                        else:
+                            # Something to be looked at
+                            raise
+            except (ClusterNotReachableException, NodeNotReachableException):
+                cls.logger.exception('Exception occurred when listing volumes')
+                result_handler.failure('Could not list the volumes for vPool {0}.'.format(vpool.name), code=ErrorCodes.voldrv_connection_problem)
                 continue
 
-            # print all results
-            if len(haltedvolumes) > 0:
-                result_handler.failure('Detected volumes that are HALTED in vPool {0}: {1}'.format(vp.name, ', '.join(haltedvolumes)))
-            else:
-                result_handler.success('No halted volumes detected in vPool {0}'.format(vp.name))
-
-    @staticmethod
-    @timeout_decorator.timeout(5)
-    def _info_volume(voldrv_client, volume_name):
-        """
-        Fetch the information from a volume through the volumedriver client
-        :param voldrv_client: client of a volumedriver
-        :type voldrv_client: volumedriver.storagerouter.storagerouterclient.LocalStorageRouterClient
-        :param volume_name: name of a volume in the volumedriver
-        :type volume_name: str
-        :return: volumedriver volume object
-        """
-        # noinspection PyUnresolvedReferences
-        return voldrv_client.info_volume(volume_name)
+            for state, volumes in volume_states.iteritems():
+                if state == 'not_found':
+                    log_func = result_handler.warning
+                    message = 'These volumes could not be queried for information: {0}'
+                    code = ErrorCodes.volume_not_found
+                elif state == 'max_redir':
+                    log_func = result_handler.failure
+                    message = 'These volumes are not running (maximum redirection on call): {0}'
+                    code = ErrorCodes.volume_max_redir
+                elif state == 'connection':
+                    log_func = result_handler.failure
+                    message = 'These volumes experienced a connectivity/timeout problem: {0}'
+                    code = ErrorCodes.voldrv_connection_problem
+                else:  # Halted
+                    log_func = result_handler.failure
+                    message = 'These volumes are currently halted: {0}'
+                    code = ErrorCodes.volume_halted
+                if len(volumes) > 0:
+                    log_func(message.format(', '.join(volumes)), code=code)
+            # Call success in case nothing is wrong
+            if no_volume_issues is True:
+                result_handler.success('All volumes should be up and running')
 
     @staticmethod
     @timeout_decorator.timeout(5)
@@ -302,7 +314,7 @@ class VolumedriverHealthCheck(object):
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
         """
         result_handler.info('Checking file drivers.', add_to_result=False)
-        vpools = VPoolHelper.get_vpools()
+        vpools = VPoolList.get_vpools()
         # perform tests
         if len(vpools) == 0:
             result_handler.skip('No vPools found!')
