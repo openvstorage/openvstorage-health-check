@@ -70,6 +70,13 @@ class ConfigNotMatchedException(Exception):
     pass
 
 
+class ConnectionFailedException(Exception):
+    """
+    Raised when a connection is failed
+    """
+    pass
+
+
 class AlbaException(Exception):
     """
     Exceptions by AlbaCli will be derived from this class

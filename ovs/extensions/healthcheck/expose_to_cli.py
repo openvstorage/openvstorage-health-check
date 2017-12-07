@@ -57,7 +57,7 @@ class CLIRunner(object):
     """
     Runs a method exposed by the expose_to_cli decorator. Serves as a base for all extensions using expose_to_cli
     """
-    logger = Logger("healthcheck-ovs_clirunner")
+    logger = LogHandler.get("ovs", "clirunner")
 
     START_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
     CACHE_KEY = 'ovs_discover_method'

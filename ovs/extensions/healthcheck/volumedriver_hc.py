@@ -19,23 +19,22 @@ import timeout_decorator
 from ovs.dal.exceptions import ObjectNotFoundException
 from ovs.dal.lists.vpoollist import VPoolList
 from ovs.dal.hybrids.vdisk import VDisk
-from ovs.extensions.healthcheck.logger import Logger
 from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
 from ovs.extensions.healthcheck.config.error_codes import ErrorCodes
 from ovs.extensions.healthcheck.helpers.exceptions import VDiskNotFoundError
 from ovs.extensions.healthcheck.helpers.vdisk import VDiskHelper
 from ovs.lib.vdisk import VDiskController
+from ovs.log.log_handler import LogHandler
 from timeout_decorator.timeout_decorator import TimeoutError
-from volumedriver.storagerouter import storagerouterclient as src
-from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, NodeNotReachableException, ObjectNotFoundException, MaxRedirectsExceededException, FileExistsException
+from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, ObjectNotFoundException, MaxRedirectsExceededException, FileExistsException
 
 
 class VolumedriverHealthCheck(object):
     """
     A healthcheck for the volumedriver components
     """
-    logger = Logger("healthcheck-volumedriver_check")
+    logger = LogHandler.get('ovs', 'healthcheck_volumedriver')
 
     MODULE = 'volumedriver'
     LOCAL_SR = System.get_my_storagerouter()
@@ -185,6 +184,16 @@ class VolumedriverHealthCheck(object):
                     pass
 
     @classmethod
+    def _is_volumedriver_timeout(cls, exception):
+        """
+        Validates whether a certain exception is a timeout exception (RuntimeError, prior to NodeNotReachable in voldriver 6.17)
+        :param exception: Exception object to check
+        :return: True if it is a timeout or False if it's not
+        :rtype: bool
+        """
+        return isinstance(exception, ClusterNotReachableException) or isinstance(exception, RuntimeError) and 'failed to send XMLRPC request' in str(exception)
+
+    @classmethod
     @expose_to_cli(MODULE, 'halted-volumes-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_for_halted_volumes(cls, result_handler):
         """
@@ -239,15 +248,23 @@ class VolumedriverHealthCheck(object):
                         elif isinstance(ex, MaxRedirectsExceededException):
                             # This means the volume is not halted but detached or unreachable for the Volumedriver
                             volume_states['max_redir'].append(volume)
-                        elif any(isinstance(ex, exception) for exception in [ClusterNotReachableException, NodeNotReachableException]):
+                            # @todo replace RuntimeError with NodeNotReachableException
+                        elif any(isinstance(ex, exception) for exception in [ClusterNotReachableException, RuntimeError]):
+                            if cls._is_volumedriver_timeout(ex) is False:
+                                # Unhandled exception at this point
+                                raise
                             # Timeout / connection problems
                             volume_states['connection'].append(volume)
                         else:
                             # Something to be looked at
                             raise
-            except (ClusterNotReachableException, NodeNotReachableException):
+            # @todo replace RuntimeError with NodeNotReachableException
+            except (ClusterNotReachableException, RuntimeError) as ex:
+                if cls._is_volumedriver_timeout(ex) is False:
+                    # Unhandled exception at this point
+                    raise
                 cls.logger.exception('Exception occurred when listing volumes')
-                result_handler.failure('Could not list the volumes for vPool {0}.'.format(vpool.name), code=ErrorCodes.voldrv_connection_problem)
+                result_handler.failure('Could not list the volumes for vPool {0} due to a connection problem.'.format(vpool.name), code=ErrorCodes.voldrv_connection_problem)
                 continue
 
             for state, volumes in volume_states.iteritems():
