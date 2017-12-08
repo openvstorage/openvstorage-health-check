@@ -5,19 +5,7 @@
 The health check is classified as a monitoring, detection tool for Open vStorage.
 
 **Note:** You will have to deploy this on every Open vStorage node.
-
-## 2. Adding the package server
-### 2.1. Stable
-```
-echo "deb http://apt.openvstorage.com fargo main" > /etc/apt/sources.list.d/ovsaptrepo.list
-apt-get update
-```
-
-### 2.2. Unstable
-```
-echo "deb http://apt.openvstorage.com unstable main" > /etc/apt/sources.list.d/ovsaptrepo.list
-apt-get update
-```
+**Note:** Install the health check after the setup of Open vStorage.
 
 ## 3. Installation
 ```
