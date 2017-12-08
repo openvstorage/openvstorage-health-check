@@ -26,8 +26,8 @@ from ovs.extensions.healthcheck.helpers.helper import Helper
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.helpers.rabbitmq import RabbitMQ
 from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
-from ovs.extensions.packages.package import PackageManager
-from ovs.extensions.services.service import ServiceManager
+from ovs.extensions.packages.packagefactory import PackageFactory
+from ovs.extensions.services.servicefactory import ServiceFactory
 from ovs.lib.storagerouter import StorageRouterController
 from timeout_decorator import timeout
 from timeout_decorator.timeout_decorator import TimeoutError
@@ -177,19 +177,21 @@ class OpenvStorageHealthCheck(object):
         result_handler.info('Checking OVS packages: ', add_to_result=False)
         client = SSHClient(OpenvStorageHealthCheck.LOCAL_SR)
         # PackageManager.SDM_PACKAGE_NAMES for sdm
-        all_packages = list(PackageManager.OVS_PACKAGE_NAMES)
+        package_manager = PackageFactory.get_manager()
+        all_packages = list(package_manager.package_names)
         extra_packages = list(Helper.packages)
         ee_relation = {'alba': 'alba-ee', 'arakoon': 'arakoon', 'volumedriver-no-dedup-server': 'volumedriver-ee-server'}  # Key = non-ee, value = ee
         if OpenvStorageHealthCheck.LOCAL_SR.features['alba']['edition'] == 'community':
             required_packages = [package_name for package_name in all_packages if package_name in ee_relation.keys()]
         else:
             required_packages = [package_name for package_name in all_packages if package_name in ee_relation.values()]
-        installed = PackageManager.get_installed_versions(client=client, package_names=list(required_packages + extra_packages))
+        installed = package_manager.get_installed_versions(client=client, package_names=list(required_packages + extra_packages))
 
         while len(required_packages) > 0:
             package = required_packages.pop()
             version = installed.get(package)
             if version:
+                version = str(version)
                 result_handler.success('Package {0} is installed with version {1}'.format(package, version.replace('\n', '')))
             else:
                 result_handler.warning('Package {0} is not installed.'.format(package))
@@ -197,6 +199,7 @@ class OpenvStorageHealthCheck(object):
             package = extra_packages.pop()
             version = installed.get(package)
             if version:
+                version = str(version)
                 result_handler.success('Package {0} is installed with version {1}'.format(package, version.replace('\n', '')))
             else:
                 result_handler.skip('Package {0} is not installed.'.format(package))
@@ -213,11 +216,12 @@ class OpenvStorageHealthCheck(object):
         """
         logger.info('Checking local ovs services.')
         client = SSHClient(OpenvStorageHealthCheck.LOCAL_SR)
-        services = [service for service in ServiceManager.list_services(client=client) if service.startswith(OpenvStorageHealthCheck.MODULE)]
+        service_manager = ServiceFactory.get_manager()
+        services = [service for service in service_manager.list_services(client=client) if service.startswith(OpenvStorageHealthCheck.MODULE)]
         if len(services) == 0:
             logger.warning('Found no local ovs services.')
         for service_name in services:
-            if ServiceManager.get_service_status(service_name, client) == 'active':
+            if service_manager.get_service_status(service_name, client) == 'active':
                 logger.success('Service {0} is running!'.format(service_name))
             else:
                 logger.failure('Service {0} is not running, please check this.'.format(service_name))

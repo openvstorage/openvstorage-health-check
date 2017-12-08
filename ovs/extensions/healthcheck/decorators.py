@@ -16,11 +16,11 @@
 import inspect
 import time
 from functools import wraps
-from ovs.extensions.generic.filemutex import file_mutex
-from ovs.extensions.generic.filemutex import NoLockAvailableException as NoFileLockAvailableException
+from ovs_extensions.generic.filemutex import file_mutex
+from ovs_extensions.generic.filemutex import NoLockAvailableException as NoFileLockAvailableException
 from ovs.extensions.generic.system import System
 from ovs.extensions.generic.volatilemutex import volatile_mutex
-from ovs.extensions.generic.volatilemutex import NoLockAvailableException as NoVolatileLockAvailableException
+from ovs_extensions.generic.volatilemutex import NoLockAvailableException as NoVolatileLockAvailableException
 from ovs.extensions.healthcheck.helpers.cache import CacheHelper
 from ovs.extensions.healthcheck.result import HCResults
 
