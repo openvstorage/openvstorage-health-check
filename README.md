@@ -9,7 +9,7 @@ The health check is classified as a monitoring, detection tool for Open vStorage
 ## 2. Adding the package server
 ### 2.1. Stable
 ```
-echo "deb http://apt.openvstorage.com fargo main" > /etc/apt/sources.list.d/ovsaptrepo.list
+echo "deb http://apt.openvstorage.com fargo-updates-1 main" > /etc/apt/sources.list.d/ovsaptrepo.list
 apt-get update
 ```
 
