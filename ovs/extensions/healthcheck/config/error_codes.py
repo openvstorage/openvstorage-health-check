@@ -91,14 +91,6 @@ class ErrorCodes(object):
         row_data.sort(key=itemgetter(0))
         print MarkDownGenerator.generate_table(headings, row_data)
 
-    @staticmethod
-    def _generate_table_header():
-        """
-        Generate an md table header
-        :return:
-        """
-        pass
-
 
 class MarkDownGenerator(object):
     """

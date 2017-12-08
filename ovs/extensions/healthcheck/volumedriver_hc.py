@@ -203,7 +203,6 @@ class VolumedriverHealthCheck(object):
         :return: None
         :rtype: NoneType
         """
-        result_handler.info('Checking for halted volumes.', add_to_result=False)
         vpools = VPoolList.get_vpools()
         local_sr = System.get_my_storagerouter()
 
@@ -217,6 +216,7 @@ class VolumedriverHealthCheck(object):
 
             result_handler.info('Checking vPool {0}'.format(vpool.name), add_to_result=False)
             voldrv_client = vpool.storagedriver_client
+            objectregistry_client = vpool.objectregistry_client
             storagedriver = None
             for std in vpool.storagedrivers:
                 if std.storagerouter_guid == local_sr.guid:
@@ -229,11 +229,15 @@ class VolumedriverHealthCheck(object):
 
             volume_states = {'max_redir': [], 'connection': [], 'not_found': [], 'halted': []}
             no_volume_issues = True
+            result_handler.info('Checking the volumes their states in vPool {0} on this machine'.format(vpool.name), add_to_result=False)
             try:
-                result_handler.info('Checking volume states in vPool {0}'.format(vpool.name), add_to_result=False)
                 # Leveraging off the Volumedrivers list halted volumes (instead of info volume) as it detects stolen volumes
                 volume_states['halted'].extend(voldrv_client.list_halted_volumes(str(storagedriver.storagedriver_id)))
-                volumes = voldrv_client.list_volumes(str(storagedriver.storagedriver_id))
+                # Listing all volumes is required. Providing a node_id would only return the runing volumes
+                volumes = voldrv_client.list_volumes()
+                # Filter out for this machine, object registry client goes to the arakoon, when these exceptions occur,
+                # just raise (will give an error to ops, just like the arakoon checks will)
+                volumes = [volume for volume in volumes if objectregistry_client.find(volume).node_id() == storagedriver.storagedriver_id]
                 result_handler.info('Found the following volumes on this machine: {0}'.format(', '.join(volumes)))
                 for volume in volumes:
                     try:
