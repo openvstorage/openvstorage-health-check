@@ -28,7 +28,7 @@ from ovs.extensions.healthcheck.logger import Logger
 from ovs.extensions.storageserver.storagedriver import StorageDriverConfiguration
 from ovs.lib.vdisk import VDiskController
 from timeout_decorator.timeout_decorator import TimeoutError
-from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, ObjectNotFoundException, MaxRedirectsExceededException, FileExistsException
+from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, FileExistsException, LocalStorageRouterClient, MaxRedirectsExceededException, ObjectNotFoundException
 
 
 class VolumedriverHealthCheck(object):
@@ -377,7 +377,7 @@ class VolumedriverHealthCheck(object):
         for std in VolumedriverHealthCheck.LOCAL_SR.storagedrivers:
             try:
                 std_config = StorageDriverConfiguration(std.vpool_guid, std.storagedriver_id)
-                client = src.LocalStorageRouterClient(std_config.remote_path)
+                client = LocalStorageRouterClient(std_config.remote_path)
                 vol_potential = client.volume_potential(str(std.storagedriver_id))
                 if vol_potential >= critical_vol_number:
                     log_level = 'success'

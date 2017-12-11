@@ -26,13 +26,11 @@ from ovs.extensions.healthcheck.helpers.filesystem import FilesystemHelper
 from ovs.extensions.healthcheck.helpers.helper import Helper
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.helpers.rabbitmq import RabbitMQ
-from ovs.extensions.healthcheck.helpers.vpool import VPoolHelper
 from ovs.extensions.packages.packagefactory import PackageFactory
 from ovs.extensions.services.servicefactory import ServiceFactory
 from ovs.lib.storagerouter import StorageRouterController
 from timeout_decorator import timeout
 from timeout_decorator.timeout_decorator import TimeoutError
-from volumedriver.storagerouter import storagerouterclient as src
 from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException
 
 
@@ -243,9 +241,8 @@ class OpenvStorageHealthCheck(object):
         """
         # try if celery works smoothly
         try:
-            guid = OpenvStorageHealthCheck.LOCAL_SR.guid
             machine_id = OpenvStorageHealthCheck.LOCAL_SR.machine_id
-            obj = StorageRouterController.get_support_info.s(guid).apply_async(routing_key='sr.{0}'.format(machine_id)).get()
+            obj = StorageRouterController.get_support_info.s().apply_async(routing_key='sr.{0}'.format(machine_id)).get()
         except TimeoutError as ex:
             raise TimeoutError('{0}: Process is taking to long!'.format(ex.value))
         if obj:
@@ -388,13 +385,11 @@ class OpenvStorageHealthCheck(object):
             result_handler.info('Checking consistency of volumedriver vs. ovsdb for {0}: '.format(vp.name), add_to_result=False)
             missing_in_volumedriver = []
             missing_in_model = []
-            config_file = Configuration.get_configuration_path('/ovs/vpools/{0}/hosts/{1}/config'.format(vp.guid, vp.storagedrivers[0].name))
             try:
-                voldrv_client = src.LocalStorageRouterClient(config_file)
                 # noinspection PyArgumentList
-                voldrv_volume_list = voldrv_client.list_volumes()
+                voldrv_volume_list = vp.storagedriver_client.list_volumes()
             except (ClusterNotReachableException, RuntimeError) as ex:
-                result_handler.warning('Seems like the volumedriver {0} is not running. Got {1}'.format(vp.name, ex.message))
+                result_handler.warning('Seems like the volumedriver {0} is not running. Got {1}'.format(vp.name, str(ex)))
                 continue
 
             vdisk_volume_ids = []
