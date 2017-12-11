@@ -125,8 +125,6 @@ class AlbaCLI(object):
                     stdout_debug = 'stdout: {0}'.format(output)
                     if debug is True:
                         logger.debug(stderr_debug)
-                        logger.debug(stdout_debug)
-                    debug_log.append(stderr_debug)
                     debug_log.append(stdout_debug)
                     exit_code = channel.returncode
                     if exit_code != 0:  # Raise same error as check_output

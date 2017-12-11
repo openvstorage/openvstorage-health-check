@@ -61,6 +61,7 @@ class CLIRunner(object):
     logger = Logger("healthcheck-ovs_clirunner")
     START_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
     CACHE_KEY = 'ovs_discover_method'
+
     _WILDCARD = 'X'
 
     def __init__(self):
@@ -210,7 +211,7 @@ class CLIRunner(object):
         Prints the possible methods that are exposed to the CLI
         :param method_pointers: list of method pointers
         :type method_pointers: list[function]
-        :param error_help: print extra help incase wrong arguments were suppplied
+        :param error_help: print extra help in case wrong arguments were supplied
         :type error_help: bool
         :return: None
         :rtype: NoneType
