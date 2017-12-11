@@ -33,7 +33,7 @@ from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckC
 from ovs.extensions.healthcheck.helpers.albacli import AlbaCLI
 from ovs.extensions.healthcheck.helpers.backend import BackendHelper
 from ovs.extensions.healthcheck.decorators import cluster_check
-from ovs.extensions.healthcheck.helpers.exceptions import AlbaException, ConfigNotMatchedException, ConnectionFailedException, DiskNotFoundException, ObjectNotFoundException
+from ovs.extensions.healthcheck.helpers.exceptions import AlbaException, ConnectionFailedException, ConfigNotMatchedException, DiskNotFoundException, ObjectNotFoundException
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
 from ovs.extensions.services.servicefactory import ServiceFactory
