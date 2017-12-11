@@ -17,6 +17,7 @@
 # but WITHOUT ANY WARRANTY of any kind.
 import os
 import psutil
+from ovs.dal.lists.vpoollist import VPoolList
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.generic.system import System
@@ -380,7 +381,7 @@ class OpenvStorageHealthCheck(object):
         result_handler.info('Checking model consistency: ')
 
         # Checking consistency of volumedriver vs. ovsdb and backwards
-        for vp in VPoolHelper.get_vpools():
+        for vp in VPoolList.get_vpools():
             if vp.guid not in OpenvStorageHealthCheck.LOCAL_SR.vpools_guids:
                 result_handler.skip('Skipping vPool {0} because it is not living here.'.format(vp.name))
                 continue
