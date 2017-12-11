@@ -24,8 +24,8 @@ from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckC
 from ovs.extensions.healthcheck.config.error_codes import ErrorCodes
 from ovs.extensions.healthcheck.helpers.exceptions import VDiskNotFoundError
 from ovs.extensions.healthcheck.helpers.vdisk import VDiskHelper
+from ovs.extensions.healthcheck.logger import Logger
 from ovs.lib.vdisk import VDiskController
-from ovs.log.log_handler import LogHandler
 from timeout_decorator.timeout_decorator import TimeoutError
 from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, ObjectNotFoundException, MaxRedirectsExceededException, FileExistsException
 
@@ -34,7 +34,7 @@ class VolumedriverHealthCheck(object):
     """
     A healthcheck for the volumedriver components
     """
-    logger = LogHandler.get('ovs', 'healthcheck_volumedriver')
+    logger = Logger('healthcheck-ovs_volumedriver')
 
     MODULE = 'volumedriver'
     LOCAL_SR = System.get_my_storagerouter()
