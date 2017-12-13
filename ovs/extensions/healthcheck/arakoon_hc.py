@@ -34,7 +34,7 @@ from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckC
 from ovs.extensions.healthcheck.decorators import cluster_check
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
-from ovs.extensions.healthcheck.helpers.storagerouter import StoragerouterHelper
+from ovs.dal.lists.storagerouterlist import StorageRouterList
 from ovs.extensions.storage.persistentfactory import PersistentFactory
 from timeout_decorator.timeout_decorator import TimeoutError
 
@@ -84,7 +84,7 @@ class ArakoonHealthCheck(object):
 
             tlog_dir = arakoon_config.export_dict()[ArakoonHealthCheck.LOCAL_SR.machine_id]['tlog_dir']
             for node_id in master_node_ids:
-                machine = StoragerouterHelper.get_by_machine_id(node_id)
+                machine = StorageRouterList.get_by_machine_id(node_id)
                 if machine is None:
                     # No information found about the storagerouter - old value in arakoon
                     missing_nodes_per_cluster.update({node_id: tlog_dir})

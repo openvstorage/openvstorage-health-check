@@ -15,8 +15,10 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
+import itertools
 import os
 import psutil
+from ovs.dal.lists.domainlist import DomainList
 from ovs.dal.lists.vpoollist import VPoolList
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.generic.sshclient import SSHClient
@@ -439,3 +441,21 @@ class OpenvStorageHealthCheck(object):
                 result_handler.failure('RabbitMQ has partition issues: {0}'.format(', '.join(partitions)))
         else:
             result_handler.skip('RabbitMQ is not running/active on this server!')
+
+    @staticmethod
+    @expose_to_cli(MODULE, 'recovery-domain-test', HealthCheckCLIRunner.ADDON_TYPE)
+    def check_recovery_domains(result_handler):
+        prim_domains = [i.name for i in DomainList.get_domains() if len(i.storage_router_layout['regular']) >= 1]
+        for domain in DomainList.get_domains():
+            layout = domain._storage_router_layout()
+            recovery = layout['recovery']
+            regular = layout['regular']
+            # Check recovery usage
+            if len(recovery) >= 1 and domain.name not in prim_domains:
+                result_handler.warning('warning: domain {0} set as recovery, but not as regular domain'.format(domain.name))
+            else:
+                result_handler.info('no problem, domain {0} set {1} time(s) as regular domain'.format(domain.name, len(regular)))
+            # Check for double usage
+            if set(recovery).intersection(regular):
+                result_handler.warning('intersection found')
+
