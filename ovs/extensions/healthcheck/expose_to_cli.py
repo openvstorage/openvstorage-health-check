@@ -318,6 +318,7 @@ class HealthCheckCLIRunner(CLIRunner):
                 except KeyboardInterrupt:
                     raise
                 except Exception as ex:
+                    raise
                     result_handler.exception('Unhandled exception caught when executing {0}. Got {1}'.format(found_method.__name__, str(ex)))
             return HealthCheckCLIRunner.get_results(result_handler, module_name, method_name)
         except KeyboardInterrupt:
@@ -358,3 +359,7 @@ class HealthCheckCLIRunner(CLIRunner):
                                             'SKIPPED': result_handler.counters['SKIPPED'],
                                             'WARNING': result_handler.counters['WARNING'],
                                             'EXCEPTION': result_handler.counters['EXCEPTION']}}
+
+
+if __name__ == '__main__':
+    HealthCheckCLIRunner.run_method('arakoon', 'collapse-test')
