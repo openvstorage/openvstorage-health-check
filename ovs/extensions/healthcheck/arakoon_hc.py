@@ -21,7 +21,6 @@ Arakoon Health Check module
 """
 
 import os
-import copy
 import json
 import time
 import Queue
@@ -227,17 +226,14 @@ class ArakoonHealthCheck(object):
         result_handler.info('Retrieving all collapsing statistics. This might take a while', add_to_result=False)
         start = time.time()
         arakoon_stats = cls._retrieve_stats(result_handler, arakoon_clusters)
-        print arakoon_stats['CFG']
         result_handler.info('Retrieving all collapsing statistics succeeded (duration: {0})'.format(start - time.time()), add_to_result=False)
         for cluster_type, clusters in arakoon_stats.iteritems():
             result_handler.info('Testing the collapse of {0} Arakoons'.format(cluster_type), add_to_result=False)
             for cluster in clusters:
                 cluster_name = cluster['cluster_name']
-                arakoon_config = cluster['config']
-                node_stats = cls._retrieve_stats(arakoon_config)
-                node_stats = OrderedDict(sorted(node_stats.items(), key=lambda item: ExtensionsToolbox.advanced_sort(item[0].ip, separator='.')))
-                print node_stats
-                for node, stats in node_stats.iteritems():
+                collapse_result = cluster['collapse_result']
+                collapse_result = OrderedDict(sorted(collapse_result.items(), key=lambda item: ExtensionsToolbox.advanced_sort(item[0].ip, separator='.')))
+                for node, stats in collapse_result.iteritems():
                     identifier_log = 'Arakoon cluster {0} on node {1}'.format(cluster_name, node.ip)
                     if len(stats['errors']) > 0:
                         # Determine where issues were found
@@ -266,8 +262,8 @@ class ArakoonHealthCheck(object):
                                     cls.logger.exception(message)
                                     result_handler.exception(message)
                         continue
-                    tlx_files = stats['results']['tlx']
-                    tlog_files = stats['results']['tlog']
+                    tlx_files = stats['result']['tlx']
+                    tlog_files = stats['result']['tlog']
                     if any(item is None for item in [tlx_files, tlog_files]):
                         # Exception occurred but no errors were logged
                         result_handler.exception('Neither the tlx or tlog files could be found in the tlog directory ({0}) for {1}'.format(node.tlog_dir, identifier_log))
@@ -287,16 +283,22 @@ class ArakoonHealthCheck(object):
                         result_handler.failure('{0} should be collapsed. The oldest tlx is currently {1} old'.format(identifier_log, str(timedelta(seconds=seconds_difference))))
 
     @classmethod
-    def _retrieve_stats(cls, result_handler, arakoon_clusters, batch_size=25):
+    def _retrieve_stats(cls, result_handler, arakoon_clusters, batch_size=10):
         """
         Retrieve tlog/tlx stat information for a Arakoon cluster concurrently
-
+        Note: this will mutate the given arakoon_clusters dict
+        :param result_handler: logging object
+        :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :param arakoon_clusters: Information about all arakoon clusters, sorted by type and given config
+        :type arakoon_clusters: dict
+        :param batch_size: Amount of workers to collect the Arakoon information.
+        The amount of workers are dependant on the MaxSessions in the sshd_config
         :return: Dict with tlog/tlx contents for every node config
         Example return:
-        {CFG: {ovs.extensions.db.arakooninstaller.ArakoonClusterConfig object: {ovs_extensions.db.arakoon.arakooninstaller.ArakoonNodeConfig object: {'output': {'tlx': [['1513174398', '/opt/OpenvStorage/db/arakoon/config/tlogs/3393.tlx']],
+        {CFG: {ovs.extensions.db.arakooninstaller.ArakoonClusterConfig object: {ovs_extensions.db.arakoon.arakooninstaller.ArakoonNodeConfig object: {'result': {'tlx': [['1513174398', '/opt/OpenvStorage/db/arakoon/config/tlogs/3393.tlx']],
                                                                                                                                                                 'tlog': [['1513178427', '/opt/OpenvStorage/db/arakoon/config/tlogs/3394.tlog']]},
                                                                                                                                                      'errors': []},
-                                                                                ovs_extensions.db.arakoon.arakooninstaller.ArakoonNodeConfig object: {'output': {'tlx': [['1513166090', '/opt/OpenvStorage/db/arakoon/config/tlogs/3392.tlx'], ['1513174418', '/opt/OpenvStorage/db/arakoon/config/tlogs/3393.tlx']],
+                                                                                ovs_extensions.db.arakoon.arakooninstaller.ArakoonNodeConfig object: {'result': {'tlx': [['1513166090', '/opt/OpenvStorage/db/arakoon/config/tlogs/3392.tlx'], ['1513174418', '/opt/OpenvStorage/db/arakoon/config/tlogs/3393.tlx']],
                                                                                                                                                                 'tlog': [['1513178427', '/opt/OpenvStorage/db/arakoon/config/tlogs/3394.tlog']]}, 'errors': []}, <ovs_extensions.db.arakoon.arakooninstaller.ArakoonNodeConfig object at 0x7fb3a84db090>: {'output': {'tlx': [['1513174358', '/opt/OpenvStorage/db/arakoon/config/tlogs/3393.tlx']], 'tlog': [['1513178427', '/opt/OpenvStorage/db/arakoon/config/tlogs/3394.tlog']]},
                                                                                                                                                       'errors': []}}}
         :rtype: dict
@@ -305,7 +307,7 @@ class ArakoonHealthCheck(object):
             while not _queue.empty():
                 _cluster_type, _cluster_name, _node_config, _results = _queue.get()
                 _errors = _results['errors']
-                _output = _results['output']
+                _output = _results['result']
                 identifier = 'Arakoon cluster {0} on node {1}'.format(_cluster_name, _node_config.ip)
                 _result_handler.info('Retrieving collapse information for {0}'.format(identifier), add_to_result=False)
                 try:
@@ -330,17 +332,16 @@ class ArakoonHealthCheck(object):
                     _queue.task_done()
 
         queue = Queue.Queue()
-        results = copy.deepcopy(arakoon_clusters)
         clients = {}
         # Prep work
-        for cluster_type, clusters in results.iteritems():
+        for cluster_type, clusters in arakoon_clusters.iteritems():
             for cluster in clusters:
                 cluster_name = cluster['cluster_name']
                 arakoon_config = cluster['config']
                 cluster['collapse_result'] = {}
                 for node_config in arakoon_config.nodes:
                     result = {'errors': [],
-                              'output': {'tlx': [],
+                              'result': {'tlx': [],
                                          'tlog': []}}
                     # Build SSHClients outside the threads to avoid GIL
                     try:
@@ -356,11 +357,11 @@ class ArakoonHealthCheck(object):
 
         for _ in xrange(batch_size):
             thread = Thread(target=_get_stats, args=(queue, clients, result_handler))
-            thread.setDaemon(True)  # Setting threads as "daemon" allows main program to exit eventually even if these don't finish correctly.
+            # thread.setDaemon(True)  # Setting threads as "daemon" allows main program to exit eventually even if these don't finish correctly.
             thread.start()
         # Wait for all results
         queue.join()
-        return results
+        return arakoon_clusters
 
     @classmethod
     @cluster_check
