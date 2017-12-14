@@ -354,3 +354,23 @@ class VolumedriverHealthCheck(object):
                 getattr(result_handler, log_level)('Volume potential of local storage driver: {0}: {1} (potential at: {2})'.format(std.storagedriver_id, log_level.upper(), vol_potential))
             except RuntimeError:
                 result_handler.exception('Unable to retrieve configuration for storagedriver {0}'.format(std.storagedriver_id))
+
+    @staticmethod
+    @expose_to_cli(MODULE, 'sco-cache-mountpoint-test', HealthCheckCLIRunner.ADDON_TYPE)
+    def check_sco_cache_mountpoints(result_handler):
+        """
+        Iterates over all local storage drivers from a volume driver and will check all its sco cache mount points.
+        Will result in a warning log if the sco is in offline state
+        :param result_handler: logging object
+        :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        """
+        result_handler.info('Checking sco cache mount points on all local storagedrivers')
+        for std in VolumedriverHealthCheck.LOCAL_SR.storagedrivers:
+            try:
+                std_config = StorageDriverConfiguration(std.vpool_guid, std.storagedriver_id)
+                client = src.LocalStorageRouterClient(std_config.remote_path)
+                path, offlined = [(i.path, i.offlined) for i in client.sco_cache_mount_point_info(str(std.storagedriver_id))]
+                if offlined:
+                    result_handler.warning('Mountpoint at location {0} of storagedriver {1} is in offline state'.format(path, std.storagedriver_id))
+            except Exception:
+                pass
