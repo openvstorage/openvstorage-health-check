@@ -450,6 +450,7 @@ class OpenvStorageHealthCheck(object):
     @staticmethod
     @expose_to_cli(MODULE, 'recovery-domain-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_recovery_domains(result_handler):
+        result_handler.info('Checking recovery domains:')
         prim_domains = [domain.name for domain in DomainList.get_domains() if len(domain.storage_router_layout['regular']) >= 1]
         for domain in DomainList.get_domains():
             layout = domain.storage_router_layout
@@ -457,13 +458,13 @@ class OpenvStorageHealthCheck(object):
             regular = layout['regular']
             # Check recovery usage
             if len(recovery) >= 1 and domain.name not in prim_domains:
-                sr_ips = str(', '.join([StorageRouter(guid).ip for guid in recovery]))
+                sr_ips = ', '.join([StorageRouter(guid).ip for guid in recovery])
                 result_handler.warning('Domain {0} set as recovery domain on storagerouter(s) {1}, but nowhere as regular domain'.format(domain.name, sr_ips))
             else:
                 result_handler.info('Domain {0} passed test, set {1} time(s) as regular domain'.format(domain.name, len(regular)))
+
             # Check for double usage
             intersection = set(recovery).intersection(regular)
-
             if intersection:
-                sr_ips = str(', '.join([StorageRouter(guid).ip for guid in intersection]))
+                sr_ips = ', '.join([StorageRouter(guid).ip for guid in intersection])
                 result_handler.warning('Recovery domain {0} is also found to be a regular domain in {1}.'.format(domain.name, sr_ips))
