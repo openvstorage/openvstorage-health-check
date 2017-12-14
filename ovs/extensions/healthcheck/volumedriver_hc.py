@@ -337,6 +337,8 @@ class VolumedriverHealthCheck(object):
         :param critical_vol_number: maximal number of volumes that result in a warning
         :type critical_vol_number: int
         """
+        result_handler.info('Checking volume potential of toragedrivers')
+
         if not isinstance(critical_vol_number, int) or critical_vol_number < 0:
             raise ValueError('Critical volume number should be a positive integer')
 
@@ -359,7 +361,7 @@ class VolumedriverHealthCheck(object):
     @expose_to_cli(MODULE, 'sco-cache-mountpoint-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_sco_cache_mountpoints(result_handler):
         """
-        Iterates over storageDrivers of a local StorageRouter and will check all its sco cache mount points.
+        Iterates over StorageDrivers of a local StorageRouter and will check all its sco cache mount points.
         Will result in a warning log if the sco is in offline state
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
@@ -370,9 +372,13 @@ class VolumedriverHealthCheck(object):
                 std_config = StorageDriverConfiguration(std.vpool_guid, std.storagedriver_id)
                 client = src.LocalStorageRouterClient(std_config.remote_path)
                 for std_info in client.sco_cache_mount_point_info(str(std.storagedriver_id)):
-                    path = std_info.path
-                    offlined = std_info.offlined
-                    if offlined:
-                        result_handler.warning('Mountpoint at location {0} of storagedriver {1} is in offline state'.format(path, std.storagedriver_id))
+                    if std_info.offlined is True:
+                        result_handler.warning('Mountpoint at location {0} of storagedriver {1} is in offline state'.format(std_info.path,
+                                                                                                                            std.storagedriver_id))
+                    else:
+                        result_handler.success('Mountpoint at location {0} of storagedriver {1} is in online state'.format(std_info.path,
+                                                                                                                            std.storagedriver_id))
             except RuntimeError:
-                result_handler.exception('Unable to retrieve configuration for storagedriver {0}'.format(std.storagedriver_id))
+                result_handler.exception('Unable to retrieve storagedriverclient {0}'.format(std.storagedriver_id))
+
+
