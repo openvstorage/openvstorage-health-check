@@ -27,7 +27,6 @@ import Queue
 import socket
 from datetime import timedelta
 from collections import OrderedDict
-from operator import itemgetter
 from threading import Thread
 from ovs.dal.hybrids.servicetype import ServiceType
 from ovs.extensions.db.arakooninstaller import ArakoonClusterConfig, ArakoonInstaller
@@ -246,9 +245,10 @@ class ArakoonHealthCheck(object):
                         result_handler.skip('{0} only has {1} tlx, not worth collapsing (required: {2})'.format(identifier_log, len(tlx_files), min_tlx_amount))
                         continue
                     # Compare youngest tlog and oldest tlx timestamp
-                    seconds_difference = tlx_files[-1][0] - tlog_files[0][0]
-                    if seconds_difference > max_age_seconds:
-                        result_handler.success('{0} should not be collapsed. The oldest tlx is at least {1} days younger than the youngest tlog'.format(identifier_log, max_collapse_age))
+                    seconds_difference = int(tlog_files[-1][0]) - int(tlx_files[0][0])
+                    print seconds_difference
+                    if max_age_seconds > seconds_difference:
+                        result_handler.success('{0} should not be collapsed. The oldest tlx is at least {1} days younger than the youngest tlog (actual age: {2})'.format(identifier_log, max_collapse_age, str(timedelta(seconds=seconds_difference))))
                     else:
                         result_handler.failure('{0} should be collapsed. The oldest tlx is currently {1} old'.format(identifier_log, str(timedelta(seconds=seconds_difference))))
 
@@ -294,8 +294,8 @@ class ArakoonHealthCheck(object):
                         _errors.append(('stat_dir', _ex))
                         return _queue.task_done()
                     # Sort and separate the timestamp item files
-                    _output['tlx'] = sorted((timestamp_file.split() for timestamp_file in timestamp_files.splitlines() if timestamp_file.split()[1].endswith('tlx')), key=itemgetter(0))
-                    _output['tlog'] = sorted((timestamp_file.split() for timestamp_file in timestamp_files.splitlines() if timestamp_file.split()[1].endswith('tlog')), key=itemgetter(0))
+                    _output['tlx'] = sorted((timestamp_file.split() for timestamp_file in timestamp_files.splitlines() if timestamp_file.split()[1].endswith('tlx')), key=lambda split: int(split[0]))
+                    _output['tlog'] = sorted((timestamp_file.split() for timestamp_file in timestamp_files.splitlines() if timestamp_file.split()[1].endswith('tlog')), key=lambda split: int(split[0]))
                     _queue.task_done()
                 except Exception as _ex:
                     _result_handler.warning('Could not retrieve the collapse information for {0} ({1})'.format(identifier, str(_ex)), add_to_result=False)
