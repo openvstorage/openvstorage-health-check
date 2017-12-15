@@ -25,24 +25,19 @@ import json
 import time
 import Queue
 import socket
-import ConfigParser
 from datetime import timedelta
 from collections import OrderedDict
 from operator import itemgetter
-from StringIO import StringIO
 from threading import Thread
 from ovs.dal.hybrids.servicetype import ServiceType
 from ovs.extensions.db.arakooninstaller import ArakoonClusterConfig, ArakoonInstaller
 from ovs_extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNoMaster, ArakoonNoMasterResult
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.generic.sshclient import SSHClient, TimeOutException, NotAuthenticatedException, UnableToConnectException
-from ovs.extensions.generic.system import System
 from ovs_extensions.generic.toolbox import ExtensionsToolbox
 from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
 from ovs.extensions.healthcheck.decorators import cluster_check
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
-from ovs.extensions.healthcheck.helpers.service import ServiceHelper
-from ovs.extensions.healthcheck.helpers.storagerouter import StoragerouterHelper
 from ovs.log.log_handler import LogHandler
 
 
@@ -51,11 +46,7 @@ class ArakoonHealthCheck(object):
     A healthcheck for the arakoon persistent store
     """
     logger = LogHandler.get('ovs', 'healthcheck_arakoon')
-
     MODULE = 'arakoon'
-    # oldest tlx files may not older than x days. If they are - failed collapse
-    MAX_COLLAPSE_AGE = 2
-    LOCAL_SR = System.get_my_storagerouter()
 
     @classmethod
     def _get_arakoon_clusters(cls, result_handler):
@@ -72,13 +63,14 @@ class ArakoonHealthCheck(object):
             # Determine Arakoon type
             is_cacc = cluster_name == 'cacc'
             arakoon_config = ArakoonClusterConfig(cluster_id=cluster_name, load_config=not is_cacc)
-            arakoon_client = ArakoonInstaller.build_client(arakoon_config)
             if is_cacc is True:
                 with open(Configuration.CACC_LOCATION) as config_file:
                     contents = config_file.read()
                 arakoon_config.read_config(contents=contents)
                 cluster_type = ServiceType.ARAKOON_CLUSTER_TYPES.CFG
+                arakoon_client = ArakoonInstaller.build_client(arakoon_config)
             else:
+                arakoon_client = ArakoonInstaller.build_client(arakoon_config)
                 metadata = json.loads(arakoon_client.get(ArakoonInstaller.METADATA_KEY))
                 cluster_type = metadata['cluster_type']
             if cluster_type not in arakoon_clusters:
@@ -86,131 +78,109 @@ class ArakoonHealthCheck(object):
             arakoon_clusters[cluster_type].append({'cluster_name': cluster_name, 'client': arakoon_client, 'config': arakoon_config})
         return arakoon_clusters
 
-    @staticmethod
-    def _get_clusters_residing_on_local_node(result_handler):
+    @classmethod
+    @cluster_check
+    @expose_to_cli('arakoon', 'ports-test', HealthCheckCLIRunner.ADDON_TYPE)
+    def check_arakoon_ports(cls, result_handler):
         """
-        Fetches the available local arakoon clusters of a cluster
+        Verifies that the Arakoon clusters still respond to connections
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
-        :return: dict with the arakoon info
+        :return: None
+        :rtype: NoneType
+        """
+        arakoon_clusters = cls._get_arakoon_clusters(result_handler)
+        result_handler.info('Checking Arakoon ports test.', add_to_result=False)
+        result_handler.info('Retrieving all collapsing statistics. This might take a while', add_to_result=False)
+        start = time.time()
+        arakoon_stats = cls._get_port_connections(result_handler, arakoon_clusters)
+        result_handler.info('Retrieving all collapsing statistics succeeded (duration: {0})'.format(time.time() - start), add_to_result=False)
+        for cluster_type, clusters in arakoon_stats.iteritems():
+            result_handler.info('Testing the collapse of {0} Arakoons'.format(cluster_type), add_to_result=False)
+            for cluster in clusters:
+                cluster_name = cluster['cluster_name']
+                connection_result = cluster['connection_result']
+                connection_result = OrderedDict(sorted(connection_result.items(), key=lambda item: ExtensionsToolbox.advanced_sort(item[0].ip, separator='.')))
+                for node, stats in connection_result.iteritems():
+                    identifier_log = 'Arakoon cluster {0} on node {1}'.format(cluster_name, node.ip)
+                    if len(stats['errors']) > 0:
+                        # Determine where issues were found
+                        for step, exception in stats['errors']:
+                            if step == 'test_connection':
+                                try:
+                                    # Raise the thrown exception
+                                    raise exception
+                                except Exception:
+                                    message = 'Connection to {0} could not be established due to an unhandled exception.'.format(identifier_log)
+                                    cls.logger.exception(message)
+                                    result_handler.exception(message)
+                        continue
+                    if stats['result'] is True:
+                        result_handler.success('Connection established to {0}'.format(identifier_log))
+                    else:
+                        result_handler.failure('Connection could not be established to {0}'.format(identifier_log))
+
+    @classmethod
+    def _get_port_connections(cls, result_handler, arakoon_clusters, batch_size=10):
+        """
+        Retrieve tlog/tlx stat information for a Arakoon cluster concurrently
+        Note: this will mutate the given arakoon_clusters dict
+        :param result_handler: logging object
+        :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :param arakoon_clusters: Information about all arakoon clusters, sorted by type and given config
+        :type arakoon_clusters: dict
+        :param batch_size: Amount of workers to collect the Arakoon information.
+        The amount of workers are dependant on the MaxSessions in the sshd_config
+        :return: Dict with tlog/tlx contents for every node config
+        Example return:
+        {CFG: {ovs.extensions.db.arakooninstaller.ArakoonClusterConfig object: {ovs_extensions.db.arakoon.arakooninstaller.ArakoonNodeConfig object: {'result': True,
+                                                                                                                                                     'errors': []},
+                                                                                ovs_extensions.db.arakoon.arakooninstaller.ArakoonNodeConfig object: {'result': False,
+                                                                                                                                                      'errors': []}}}
         :rtype: dict
         """
-        result_handler.info('Fetching available arakoon clusters.', add_to_result=False)
-        arakoon_clusters = list(Configuration.list('/ovs/arakoon'))
+        def _test_connection(_queue, _result_handler):
+            while not _queue.empty():
+                _cluster_type, _cluster_name, _node_config, _results = _queue.get()
+                _errors = _results['errors']
+                identifier = 'Arakoon cluster {0} on node {1}'.format(_cluster_name, _node_config.ip)
+                _result_handler.info('Testing the connection to {0}'.format(identifier), add_to_result=False)
+                try:
+                    _results['result'] = NetworkHelper.check_port_connection(_node_config.client_port, _node_config.ip)
+                    _queue.task_done()
+                except Exception as ex:
+                    _errors.append(('test_connection', ex))
+                    _result_handler.warning('Could not test the connection to {0} ({1})'.format(identifier, str(ex)), add_to_result=False)
+                    _queue.task_done()
 
-        present_nodes = {}
-        missing_nodes = {}
-        missing_tlog = {}
-        cluster_results = {'present': present_nodes, 'missing': missing_nodes, 'tlog_missing': missing_tlog}
-        if len(arakoon_clusters) == 0:
-            # no arakoon clusters on node
-            result_handler.warning('No installed arakoon clusters detected on this system.')
-            return cluster_results
+        queue = Queue.Queue()
+        # Prep work
+        for cluster_type, clusters in arakoon_clusters.iteritems():
+            for cluster in clusters:
+                cluster_name = cluster['cluster_name']
+                arakoon_config = cluster['config']
+                cluster['connection_result'] = {}
+                for node_config in arakoon_config.nodes:
+                    result = {'errors': [],
+                              'result': False}
+                    # Build SSHClients outside the threads to avoid GIL
+                    cluster['connection_result'][node_config] = result
+                    queue.put((cluster_type, cluster_name, node_config, result))
 
-        # add arakoon clusters
-        for cluster in arakoon_clusters:
-            arakoon_config = ArakoonClusterConfig(str(cluster))
-            master_node_ids = [node.name for node in arakoon_config.nodes]
-
-            if ArakoonHealthCheck.LOCAL_SR.machine_id not in master_node_ids:
-                continue
-            # add node that is available for arakoon cluster
-            nodes_per_cluster_result = {}
-            missing_nodes_per_cluster = {}
-            missing_tlog_per_cluster = {}
-
-            tlog_dir = arakoon_config.export_dict()[ArakoonHealthCheck.LOCAL_SR.machine_id]['tlog_dir']
-            for node_id in master_node_ids:
-                machine = StoragerouterHelper.get_by_machine_id(node_id)
-                if machine is None:
-                    # No information found about the storagerouter - old value in arakoon
-                    missing_nodes_per_cluster.update({node_id: tlog_dir})
-                    result_handler.warning('Could not fetch storagerouter information about node {0} that was stored in Arakoon {1}'.format(node_id, cluster), add_to_result=False)
-                elif not tlog_dir:
-                    missing_tlog_per_cluster.update({node_id: tlog_dir})
-                    result_handler.warning('Arakoon {1} seems to have no tlog_dir on this node.'.format(node_id, cluster), add_to_result=False)
-                else:
-                    nodes_per_cluster_result.update({node_id: tlog_dir})
-            present_nodes[cluster] = nodes_per_cluster_result
-            missing_nodes[cluster] = missing_nodes_per_cluster
-            missing_tlog[cluster] = missing_tlog_per_cluster
-
-        return cluster_results
-
-    @staticmethod
-    @expose_to_cli('arakoon', 'consistency-test', HealthCheckCLIRunner.ADDON_TYPE)
-    def check_model_consistency(result_handler):
-        """
-        Verifies the information in the model
-        :param result_handler: logging object
-        :type result_handler: ovs.extensions.healthcheck.result.HCResults
-        :return: None
-        :rtype: NoneType
-        """
-        def dict_compare(dict1, dict2):
-            d1_keys = set(dict1.keys())
-            d2_keys = set(dict2.keys())
-            intersect_keys = d1_keys.intersection(d2_keys)
-            added = d1_keys - d2_keys
-            removed = d2_keys - d1_keys
-            modified = {key: (dict1[key], dict2[key]) for key in intersect_keys if dict1[key] != dict2[key]}
-            same = set(key for key in intersect_keys if dict1[key] == dict2[key])
-            return {'added': added, 'removed': removed, 'modified': modified, 'same': same}
-
-        result_handler.info("Verifying arakoon information.", add_to_result=False)
-        dal_ports = {}
-        arakoon_ports = {}
-        for service in ServiceHelper.get_local_arakoon_services():
-            dal_ports[service.name] = service.ports
-        for arakoon_cluster in Configuration.list('/ovs/arakoon'):
-            e = Configuration.get('/ovs/arakoon/{0}/config'.format(arakoon_cluster), raw=True)
-            config = ConfigParser.RawConfigParser()
-            config.readfp(StringIO(e))
-            for section in config.sections():
-                if section == ArakoonHealthCheck.LOCAL_SR.machine_id:
-                    process_name = "arakoon-{0}".format(arakoon_cluster)
-                    arakoon_ports[process_name] = [int(config.get(section, 'client_port')), int(config.get(section, 'messaging_port'))]  # cast port strings to int
-                    break
-        diff = dict_compare(dal_ports, arakoon_ports)
-        if len(diff['added']) > 0 or len(diff['removed']) > 0:
-            if len(diff['added']) > 0:
-                result_handler.warning('Found {0} in DAL but not in Arakoon.'.format(diff['added']))
-            if len(diff['removed']) > 0:
-                result_handler.warning('Found {0} in Arakoon but not in DAL.'.format(diff['removed']))
-        else:
-            result_handler.success('Arakoon info for DAL and Arakoon are the same.')
-        if len(diff['modified']) > 0:
-            result_handler.warning('The following items have changed: {0}.'.format(diff['modified']))
-        else:
-            result_handler.success('No items have changed.')
-
-    @staticmethod
-    @expose_to_cli('arakoon', 'ports-test', HealthCheckCLIRunner.ADDON_TYPE)
-    def check_local_arakoon_ports(result_handler):
-        """
-        Checks all ports of Arakoon nodes (client & server) on the local node
-        :param result_handler: logging object
-        :type result_handler: ovs.extensions.healthcheck.result.HCResults
-        :return: None
-        :rtype: NoneType
-        """
-        result_handler.info('Checking PORT CONNECTIONS of arakoon nodes.', add_to_result=False)
-        ip = ArakoonHealthCheck.LOCAL_SR.ip
-        for service in ServiceHelper.get_local_arakoon_services():
-            for port in service.ports:
-                result = NetworkHelper.check_port_connection(port, ip)
-                if result:
-                    result_handler.success(
-                        'Connection successfully established to service {0} on {1}:{2}'.format(service.name, ip, port))
-                else:
-                    result_handler.failure('Connection FAILED to service {0} on {1}:{2}'.format(service.name, ip, port))
+        for _ in xrange(batch_size):
+            thread = Thread(target=_test_connection, args=(queue, result_handler))
+            thread.setDaemon(True)  # Setting threads as "daemon" allows main program to exit eventually even if these don't finish correctly.
+            thread.start()
+        # Wait for all results
+        queue.join()
+        return arakoon_clusters
 
     @classmethod
     @cluster_check
     @expose_to_cli('arakoon', 'collapse-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_collapse(cls, result_handler, max_collapse_age=3, min_tlx_amount=10):
         """
-        Check collapsing of arakoon
+        Verifies collapsing has occurred for all Arakoons
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
         :param max_collapse_age: tlx files may not be longer than x days
@@ -226,7 +196,7 @@ class ArakoonHealthCheck(object):
         result_handler.info('Retrieving all collapsing statistics. This might take a while', add_to_result=False)
         start = time.time()
         arakoon_stats = cls._retrieve_stats(result_handler, arakoon_clusters)
-        result_handler.info('Retrieving all collapsing statistics succeeded (duration: {0})'.format(start - time.time()), add_to_result=False)
+        result_handler.info('Retrieving all collapsing statistics succeeded (duration: {0})'.format(time.time() - start), add_to_result=False)
         for cluster_type, clusters in arakoon_stats.iteritems():
             result_handler.info('Testing the collapse of {0} Arakoons'.format(cluster_type), add_to_result=False)
             for cluster in clusters:
@@ -320,15 +290,15 @@ class ArakoonHealthCheck(object):
                         # 01111 file.tlog
                         # 01112 file2.tlog
                         timestamp_files = _client.run('stat -c "%Y %n" {0}'.format(path), allow_insecure=True)
-                    except Exception as ex:
-                        _errors.append(('stat_dir', ex))
+                    except Exception as _ex:
+                        _errors.append(('stat_dir', _ex))
                         return _queue.task_done()
                     # Sort and separate the timestamp item files
                     _output['tlx'] = sorted((timestamp_file.split() for timestamp_file in timestamp_files.splitlines() if timestamp_file.split()[1].endswith('tlx')), key=itemgetter(0))
                     _output['tlog'] = sorted((timestamp_file.split() for timestamp_file in timestamp_files.splitlines() if timestamp_file.split()[1].endswith('tlog')), key=itemgetter(0))
                     _queue.task_done()
-                except Exception as ex:
-                    _result_handler.warning('Could not retrieve the collapse information for {0} ({1})'.format(identifier, str(ex)), add_to_result=False)
+                except Exception as _ex:
+                    _result_handler.warning('Could not retrieve the collapse information for {0} ({1})'.format(identifier, str(_ex)), add_to_result=False)
                     _queue.task_done()
 
         queue = Queue.Queue()
@@ -357,7 +327,7 @@ class ArakoonHealthCheck(object):
 
         for _ in xrange(batch_size):
             thread = Thread(target=_get_stats, args=(queue, clients, result_handler))
-            # thread.setDaemon(True)  # Setting threads as "daemon" allows main program to exit eventually even if these don't finish correctly.
+            thread.setDaemon(True)  # Setting threads as "daemon" allows main program to exit eventually even if these don't finish correctly.
             thread.start()
         # Wait for all results
         queue.join()
@@ -368,7 +338,7 @@ class ArakoonHealthCheck(object):
     @expose_to_cli('arakoon', 'integrity-test', HealthCheckCLIRunner.ADDON_TYPE)
     def verify_integrity(cls, result_handler):
         """
-        Verifies the integrity of a list of arakoons
+        Verifies that all Arakoon clusters are still responding to client calls
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
         :return: None
