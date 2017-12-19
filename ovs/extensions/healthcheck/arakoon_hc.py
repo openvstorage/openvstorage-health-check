@@ -343,14 +343,17 @@ class ArakoonHealthCheck(object):
         """
         if passed_connections is None:
             passed_connections = ['ESTABLISHED', 'TIME_WAIT']
-        warning_threshold = fd_limit*80/100
-        error_threshold = fd_limit*95/100
+        warning_threshold = fd_limit * 80 / 100
+        error_threshold = fd_limit * 95 / 100
         result_handler.info('Checking number of tcp connections per arakoon cluster')
         service_manager = ServiceFactory.get_manager()
         client = SSHClient(System.get_my_storagerouter(), username='root')
         for service in ServiceHelper.get_local_arakoon_services():
-            process_connections = service_manager.get_service_fd(service.name, client)
-            process_connections = [i for i in process_connections if i.split()[-1].strip('(').strip(')') in passed_connections]
+            try:
+                process_connections = service_manager.get_service_fd(service.name, client)
+                process_connections = [i for i in process_connections if i.split()[-1].strip('(').strip(')') in passed_connections]
+            except ValueError:
+                result_handler.exception('No services found for Arakoon {0}'.format(service.name))
             if len(process_connections) >= warning_threshold:
                 if len(process_connections) >= error_threshold:
                     result_handler.warning('Number of TCP connections exceeded the 95% warning threshold on Arakoon {0}, ({1}/{2})'.format(service.name, len(process_connections), fd_limit))
