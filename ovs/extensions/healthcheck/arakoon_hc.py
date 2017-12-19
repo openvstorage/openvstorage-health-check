@@ -22,7 +22,6 @@ Arakoon Health Check module
 
 import os
 import time
-import subprocess
 import timeout_decorator
 import ConfigParser
 from datetime import date, timedelta
@@ -328,30 +327,34 @@ class ArakoonHealthCheck(object):
         else:
             result_handler.success('Found no nodes that are missing according to arakoons.')
 
-
     @staticmethod
     @cluster_check
     @expose_to_cli('arakoon', 'connections-test', HealthCheckCLIRunner.ADDON_TYPE)
-    def check_arakoon_tcp_connections(result_handler, alert_connections = 30): #todo verify amount of connections for alert
+    def check_arakoon_tcp_connections(result_handler, fd_limit=30, passed_connections=None):
         """
         Verifies/validates the integrity of all available arakoons
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
-        :param alert_connections: threshold number of tcp connections for which to start logging warnings
-        :type alert_connections: int
+        :param fd_limit: threshold number of tcp connections for which to start logging warnings
+        :type fd_limit: int
+        :param passed_connections: checked TCP connections
+        :type passed_connections: list
+
         """
+        if passed_connections is None:
+            passed_connections = ['ESTABLISHED', 'TIME_WAIT']
+        warning_threshold = fd_limit*80/100
+        error_threshold = fd_limit*95/100
         result_handler.info('Checking number of tcp connections per arakoon cluster')
         service_manager = ServiceFactory.get_manager()
         client = SSHClient(System.get_my_storagerouter(), username='root')
         for service in ServiceHelper.get_local_arakoon_services():
             process_connections = service_manager.get_service_fd(service.name, client)
-            #todo only established connections? right now all connections are counted
-            if len(process_connections) > alert_connections:
-                result_handler.warning('Number of TCP connections exceeded the warning threshold on Arakoon {0}, ({1}/{2})'.format(service.name, len(process_connections), alert_connections))
+            process_connections = [i for i in process_connections if i.split()[-1].strip('(').strip(')') in passed_connections]
+            if len(process_connections) >= warning_threshold:
+                if len(process_connections) >= error_threshold:
+                    result_handler.warning('Number of TCP connections exceeded the 95% warning threshold on Arakoon {0}, ({1}/{2})'.format(service.name, len(process_connections), fd_limit))
+                else:
+                    result_handler.warning('Number of TCP connections exceeded the 80% warning threshold on Arakoon {0}, ({1}/{2})'.format(service.name, len(process_connections), fd_limit))
             else:
-                result_handler.success('Number of TCP connections on Arakoon {0} is healthy ({1}/{2})'.format(service.name, len(process_connections), alert_connections))
-
-
-
-
-
+                    result_handler.success('Number of TCP connections on Arakoon {0} is healthy ({1}/{2})'.format(service.name, len(process_connections), fd_limit))
