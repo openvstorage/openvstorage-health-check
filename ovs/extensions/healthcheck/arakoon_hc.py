@@ -29,11 +29,13 @@ from StringIO import StringIO
 from ovs.extensions.db.arakooninstaller import ArakoonClusterConfig
 from ovs_extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 from ovs.extensions.generic.configuration import Configuration
+from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
 from ovs.extensions.healthcheck.decorators import cluster_check
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
+from ovs.extensions.services.servicefactory import ServiceFactory
 from ovs.dal.lists.storagerouterlist import StorageRouterList
 from ovs.extensions.storage.persistentfactory import PersistentFactory
 from timeout_decorator.timeout_decorator import TimeoutError
@@ -324,3 +326,38 @@ class ArakoonHealthCheck(object):
             result_handler.failure('The following nodes are stored in arakoon but missing in reality.'.format(missing))
         else:
             result_handler.success('Found no nodes that are missing according to arakoons.')
+
+    @staticmethod
+    @cluster_check
+    @expose_to_cli('arakoon', 'connections-test', HealthCheckCLIRunner.ADDON_TYPE)
+    def check_arakoon_tcp_connections(result_handler, fd_limit=30, passed_connections=None):
+        """
+        Verifies/validates the integrity of all available arakoons
+        :param result_handler: logging object
+        :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :param fd_limit: threshold number of tcp connections for which to start logging warnings
+        :type fd_limit: int
+        :param passed_connections: checked TCP connections
+        :type passed_connections: list
+
+        """
+        if passed_connections is None:
+            passed_connections = ['ESTABLISHED', 'TIME_WAIT']
+        warning_threshold = fd_limit * 80 / 100
+        error_threshold = fd_limit * 95 / 100
+        result_handler.info('Checking number of tcp connections per arakoon cluster')
+        service_manager = ServiceFactory.get_manager()
+        client = SSHClient(System.get_my_storagerouter(), username='root')
+        for service in ServiceHelper.get_local_arakoon_services():
+            try:
+                process_connections = service_manager.get_service_fd(service.name, client)
+                process_connections = [i for i in process_connections if i.split()[-1].strip('(').strip(')') in passed_connections]
+            except ValueError:
+                result_handler.exception('No services found for Arakoon {0}'.format(service.name))
+            if len(process_connections) >= warning_threshold:
+                if len(process_connections) >= error_threshold:
+                    result_handler.warning('Number of TCP connections exceeded the 95% warning threshold on Arakoon {0}, ({1}/{2})'.format(service.name, len(process_connections), fd_limit))
+                else:
+                    result_handler.warning('Number of TCP connections exceeded the 80% warning threshold on Arakoon {0}, ({1}/{2})'.format(service.name, len(process_connections), fd_limit))
+            else:
+                    result_handler.success('Number of TCP connections on Arakoon {0} is healthy ({1}/{2})'.format(service.name, len(process_connections), fd_limit))
