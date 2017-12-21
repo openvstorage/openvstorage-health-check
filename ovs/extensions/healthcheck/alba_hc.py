@@ -25,6 +25,7 @@ import uuid
 import time
 import hashlib
 import subprocess
+from ovs.dal.lists.albabackendlist import AlbaBackendList
 from ovs_extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 from ovs.extensions.generic.configuration import Configuration, NotFoundException
 from ovs.extensions.generic.sshclient import SSHClient
@@ -37,6 +38,7 @@ from ovs.extensions.healthcheck.helpers.exceptions import AlbaException, Connect
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
 from ovs.extensions.services.servicefactory import ServiceFactory
+from ovs.lib.alba import AlbaController
 from ovs.lib.helpers.toolbox import Toolbox
 
 
@@ -545,3 +547,34 @@ class AlbaHealthCheck(object):
                     result_handler.success('Connection successfully established to service {0} on {1}:{2}'.format(service.name, ip, port))
                 else:
                     result_handler.failure('Connection FAILED to service {0} on {1}:{2}'.format(service.name, ip, port))
+
+    @classmethod
+    @cluster_check
+    @expose_to_cli(MODULE, 'nsm-load-test', HealthCheckCLIRunner.ADDON_TYPE)
+    def check_nsm_load(cls, result_handler):
+        """
+        Checks all NSM services registered within the Framework and will report their load
+        :param result_handler: logging object
+        :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :return: None
+        :rtype: NoneType
+        """
+        for alba_backend in AlbaBackendList.get_albabackends():
+            if alba_backend.abm_cluster is None:
+                raise ValueError('No ABM cluster found for ALBA Backend {0}'.format(alba_backend.name))
+            if len(alba_backend.abm_cluster.abm_services) == 0:
+                raise ValueError('ALBA Backend {0} does not have any registered ABM services'.format(alba_backend.name))
+            internal = alba_backend.abm_cluster.abm_services[0].service.is_internal
+            nsm_loads = {}
+            max_load = Configuration.get('ovs/framework/plugins/alba/config|nsm.maxload')
+            sorted_nsm_clusters = sorted(alba_backend.nsm_clusters, key=lambda k: k.number)
+            for nsm_cluster in sorted_nsm_clusters:
+                nsm_loads[nsm_cluster.number] = AlbaController._get_load(nsm_cluster)
+            overloaded = min(nsm_loads.values()) >= max_load
+            if overloaded is False:
+                result_handler.success('NSMs for backend {0} are not overloaded'.format(alba_backend.name))
+            else:
+                if internal is True:
+                    result_handler.warning('NSMs for backend {0} are overloaded. The NSM checkup will take care of this'.format(alba_backend.name))
+                else:
+                    result_handler.failure('NSMs for backend {0} are overloaded. Please add your own NSM clusters to the backend'.format(alba_backend.name))
