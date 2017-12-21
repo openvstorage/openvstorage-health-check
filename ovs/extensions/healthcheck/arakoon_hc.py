@@ -25,6 +25,7 @@ import json
 import time
 import Queue
 import socket
+import operator
 from datetime import timedelta
 from collections import OrderedDict
 from threading import Thread
@@ -53,7 +54,7 @@ class ArakoonHealthCheck(object):
         Retrieves all Arakoon clusters registered in this OVSCluster
         :param result_handler: Logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
-        :return: Dict with the arakoon cluster types as key and list with dicts which contain cluster names and pyrakoon clients
+        :return: Dict with the Arakoon cluster types as key and list with dicts which contain cluster names and pyrakoon clients
         :rtype: dict(str, list[dict])
         """
         result_handler.info('Fetching available arakoon clusters.', add_to_result=False)
@@ -79,6 +80,110 @@ class ArakoonHealthCheck(object):
 
     @classmethod
     @cluster_check
+    @expose_to_cli(MODULE, 'nodes-test', HealthCheckCLIRunner.ADDON_TYPE)
+    def check_node_status(cls, result_handler, max_transactions_behind=10):
+        """
+        Checks the status of every node within the Arakoon cluster
+        This check will report what nodes are currently missing and what nodes are catching up to the master
+        :param result_handler: Logging object
+        :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :param max_transactions_behind: The number of transactions that a slave can be behind a master before logging a failure
+        :type max_transactions_behind: int
+        :return: None
+        :rtype: NoneType
+        """
+        result_handler.info('Starting Arakoon nodes test.', add_to_result=False)
+        arakoon_clusters = cls._get_arakoon_clusters(result_handler)
+        for cluster_type, clusters in arakoon_clusters.iteritems():
+            result_handler.info('Fetching the status of {0} Arakoons'.format(cluster_type), add_to_result=False)
+            for cluster in clusters:
+                arakoon_client = cluster['client']
+                cluster_name = cluster['cluster_name']
+                arakoon_config = cluster['config']
+                # Map the node ids to the object for easier lookups
+                node_info = dict((node.name, node) for node in arakoon_config.nodes)
+                identifier = 'Arakoon cluster {0}'.format(cluster_name)
+                try:
+                    statistics = arakoon_client._client.statistics()
+                    node_is = statistics['node_is']
+                    # Look for any missing nodes within the cluster
+                    missing_ids = list(set(node_info.keys()) - set(node_is.keys()))
+                    if len(missing_ids) > 0:
+                        for missing_id in missing_ids:
+                            node_config = node_info[missing_id]
+                            result_handler.failure('{0} is missing node: {1}'.format(identifier, '{0} ({1}:{2})'.format(node_config.name, node_config.ip, node_config.client_port)))
+                    highest_id = max(node_is.iteritems(), key=operator.itemgetter(1))[0]
+                    for node_id, transactions in node_is.iteritems():
+                        if node_id == highest_id:
+                            continue
+                        transactions_behind = node_is[highest_id] - transactions
+                        node_config = node_info[node_id]
+                        log = 'Node {0} ({1}:{2}) for {3} {{0}} ({4}/{5})'.format(node_config.name, node_config.ip, node_config.client_port,
+                                                                                  identifier, transactions_behind, max_transactions_behind)
+                        if transactions == 0:
+                            result_handler.warning(log.format('is catching up'))
+                        elif transactions_behind > max_transactions_behind:
+                            result_handler.failure(log.format('is behind the master'))
+                        else:
+                            result_handler.success(log.format('is up to date'))
+                except (ArakoonNoMaster, ArakoonNoMasterResult) as ex:
+                    result_handler.failure('{0} cannot find a master. (Message: {1})'.format(identifier, cluster_name, str(ex)))
+                except Exception as ex:
+                    cls.logger.exception('Unhandled exception during the nodes check')
+                    result_handler.exception('Testing {0} threw an unhandled exception. (Message: {1})'.format(identifier, cluster_name, str(ex)))
+
+    @classmethod
+    def _retrieve_node_status(cls, result_handler, arakoon_clusters, batch_size=10):
+        """
+        Retrieve Arakoon statistics concurrently
+        Note: this will mutate the given arakoon_clusters dict
+        :param result_handler: Logging object
+        :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :param batch_size: Amount of workers to collect the Arakoon information.
+        :type batch_size: int
+        :return: None
+        :rtype: NoneType
+        """
+        def _get_status(_queue, _result_handler):
+            while not _queue.empty():
+                _cluster_type, _cluster_name, _node_config, _results = _queue.get()
+                _errors = _results['errors']
+                identifier = 'Arakoon cluster {0} on node {1}'.format(_cluster_name, _node_config.ip)
+                _result_handler.info('Retrieving the information of {0}'.format(identifier), add_to_result=False)
+                try:
+
+                    _results['result'] = NetworkHelper.check_port_connection(_node_config.client_port, _node_config.ip)
+                    _queue.task_done()
+                except Exception as ex:
+                    _errors.append(('test_connection', ex))
+                    _result_handler.warning('Could not test the connection to {0} ({1})'.format(identifier, str(ex)), add_to_result=False)
+                    _queue.task_done()
+
+        queue = Queue.Queue()
+        # Prep work
+        for cluster_type, clusters in arakoon_clusters.iteritems():
+            for cluster in clusters:
+                cluster_name = cluster['cluster_name']
+                arakoon_config = cluster['config']
+                cluster['connection_result'] = {}
+                for node_config in arakoon_config.nodes:
+                    result = {'errors': [],
+                              'result': False}
+                    cluster['connection_result'][node_config] = result
+                    queue.put((cluster_type, cluster_name, node_config, result))
+                    # Only one node needs to retrieve this information
+                    break
+
+        for _ in xrange(batch_size):
+            thread = Thread(target=_get_status, args=(queue, result_handler))
+            thread.setDaemon(True)  # Setting threads as "daemon" allows main program to exit eventually even if these don't finish correctly.
+            thread.start()
+        # Wait for all results
+        queue.join()
+        return arakoon_clusters
+
+    @classmethod
+    @cluster_check
     @expose_to_cli('arakoon', 'ports-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_arakoon_ports(cls, result_handler):
         """
@@ -89,7 +194,7 @@ class ArakoonHealthCheck(object):
         :rtype: NoneType
         """
         arakoon_clusters = cls._get_arakoon_clusters(result_handler)
-        result_handler.info('Checking Arakoon ports test.', add_to_result=False)
+        result_handler.info('Starting Arakoon ports test.', add_to_result=False)
         result_handler.info('Retrieving all collapsing statistics. This might take a while', add_to_result=False)
         start = time.time()
         arakoon_stats = cls._get_port_connections(result_handler, arakoon_clusters)
@@ -162,7 +267,6 @@ class ArakoonHealthCheck(object):
                 for node_config in arakoon_config.nodes:
                     result = {'errors': [],
                               'result': False}
-                    # Build SSHClients outside the threads to avoid GIL
                     cluster['connection_result'][node_config] = result
                     queue.put((cluster_type, cluster_name, node_config, result))
 
@@ -357,4 +461,4 @@ class ArakoonHealthCheck(object):
                     result_handler.failure('Arakoon {0} cannot find a master. (Message: {1})'.format(cluster_name, str(ex)))
                 except Exception as ex:
                     cls.logger.exception('Unhandled exception during the integrity check')
-                    result_handler.exception('Arakoon {0} threw an unhandled exception. (Message: {1}'.format(cluster_name, str(ex)))
+                    result_handler.exception('Arakoon {0} threw an unhandled exception. (Message: {1})'.format(cluster_name, str(ex)))
