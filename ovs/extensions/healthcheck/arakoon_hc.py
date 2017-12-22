@@ -46,7 +46,7 @@ class ArakoonHealthCheck(object):
     """
     A healthcheck for the arakoon persistent store
     """
-    logger = LogHandler.get('ovs', 'healthcheck_arakoon')
+    logger = LogHandler.get('healthcheck', 'healthcheck_arakoon')
     MODULE = 'arakoon'
 
     @classmethod

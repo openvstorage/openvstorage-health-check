@@ -34,7 +34,7 @@ class VolumedriverHealthCheck(object):
     """
     A healthcheck for the volumedriver components
     """
-    logger = LogHandler.get('ovs', 'healthcheck_volumedriver')
+    logger = LogHandler.get('healthcheck', 'healthcheck_volumedriver')
 
     MODULE = 'volumedriver'
     LOCAL_SR = System.get_my_storagerouter()
