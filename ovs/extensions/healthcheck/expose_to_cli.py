@@ -358,7 +358,3 @@ class HealthCheckCLIRunner(CLIRunner):
                                             'SKIPPED': result_handler.counters['SKIPPED'],
                                             'WARNING': result_handler.counters['WARNING'],
                                             'EXCEPTION': result_handler.counters['EXCEPTION']}}
-
-
-if __name__ == '__main__':
-    HealthCheckCLIRunner.run_method('arakoon', 'collapse-test')

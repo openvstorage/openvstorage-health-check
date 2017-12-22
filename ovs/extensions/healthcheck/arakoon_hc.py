@@ -38,6 +38,7 @@ from ovs_extensions.generic.toolbox import ExtensionsToolbox
 from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
 from ovs.extensions.healthcheck.decorators import cluster_check
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
+from ovs.extensions.services.servicefactory import ServiceFactory
 from ovs.log.log_handler import LogHandler
 
 
@@ -133,58 +134,8 @@ class ArakoonHealthCheck(object):
                     result_handler.exception('Testing {0} threw an unhandled exception. (Message: {1})'.format(identifier, cluster_name, str(ex)))
 
     @classmethod
-    def _retrieve_node_status(cls, result_handler, arakoon_clusters, batch_size=10):
-        """
-        Retrieve Arakoon statistics concurrently
-        Note: this will mutate the given arakoon_clusters dict
-        :param result_handler: Logging object
-        :type result_handler: ovs.extensions.healthcheck.result.HCResults
-        :param batch_size: Amount of workers to collect the Arakoon information.
-        :type batch_size: int
-        :return: None
-        :rtype: NoneType
-        """
-        def _get_status(_queue, _result_handler):
-            while not _queue.empty():
-                _cluster_type, _cluster_name, _node_config, _results = _queue.get()
-                _errors = _results['errors']
-                identifier = 'Arakoon cluster {0} on node {1}'.format(_cluster_name, _node_config.ip)
-                _result_handler.info('Retrieving the information of {0}'.format(identifier), add_to_result=False)
-                try:
-
-                    _results['result'] = NetworkHelper.check_port_connection(_node_config.client_port, _node_config.ip)
-                    _queue.task_done()
-                except Exception as ex:
-                    _errors.append(('test_connection', ex))
-                    _result_handler.warning('Could not test the connection to {0} ({1})'.format(identifier, str(ex)), add_to_result=False)
-                    _queue.task_done()
-
-        queue = Queue.Queue()
-        # Prep work
-        for cluster_type, clusters in arakoon_clusters.iteritems():
-            for cluster in clusters:
-                cluster_name = cluster['cluster_name']
-                arakoon_config = cluster['config']
-                cluster['connection_result'] = {}
-                for node_config in arakoon_config.nodes:
-                    result = {'errors': [],
-                              'result': False}
-                    cluster['connection_result'][node_config] = result
-                    queue.put((cluster_type, cluster_name, node_config, result))
-                    # Only one node needs to retrieve this information
-                    break
-
-        for _ in xrange(batch_size):
-            thread = Thread(target=_get_status, args=(queue, result_handler))
-            thread.setDaemon(True)  # Setting threads as "daemon" allows main program to exit eventually even if these don't finish correctly.
-            thread.start()
-        # Wait for all results
-        queue.join()
-        return arakoon_clusters
-
-    @classmethod
     @cluster_check
-    @expose_to_cli('arakoon', 'ports-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'ports-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_arakoon_ports(cls, result_handler):
         """
         Verifies that the Arakoon clusters still respond to connections
@@ -243,20 +194,6 @@ class ArakoonHealthCheck(object):
                                                                                                                                                       'errors': []}}}
         :rtype: dict
         """
-        def _test_connection(_queue, _result_handler):
-            while not _queue.empty():
-                _cluster_type, _cluster_name, _node_config, _results = _queue.get()
-                _errors = _results['errors']
-                identifier = 'Arakoon cluster {0} on node {1}'.format(_cluster_name, _node_config.ip)
-                _result_handler.info('Testing the connection to {0}'.format(identifier), add_to_result=False)
-                try:
-                    _results['result'] = NetworkHelper.check_port_connection(_node_config.client_port, _node_config.ip)
-                    _queue.task_done()
-                except Exception as ex:
-                    _errors.append(('test_connection', ex))
-                    _result_handler.warning('Could not test the connection to {0} ({1})'.format(identifier, str(ex)), add_to_result=False)
-                    _queue.task_done()
-
         queue = Queue.Queue()
         # Prep work
         for cluster_type, clusters in arakoon_clusters.iteritems():
@@ -268,19 +205,41 @@ class ArakoonHealthCheck(object):
                     result = {'errors': [],
                               'result': False}
                     cluster['connection_result'][node_config] = result
-                    queue.put((cluster_type, cluster_name, node_config, result))
+                    queue.put((cluster_name, node_config, result))
 
         for _ in xrange(batch_size):
-            thread = Thread(target=_test_connection, args=(queue, result_handler))
+            thread = Thread(target=cls._connection_worker, args=(queue, result_handler))
             thread.setDaemon(True)  # Setting threads as "daemon" allows main program to exit eventually even if these don't finish correctly.
             thread.start()
         # Wait for all results
         queue.join()
         return arakoon_clusters
 
+    @staticmethod
+    def _connection_worker(queue, result_handler):
+        """
+        Worker method to retrieve file descriptors
+        :param queue: Queue to use
+        :param result_handler: Logging object
+        :return: None
+        :rtype: NoneType
+        """
+        while not queue.empty():
+            cluster_name, _node_config, _results = queue.get()
+            errors = _results['errors']
+            identifier = 'Arakoon cluster {0} on node {1}'.format(cluster_name, _node_config.ip)
+            result_handler.info('Testing the connection to {0}'.format(identifier), add_to_result=False)
+            try:
+                _results['result'] = NetworkHelper.check_port_connection(_node_config.client_port, _node_config.ip)
+            except Exception as ex:
+                errors.append(('test_connection', ex))
+                result_handler.warning('Could not test the connection to {0} ({1})'.format(identifier, str(ex)), add_to_result=False)
+            finally:
+                queue.task_done()
+
     @classmethod
     @cluster_check
-    @expose_to_cli('arakoon', 'collapse-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'collapse-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_collapse(cls, result_handler, max_collapse_age=3, min_tlx_amount=10):
         """
         Verifies collapsing has occurred for all Arakoons
@@ -376,34 +335,6 @@ class ArakoonHealthCheck(object):
                                                                                                                                                       'errors': []}}}
         :rtype: dict
         """
-        def _get_stats(_queue, _clients, _result_handler):
-            while not _queue.empty():
-                _cluster_type, _cluster_name, _node_config, _results = _queue.get()
-                _errors = _results['errors']
-                _output = _results['result']
-                identifier = 'Arakoon cluster {0} on node {1}'.format(_cluster_name, _node_config.ip)
-                _result_handler.info('Retrieving collapse information for {0}'.format(identifier), add_to_result=False)
-                try:
-                    _client = _clients[_node_config.ip]
-                    tlog_dir = _node_config.tlog_dir
-                    path = os.path.join(tlog_dir, '*')
-                    try:
-                        # List the contents of the tlog directory and sort by oldest modification date
-                        # Example output:
-                        # 01111 file.tlog
-                        # 01112 file2.tlog
-                        timestamp_files = _client.run('stat -c "%Y %n" {0}'.format(path), allow_insecure=True)
-                    except Exception as _ex:
-                        _errors.append(('stat_dir', _ex))
-                        return _queue.task_done()
-                    # Sort and separate the timestamp item files
-                    _output['tlx'] = sorted((timestamp_file.split() for timestamp_file in timestamp_files.splitlines() if timestamp_file.split()[1].endswith('tlx')), key=lambda split: int(split[0]))
-                    _output['tlog'] = sorted((timestamp_file.split() for timestamp_file in timestamp_files.splitlines() if timestamp_file.split()[1].endswith('tlog')), key=lambda split: int(split[0]))
-                    _queue.task_done()
-                except Exception as _ex:
-                    _result_handler.warning('Could not retrieve the collapse information for {0} ({1})'.format(identifier, str(_ex)), add_to_result=False)
-                    _queue.task_done()
-
         queue = Queue.Queue()
         clients = {}
         # Prep work
@@ -426,19 +357,58 @@ class ArakoonHealthCheck(object):
                         result['errors'].append(('build_client', ex))
                         continue
                     cluster['collapse_result'][node_config] = result
-                    queue.put((cluster_type, cluster_name, node_config, result))
+                    queue.put((cluster_name, node_config, result))
 
         for _ in xrange(batch_size):
-            thread = Thread(target=_get_stats, args=(queue, clients, result_handler))
+            thread = Thread(target=cls._collapse_worker, args=(queue, clients, result_handler))
             thread.setDaemon(True)  # Setting threads as "daemon" allows main program to exit eventually even if these don't finish correctly.
             thread.start()
         # Wait for all results
         queue.join()
         return arakoon_clusters
 
+    @staticmethod
+    def _collapse_worker(queue, clients, result_handler):
+        """
+        Worker method to retrieve file descriptors
+        :param queue: Queue to use
+        :param clients: SSHClients to choose from
+        :param result_handler: Logging object
+        :return: None
+        :rtype: NoneType
+        """
+        while not queue.empty():
+            cluster_name, _node_config, _results = queue.get()
+            errors = _results['errors']
+            output = _results['result']
+            identifier = 'Arakoon cluster {0} on node {1}'.format(cluster_name, _node_config.ip)
+            result_handler.info('Retrieving collapse information for {0}'.format(identifier), add_to_result=False)
+            try:
+                _client = clients[_node_config.ip]
+                tlog_dir = _node_config.tlog_dir
+                path = os.path.join(tlog_dir, '*')
+                try:
+                    # List the contents of the tlog directory and sort by oldest modification date
+                    # Example output:
+                    # 01111 file.tlog
+                    # 01112 file2.tlog
+                    timestamp_files = _client.run('stat -c "%Y %n" {0}'.format(path), allow_insecure=True)
+                except Exception as _ex:
+                    errors.append(('stat_dir', _ex))
+                    raise
+                # Sort and separate the timestamp item files
+                output['tlx'] = sorted((timestamp_file.split() for timestamp_file in timestamp_files.splitlines()
+                                        if timestamp_file.split()[1].endswith('tlx')), key=lambda split: int(split[0]))
+                output['tlog'] = sorted((timestamp_file.split() for timestamp_file in timestamp_files.splitlines()
+                                         if timestamp_file.split()[1].endswith('tlog')), key=lambda split: int(split[0]))
+            except Exception as _ex:
+                result_handler.warning('Could not retrieve the collapse information for {0} ({1})'.format(identifier, str(_ex)), add_to_result=False)
+            finally:
+                queue.task_done()
+
     @classmethod
     @cluster_check
-    @expose_to_cli('arakoon', 'integrity-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'integrity-test', HealthCheckCLIRunner.ADDON_TYPE)
     def verify_integrity(cls, result_handler):
         """
         Verifies that all Arakoon clusters are still responding to client calls
@@ -462,3 +432,154 @@ class ArakoonHealthCheck(object):
                 except Exception as ex:
                     cls.logger.exception('Unhandled exception during the integrity check')
                     result_handler.exception('Arakoon {0} threw an unhandled exception. (Message: {1})'.format(cluster_name, str(ex)))
+
+    @classmethod
+    @cluster_check
+    @expose_to_cli(MODULE, 'file-descriptors-test', HealthCheckCLIRunner.ADDON_TYPE)
+    def check_arakoon_fd(cls, result_handler, fd_limit=30, passed_connections=None):
+        """
+        Checks all current open tcp file descriptors for all Arakoon clusters in the OVS cluster
+        Will raise warnings when these reach a certain threshold
+        :param result_handler: Logging object
+        :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :param fd_limit: Threshold for the number number of tcp connections for which to start logging warnings
+        :type fd_limit: int
+        :param passed_connections: checked TCP connections
+        :type passed_connections: list
+        :return: None
+        :rtype: NoneType
+        """
+        if passed_connections is None:
+            passed_connections = ['ESTABLISHED', 'TIME_WAIT']
+        warning_threshold = fd_limit * 80 / 100
+        error_threshold = fd_limit * 95 / 100
+
+        result_handler.info('Starting Arakoon integrity test', add_to_result=False)
+        arakoon_clusters = cls._get_arakoon_clusters(result_handler)
+        start = time.time()
+        arakoon_fd_results = cls._get_filedescriptors(result_handler, arakoon_clusters)
+        result_handler.info('Retrieving all file descriptor information succeeded (duration: {0})'.format(time.time() - start), add_to_result=False)
+        for cluster_type, clusters in arakoon_fd_results.iteritems():
+            result_handler.info('Checking the file descriptors of {0} Arakoons'.format(cluster_type), add_to_result=False)
+            for cluster in clusters:
+                cluster_name = cluster['cluster_name']
+                fd_result = cluster['fd_result']
+                fd_result = OrderedDict(sorted(fd_result.items(), key=lambda item: ExtensionsToolbox.advanced_sort(item[0].ip, separator='.')))
+                for node, stats in fd_result.iteritems():
+                    identifier_log = 'Arakoon cluster {0} on node {1}'.format(cluster_name, node.ip)
+                    if len(stats['errors']) > 0:
+                        # Determine where issues were found
+                        for step, exception in stats['errors']:
+                            if step == 'build_client':
+                                try:
+                                    # Raise the thrown exception
+                                    raise exception
+                                except TimeOutException:
+                                    result_handler.warning('Connection to {0} has timed out'.format(identifier_log))
+                                except (socket.error, UnableToConnectException):
+                                    result_handler.failure(
+                                        'Connection to {0} could not be established'.format(identifier_log))
+                                except NotAuthenticatedException:
+                                    result_handler.skip(
+                                        'Connection to {0} could not be authenticated. This node has no access to the Arakoon node.'.format(identifier_log))
+                                except Exception:
+                                    message = 'Connection to {0} could not be established due to an unhandled exception.'.format(identifier_log)
+                                    cls.logger.exception(message)
+                                    result_handler.exception(message)
+                            elif step == 'lsof':
+                                try:
+                                    raise exception
+                                except Exception:
+                                    message = 'Unable to list the file descriptors for {0}'.format(identifier_log)
+                                    cls.logger.exception(message)
+                                    result_handler.exception(message)
+                        continue
+                    fds = stats['result']['fds']
+                    filtered_fds = [i for i in fds if i.split()[-1].strip('(').strip(')') in passed_connections]
+                    if len(filtered_fds) >= warning_threshold:
+                        if len(filtered_fds) >= error_threshold:
+                            result_handler.warning('Number of TCP connections exceeded the 95% warning threshold for {0}, ({1}/{2})'.format(identifier_log, len(filtered_fds), fd_limit))
+                        else:
+                            result_handler.warning('Number of TCP connections exceeded the 80% warning threshold for {0}, ({1}/{2})'.format(identifier_log, len(filtered_fds), fd_limit))
+                    else:
+                        result_handler.success('Number of TCP connections for {0} is healthy ({1}/{2})'.format(identifier_log, len(filtered_fds), fd_limit))
+
+    @classmethod
+    def _get_filedescriptors(cls, result_handler, arakoon_clusters, batch_size=10):
+        """
+        Retrieve tlog/tlx stat information for a Arakoon cluster concurrently
+        Note: this will mutate the given arakoon_clusters dict
+        :param result_handler: logging object
+        :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :param arakoon_clusters: Information about all Arakoon clusters, sorted by type and given config
+        :type arakoon_clusters: dict
+        :param batch_size: Amount of workers to collect the Arakoon information.
+        The amount of workers are dependant on the MaxSessions in the sshd_config
+        :return: Dict with file descriptors contents for every node config
+        :rtype: dict
+        """
+        queue = Queue.Queue()
+        clients = {}
+        # Prep work
+        for cluster_type, clusters in arakoon_clusters.iteritems():
+            for cluster in clusters:
+                cluster_name = cluster['cluster_name']
+                arakoon_config = cluster['config']
+                cluster['fd_result'] = {}
+                for node_config in arakoon_config.nodes:
+                    result = {'errors': [],
+                              'result': {'fds': []}}
+                    # Build SSHClients outside the threads to avoid GIL
+                    try:
+                        client = clients.get(node_config.ip)
+                        if client is None:
+                            client = SSHClient(node_config.ip, timeout=5)
+                            clients[node_config.ip] = client
+                    except Exception as ex:
+                        result['errors'].append(('build_client', ex))
+                        continue
+                    cluster['fd_result'][node_config] = result
+                    queue.put((cluster_name, node_config, result))
+        service_manager = ServiceFactory.get_manager()
+        for _ in xrange(batch_size):
+            thread = Thread(target=cls._fd_worker, args=(queue, clients, result_handler, service_manager))
+            thread.setDaemon(True)  # Setting threads as "daemon" allows main program to exit eventually even if these don't finish correctly.
+            thread.start()
+        # Wait for all results
+        queue.join()
+        return arakoon_clusters
+
+    @staticmethod
+    def _fd_worker(queue, clients, result_handler, service_manager):
+        """
+        Worker method to retrieve file descriptors
+        :param queue: Queue to use
+        :param clients: SSHClients to choose from
+        :param result_handler: Logging object
+        :param service_manager: Service manager instance
+        :return: None
+        :rtype: NoneType
+        """
+        while not queue.empty():
+            cluster_name, _node_config, _results = queue.get(False)
+            errors = _results['errors']
+            output = _results['result']
+            identifier = 'Arakoon cluster {0} on node {1}'.format(cluster_name, _node_config.ip)
+            result_handler.info('Retrieving file descriptor information for {0}'.format(identifier), add_to_result=False)
+            try:
+                client = clients[_node_config.ip]
+                try:
+                    # Handle config Arakoon
+                    cluster_name = cluster_name if cluster_name != 'cacc' else 'config'
+                    service_name = ArakoonInstaller.get_service_name_for_cluster(cluster_name)
+                    pid = service_manager.get_service_pid(service_name, client)
+                    file_descriptors = client.run(['lsof', '-i', '-a', '-p', pid]).splitlines()[1:]
+                except Exception as _ex:
+                    errors.append(('lsof', _ex))
+                    raise
+                output['fds'] = file_descriptors
+            except Exception as _ex:
+                result_handler.warning(
+                    'Could not retrieve the file descriptor information for {0} ({1})'.format(identifier, str(_ex)), add_to_result=False)
+            finally:
+                queue.task_done()
