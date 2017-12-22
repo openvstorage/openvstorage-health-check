@@ -8,6 +8,7 @@ these ranges should be respected.
 
 | Ranges        | Component     |
 | ------------- | ------------- |
+| GEN0-999      | System        |
 | HC0-999       | Healthcheck   |
 | FWK0-999      | Framework     |
 | ALBA0-999     | Alba          |
@@ -15,17 +16,66 @@ these ranges should be respected.
 | VOL0-999      | Volumedriver  |
 
 ## Current code overview
- | Error code |                                            Information                                            |                                  Solution                                  | 
+  | Error code |                                            Information                                            |                                  Solution                                  | 
  | :--------- | :------------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------- | 
+ |  ALBA0001  |                                   A command towards ALBA failed                                   |              Validate whether the Arakoon cluster is running               | 
+ |  ALBA0100  |                                    An OSD has no associated IPs                                   |        Validate whether the asd-manager registered the correct IPs         | 
+ |  ALBA0101  |                                     An OSD seems to be broken                                     |               Validate whether the OSD is running correctly                | 
+ |  ALBA0102  |                              An OSD did not return the correct object                             |               Validate whether the OSD is running correctly                | 
+ |  ALBA0200  |                      The namespace was successfully created through the proxy                     |                             No action required                             | 
+ |  ALBA0201  |                      The namespace was successfully fetched through the proxy                     |                             No action required                             | 
+ |  ALBA0202  |                       The object was successfully uploaded through the proxy                      |                             No action required                             | 
+ |  ALBA0203  |                      The object was successfully downloaded through the proxy                     |                             No action required                             | 
+ |  ALBA0204  |                                The object's contents did not change                               |                             No action required                             | 
+ |  ALBA0205  |                                   The object's contents changed                                   |                Report this to the engineers of OpenvStorage                | 
+ |  ALBA0206  |                                Testing the proxies was unsuccessful                               |                Look for previous errors and act accordingly                | 
+ |   ARA000   |                          The Arakoon cluster could not determine a master                         |            Validate if the Arakoon cluster still has a majority            | 
+ |   ARA001   |                               The Arakoon cluster is missing a node                               |        Validate whether the Arakoon process is running on the node         | 
+ |  ARA0100   |                      The Arakoon node is currently up to date with the master                     |                            No actions required                             | 
+ |  ARA0101   |                  The Arakoon slave is a couple of transactions behind the master                  |                      Wait for the catchup to complete                      | 
+ |  ARA0102   |                           The Arakoon slave is catching up to the master                          |                      Wait for the catchup to complete                      | 
+ |  ARA0200   |                         Connection can be established to the Arakoon node                         |                            No actions required                             | 
+ |  ARA0201   |                      Connection could not be established to the Arakoon node                      |        Validate whether the Arakoon process is running on the node         | 
+ |  ARA0202   |                                   The Arakoon cluster responded                                   |                            No actions required                             | 
+ |  ARA0300   |            Neither the TLX nor TLOG could be found on a node within the Arakoon cluster           |       Validate whether this Arakoon cluster has been setup correctly       | 
+ |  ARA0301   |                  No open TLOG could be found on a node within the Arakoon cluster                 |       Validate whether this Arakoon cluster has been setup correctly       | 
+ |  ARA0302   |                        The Arakoon cluster does not require collapsing yet                        |                            No actions required                             | 
+ |  ARA0303   |                              The Arakoon cluster requires collapsing                              |                        Collapse the Arakoon cluster                        | 
+ |  ARA0400   |                     High amount of TCP connection towards the Arakoon cluster                     |                             No action required                             | 
+ |  ARA0401   |                    Normal amount of TCP connection towards the Arakoon cluster                    |                             No action required                             | 
+ |  ARA0401   |                     High amount of TCP connection towards the Arakoon cluster                     |                             No action required                             | 
+ |  FWK0001   |                        Log file size is bigger than the given maximum size                        |       Change log level to log relevant items and enable log rotation       | 
+ |  FWK0002   |                                   A required package is missing                                   |                       Install this required package                        | 
+ |  FWK0003   |                              The directory's owner is not as expected                             |                  Change the ownership to the correct user                  | 
+ |  FWK0004   |                             The directory's rights are not as expected                            |                  Change the rights to the suggested ones                   | 
+ |  FWK0005   |                         The StorageRouter is unable to resolve a hostname                         |          Validate the DNS settings and connection to the internet          | 
+ |  FWK0006   |         There are volumes that are registered in the Volumedriver and not in the Framework        |     Validate if Celery is still working and sync the vdisks to reality     | 
+ |  FWK0007   |               There are Volumes registered in the Framework that are gone in reality              |     Validate if Celery is still working and sync the vdisks to reality     | 
+ |  FWK0100   |                               Unable to connect to Memcached server                               |             Validate whether Memcached is still up and running             | 
+ |  FWK0101   |                                 Unable to connect to Nginx server                                 |               Validate whether Nginx is still up and running               | 
+ |  FWK0102   |                                    Unable to connect to Celery                                    |              Validate whether Celery is still up and running               | 
+ |  FWK0200   |                               An OpenvStorage service is not running                              |                     Make sure this service is running                      | 
+ |  FWK0201   |                          No OpenvStorage service is running on this node                          |           Validate whether this node should be running services            | 
+ |  FWK0202   |                                      Celery is not responding                                     |      Verify whether Celery is up and running and configured properly       | 
+ |  FWK0203   |                                      Celery is not responding                                     |      Verify whether Celery is up and running and configured properly       | 
+ |  FWK0204   |                                      Celery is not responding                                     |      Verify whether Celery is up and running and configured properly       | 
+ |  FWK0205   |                            RabbitMQ is experiencing partition problems                            |     Verify whether RabbitMQ is up and running and configured properly      | 
+ |  FWK0300   |                      The StorageDriver has no StorageRouter associated to it                      |                Report this to the engineers of OpenvStorage                | 
+ |  FWK0400   |                     An entry was not found within the Configuration management                    |                Report this to the engineers of OpenvStorage                | 
+ |   GEN000   |             The SSH connection could not be established within a reasonable time frame            |           Validate whether this node can accept SSH connections            | 
+ |   GEN001   |                              The SSH connection could not established                             |           Validate whether this node can accept SSH connections            | 
+ |   GEN002   |               The SSH connection could not established due to authentication issues               |   Validate whether this node has access to all nodes within the cluster    | 
  |   HC0000   |                                            Default code                                           |                                Default code                                | 
+ |   HC0001   |                                 An unhandled exception was caught                                 |                Report this to the engineers of OpenvStorage                | 
  |  VOL0000   |                                         No vPools present                                         |                          Add vPools to this node                           | 
  |  VOL0001   |                                       vPool not on this node                                      |                         Extend vPool to this node                          | 
- |  VOL1001   |                            Volumedriver does not recognize this volume                            |                Verify whether this volume is still present                 | 
- |  VOL1002   | Volumedriver can't retrieve information about the volume. This indicates the volume might be down |                   Verify whether this volume is running                    | 
- |  VOL1003   |                       Volumedriver is not responding to calls (fast enough)                       |                Verify whether this volumedriver is running                 | 
- |  VOL1004   |      Volume is in the 'halted' state. The volume could still be failing over to another node      | A possible solution is restarting this volume (after the failover is done) | 
- |  VOL1011   |                           The volumes DTL state which is not recognized                           |                     Report this issue to OpenvStorage                      | 
- |  VOL1012   |                               The volumes DTL state is still syncing                              |                        Wait for the sync to finish                         | 
- |  VOL1013   |                                The volumes DTL should be configured                               |                     Configure the DTL for this volume                      | 
- |  VOL1014   |                                    The volumes DTL is degraded                                    |                  Perform the DTL checkup for this volume                   |
-
+ |  VOL0100   |                            Volumedriver does not recognize this volume                            |                Verify whether this volume is still present                 | 
+ |  VOL0101   | Volumedriver can't retrieve information about the volume. This indicates the volume might be down |                   Verify whether this volume is running                    | 
+ |  VOL0102   |      Volume is in the 'halted' state. The volume could still be failing over to another node      | A possible solution is restarting this volume (after the failover is done) | 
+ |  VOL0200   |                           The volume's DTL state which is not recognized                          |                Report this to the engineers of OpenvStorage                | 
+ |  VOL0201   |                              The volume's DTL state is still syncing                              |                        Wait for the sync to finish                         | 
+ |  VOL0202   |                               The volume's DTL should be configured                               |                     Configure the DTL for this volume                      | 
+ |  VOL0203   |                                    The volume's DTL is degraded                                   |                  Perform the DTL checkup for this volume                   | 
+ |  VOL0204   |                                      The volume's DTL is fine                                     |                     No action required for this volume                     | 
+ |  VOL0205   |                                    The volume's DTL is disabled                                   |                     No action required for this volume                     | 
+ |  VOL0300   |                       Volumedriver is not responding to calls (fast enough)                       |                Verify whether this Volumedriver is running                 |
