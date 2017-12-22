@@ -214,7 +214,7 @@ class OpenvStorageHealthCheck(object):
         :rtype: NoneType
         """
         logger.info('Checking local ovs services.')
-        client = SSHClient(OpenvStorageHealthCheck.LOCAL_SR)
+        client = SSHClient(System.get_my_storagerouter())
         service_manager = ServiceFactory.get_manager()
         services = [service for service in service_manager.list_services(client=client) if service.startswith(OpenvStorageHealthCheck.MODULE)]
         if len(services) == 0:
