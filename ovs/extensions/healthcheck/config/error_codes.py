@@ -58,7 +58,7 @@ class ErrorCodes(object):
         'ssh_connection_time': ErrorCode('GEN000', 'The SSH connection could not be established within a reasonable time frame', 'Validate whether this node can accept SSH connections'),
         'ssh_connection_fail': ErrorCode('GEN001', 'The SSH connection could not established', 'Validate whether this node can accept SSH connections'),
         'ssh_connection_authentication': ErrorCode('GEN002', 'The SSH connection could not established due to authentication issues', 'Validate whether this node has access to all nodes within the cluster'),
-
+        ###############
         # Healthcheck #
         ###############
         'default': ErrorCode('HC0000', 'Default code', 'Default code'),  # Used in the start of these error codes. Means no code is in place
