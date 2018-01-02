@@ -39,15 +39,16 @@ from ovs.extensions.healthcheck.decorators import cluster_check
 from ovs.extensions.healthcheck.config.error_codes import ErrorCodes
 from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
+from ovs.extensions.healthcheck.logger import Logger
 from ovs.extensions.services.servicefactory import ServiceFactory
-from ovs.log.log_handler import LogHandler
 
 
 class ArakoonHealthCheck(object):
     """
     A healthcheck for the arakoon persistent store
     """
-    logger = LogHandler.get('healthcheck', 'healthcheck_arakoon')
+
+    logger = Logger("healthcheck-healthcheck_arakoon")
     MODULE = 'arakoon'
 
     @classmethod

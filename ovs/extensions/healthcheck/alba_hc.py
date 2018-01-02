@@ -39,10 +39,10 @@ from ovs.extensions.healthcheck.helpers.backend import BackendHelper
 from ovs.extensions.healthcheck.helpers.exceptions import AlbaException, ConnectionFailedException, ConfigNotMatchedException, DiskNotFoundException, ObjectNotFoundException
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
+from ovs.extensions.healthcheck.logger import Logger
 from ovs.extensions.services.servicefactory import ServiceFactory
 from ovs.lib.alba import AlbaController
 from ovs.lib.helpers.toolbox import Toolbox
-from ovs.log.log_handler import LogHandler
 
 
 class AlbaHealthCheck(object):
@@ -58,7 +58,7 @@ class AlbaHealthCheck(object):
     NAMESPACE_TIMEOUT = 30  # In seconds
     BASE_NAMESPACE_KEY = 'ovs-healthcheck-'
 
-    logger = LogHandler.get('healthcheck', 'healthcheck_alba')
+    logger = Logger("healthcheck-healthcheck_alba")
 
     @classmethod
     def _check_backend_asds(cls, result_handler, asds, backend_name, config):
@@ -640,7 +640,7 @@ class AlbaHealthCheck(object):
             max_load = Configuration.get('ovs/framework/plugins/alba/config|nsm.maxload')
             sorted_nsm_clusters = sorted(alba_backend.nsm_clusters, key=lambda k: k.number)
             for nsm_cluster in sorted_nsm_clusters:
-                nsm_loads[nsm_cluster.number] = AlbaController.get_load(nsm_cluster)
+                nsm_loads[nsm_cluster.number] = AlbaController._get_load(nsm_cluster)
             overloaded = min(nsm_loads.values()) >= max_load
             if overloaded is False:
                 result_handler.success('NSMs for backend {0} are not overloaded'.format(alba_backend.name),
