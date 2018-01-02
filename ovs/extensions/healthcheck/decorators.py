@@ -31,6 +31,10 @@ def ensure_single_with_callback(key, callback=None, lock_type='local'):
     The cluster check could have some raceconditions when the following conditions are met:
     - Decorated method takes longer than 60s (volatilemutex limit is 60s) (memcache is unstable in keeping data);
     - The second acquire enters the callback and fetches the key from memcache while the key has not been set by the first (see below for fix).
+    :param key: Key to lock the ensure single with
+    :param callback: Callback function the execute if the lock is kept. Please note that only kwargs will be passed to the callback function
+    Current args support is messing up instanced methods / classmethods (Pointer is passed in args and no real way of detecting it)
+    :param lock_type: Type of lock (can be local or cluster)
     """
     def wrapper(func):
         @wraps(func)
@@ -76,9 +80,9 @@ def ensure_single_with_callback(key, callback=None, lock_type='local'):
                                     result_handler = arguments.pop(index)
                                     break
                             if result_handler is None:
-                                raise TypeError('Expected an instance of {}'.format(type(HCResults.HCResultCollector)))
+                                raise TypeError('Expected an instance of {0}'.format(type(HCResults.HCResultCollector)))
                             kwargs['result_handler'] = result_handler
-                    return callback_func(*tuple(arguments), **kwargs)
+                    return callback_func(**kwargs)
             finally:
                 _mutex.release()
         return wrapped
