@@ -456,25 +456,30 @@ class AlbaHealthCheck(object):
                     continue
                 working_disks = result_disks['working']
                 defective_disks = result_disks['broken']
-                # check if backend is available for vPOOL attachment / use
+                # Check if backend is available for vPool use
                 if backend['is_available_for_vpool']:
                     if len(defective_disks) == 0:
                         result_handler.success('Alba backend {0} should be available for VPool use. All asds are working fine!'.format(backend_name))
                     else:
                         result_handler.warning('Alba backend {0} should be available for VPool use with {1} asds, but there are {2} defective asds: {3}'
-                                               .format(backend_name, len(working_disks), len(defective_disks), ', '.join(defective_disks)))
+                                               .format(backend_name, len(working_disks), len(defective_disks), ', '.join(defective_disks)),
+                                               code=ErrorCodes.osd_defective)
                 else:
                     if len(working_disks) == 0 and len(defective_disks) == 0:
                         result_handler.skip('Alba backend {0} is not available for vPool use, there are no asds assigned to this backend!'.format(backend_name))
                     else:
                         result_handler.failure('Alba backend {0} is not available for vPool use, preset requirements not satisfied! There are {1} working asds AND {2} '
-                                               'defective asds!'.format(backend_name, len(working_disks), len(defective_disks)))
+                                               'defective asds!'.format(backend_name, len(working_disks), len(defective_disks)),
+                                               code=ErrorCodes.osd_defective_unsatisfiable)
         except NotFoundException as ex:
-            result_handler.failure('Failed to fetch the object with exception: {0}'.format(ex))
+            result_handler.failure('Failed to fetch the object with exception: {0}'.format(ex),
+                                   code=ErrorCodes.configuration_not_found)
         except ConnectionFailedException as ex:
-            result_handler.failure('Failed to connect to configuration master with exception: {0}'.format(ex))
+            result_handler.failure('Failed to connect to configuration master with exception: {0}'.format(ex),
+                                   code=ErrorCodes.arakoon_connection_failure)
         except (ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult) as e:
-            result_handler.failure('Seems like a arakoon has some problems: {0}'.format(e))
+            result_handler.failure('Seems like an Arakoon has some problems: {0}'.format(str(e)),
+                                   code=ErrorCodes.arakoon_problems)
 
     @staticmethod
     @cluster_check
@@ -495,26 +500,29 @@ class AlbaHealthCheck(object):
                 # {'1,2': {'max_disk_safety': 2, 'current_disk_safety': {<namespaces in safety buckets>} }
                 result_handler.info('Checking policy {0} with max. disk safety {1}'.format(policy_prefix, policy_details['max_disk_safety']), add_to_result=False)
                 if len(policy_details['current_disk_safety'].values()) == 0:
-                    result_handler.skip('No data/namespaces found on backend {0}.'.format(backend_name))
+                    result_handler.skip('No data/namespaces found on backend {0}.'.format(backend_name), add_to_result=False)
                     continue
-                # if there is only 1 bucket category that is equal to the max_disk_safety, all your data is safe
+                # If there is only 1 bucket category that is equal to the max_disk_safety, all your data is safe
                 if len(policy_details['current_disk_safety']) == 1 and policy_details['max_disk_safety'] in policy_details['current_disk_safety']:
                     # all data is safe!
-                    result_handler.success('All data is safe on backend {0} with {1} namespace(s)'.format(backend_name, len(policy_details['current_disk_safety'][policy_details['max_disk_safety']])))
+                    result_handler.success('All data is safe on backend {0} with {1} namespace(s)'.format(backend_name, len(policy_details['current_disk_safety'][policy_details['max_disk_safety']])),
+                                           code=ErrorCodes.disk_safety_ok)
                 else:
-                    # some data is not or less safe!
+                    # Some data is not or less safe!
                     for disk_safety, namespaces in policy_details['current_disk_safety'].iteritems():
                         if disk_safety == policy_details['max_disk_safety']:
-                            result_handler.success('The disk safety of {0} namespace(s) is/are totally safe!'.format(len(namespaces)))
+                            result_handler.success('The disk safety of {0} namespace(s) is/are totally safe!'.format(len(namespaces)),
+                                                   code=ErrorCodes.disk_safety_ok)
                         elif disk_safety != 0:
-                            # avoid failure override
+                            # Avoid failure override
                             output = ',\n'.join(['{0} with {1}% of its objects'.format(ns['namespace'], str(ns['amount_in_bucket'])) for ns in namespaces])
-                            result_handler.warning('The disk safety of {0} namespace(s) is {1}, max. disk safety is {2}: \n{3}'
-                                                   .format(len(namespaces), disk_safety, policy_details['max_disk_safety'], output))
+                            result_handler.warning('The disk safety of {0} namespace(s) is {1}, max. disk safety is {2}: \n{3}'.format(len(namespaces), disk_safety, policy_details['max_disk_safety'], output),
+                                                   code=ErrorCodes.disk_safety_warn)
                         else:
                             # @TODO: after x amount of hours in disk safety 0 put in error, else put in warning
                             output = ',\n'.join(['{0} with {1}% of its objects'.format(ns['namespace'], str(ns['amount_in_bucket'])) for ns in namespaces])
-                            result_handler.failure('The disk safety of {0} namespace(s) is/are ZERO: \n{1}'.format(len(namespaces), output))
+                            result_handler.failure('The disk safety of {0} namespace(s) is/are ZERO: \n{1}'.format(len(namespaces), output),
+                                                   code=ErrorCodes.disk_safety_error)
 
     @classmethod
     def get_disk_safety(cls, result_handler):
@@ -546,7 +554,8 @@ class AlbaHealthCheck(object):
                 cache_eviction_prefix_preset_pairs = AlbaCLI.run(command='get-maintenance-config', config=config)['cache_eviction_prefix_preset_pairs']
                 presets = AlbaCLI.run(command='list-presets', config=config)
             except AlbaException as ex:
-                result_handler.exception('Could not fetch alba information for backend {0} Message: {1}'.format(alba_backend.name, ex))
+                result_handler.exception('Could not fetch alba information for backend {0} Message: {1}'.format(alba_backend.name, ex),
+                                         code=ErrorCodes.alba_cmd_fail)
                 # Do not execute further
                 continue
 
@@ -599,9 +608,11 @@ class AlbaHealthCheck(object):
             return
         for service_name in services:
             if service_manager.get_service_status(service_name, client) == 'active':
-                result_handler.success('Service {0} is running!'.format(service_name))
+                result_handler.success('Service {0} is running!'.format(service_name),
+                                       code=ErrorCodes.alba_service_running)
             else:
-                result_handler.failure('Service {0} is NOT running! '.format(service_name))
+                result_handler.failure('Service {0} is NOT running! '.format(service_name),
+                                       code=ErrorCodes.alba_service_down)
 
     @staticmethod
     @expose_to_cli(MODULE, 'proxy-port-test', HealthCheckCLIRunner.ADDON_TYPE)
@@ -618,9 +629,11 @@ class AlbaHealthCheck(object):
                 ip = service.alba_proxy.storagedriver.storage_ip
                 result = NetworkHelper.check_port_connection(port, ip)
                 if result:
-                    result_handler.success('Connection successfully established to service {0} on {1}:{2}'.format(service.name, ip, port))
+                    result_handler.success('Connection successfully established to service {0} on {1}:{2}'.format(service.name, ip, port),
+                                           code=ErrorCodes.alba_connection_ok)
                 else:
-                    result_handler.failure('Connection FAILED to service {0} on {1}:{2}'.format(service.name, ip, port))
+                    result_handler.failure('Connection FAILED to service {0} on {1}:{2}'.format(service.name, ip, port),
+                                           code=ErrorCodes.alba_connection_failure)
 
     @classmethod
     @cluster_check
@@ -646,9 +659,12 @@ class AlbaHealthCheck(object):
                 nsm_loads[nsm_cluster.number] = AlbaController._get_load(nsm_cluster)
             overloaded = min(nsm_loads.values()) >= max_load
             if overloaded is False:
-                result_handler.success('NSMs for backend {0} are not overloaded'.format(alba_backend.name))
+                result_handler.success('NSMs for backend {0} are not overloaded'.format(alba_backend.name),
+                                       code=ErrorCodes.nsm_load_ok)
             else:
                 if internal is True:
-                    result_handler.warning('NSMs for backend {0} are overloaded. The NSM checkup will take care of this'.format(alba_backend.name))
+                    result_handler.warning('NSMs for backend {0} are overloaded. The NSM checkup will take care of this'.format(alba_backend.name),
+                                           code=ErrorCodes.nsm_load_warn)
                 else:
-                    result_handler.failure('NSMs for backend {0} are overloaded. Please add your own NSM clusters to the backend'.format(alba_backend.name))
+                    result_handler.failure('NSMs for backend {0} are overloaded. Please add your own NSM clusters to the backend'.format(alba_backend.name),
+                                           code=ErrorCodes.nsm_load_failure)

@@ -69,6 +69,8 @@ class ErrorCodes(object):
         'osd_no_ip': ErrorCode('ALBA0100', 'An OSD has no associated IPs', 'Validate whether the asd-manager registered the correct IPs'),
         'osd_broken': ErrorCode('ALBA0101', 'An OSD seems to be broken', 'Validate whether the OSD is running correctly'),
         'osd_object_download_fail': ErrorCode('ALBA0102', 'An OSD did not return the correct object', 'Validate whether the OSD is running correctly'),
+        'osd_defective': ErrorCode('ALBA0103', 'One or more OSDs are not responding', 'Validate whether the OSD is running correctly'),
+        'osd_defective_unsatisfiable': ErrorCode('ALBA104', 'One or more OSDs are not responding and the preset is no longer satisfiable!', 'Validate whether the OSD is running correctly'),
         # Proxy
         'proxy_namespace_create': ErrorCode('ALBA0200', 'The namespace was successfully created through the proxy', no_action),
         'proxy_namespace_fetch': ErrorCode('ALBA0201', 'The namespace was successfully fetched through the proxy', no_action),
@@ -77,6 +79,20 @@ class ErrorCodes(object):
         'proxy_verify_obj': ErrorCode('ALBA0204', 'The object\'s contents did not change', no_action),
         'proxy_verify_obj_fail': ErrorCode('ALBA0205', 'The object\'s contents changed', engineer_report),
         'proxy_problems': ErrorCode('ALBA0206', 'Testing the proxies was unsuccessful', 'Look for previous errors and act accordingly'),
+        # Disk safety
+        'disk_safety_ok': ErrorCode('ALBA0300', 'All data for the backend is safe, no data is at risk', no_action),
+        'disk_safety_warn': ErrorCode('ALBA0301', 'Not all data is completely safe, certain fragments are to be repaired', 'Validate whether all OSDs are running'),
+        'disk_safety_error': ErrorCode('ALBA0302', 'The data is at risk or might have suffered some loss!', 'Validate whether all OSDs are running'),
+        # Services
+        'alba_service_running': ErrorCode('ALBA0400', 'The Alba service is up and running', no_action),
+        'alba_service_down': ErrorCode('ALBA0401', 'The Alba service is not running', 'Validate whether the Alba service has been started'),
+        # Connections
+        'alba_connection_ok': ErrorCode('ALBA0500', 'Connection established to the Alba service', no_action),
+        'alba_connection_failure': ErrorCode('ALBA0501', 'Connection could not be established to the Alba service', 'Validate whether the Alba service has been started'),
+        # NSM
+        'nsm_load_ok': ErrorCode('ALBA0600', 'The backend\'s NSM Arakoons are not overloaded', no_action),
+        'nsm_load_warn': ErrorCode('ALBA0601', 'The backend\'s NSM Arakoons are overloaded', 'No action required. The Framework will pick this up'),
+        'nsm_load_failure': ErrorCode('ALBA0602', 'The backend\'s NSM Arakoons are overloaded', 'The NSMs are not handled by the Framework. Register new NSM hosts to the cluster'),
         #############
         # Framework #
         #############
@@ -108,6 +124,7 @@ class ErrorCodes(object):
         ###########
         'master_none': ErrorCode('ARA000', 'The Arakoon cluster could not determine a master', 'Validate if the Arakoon cluster still has a majority'),
         'node_missing': ErrorCode('ARA001', 'The Arakoon cluster is missing a node', 'Validate whether the Arakoon process is running on the node'),
+        'arakoon_problems': ErrorCode('ARA0002', 'The Arakoon cluster seems to have some issues', 'Check previously logged messages'),
         # Transactions
         'node_up_to_date': ErrorCode('ARA0100', 'The Arakoon node is currently up to date with the master', 'No actions required'),
         'master_behind': ErrorCode('ARA0101', 'The Arakoon slave is a couple of transactions behind the master', 'Wait for the catchup to complete'),
