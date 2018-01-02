@@ -35,8 +35,9 @@ from ovs_extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNoMaster, 
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.generic.sshclient import SSHClient, TimeOutException, NotAuthenticatedException, UnableToConnectException
 from ovs_extensions.generic.toolbox import ExtensionsToolbox
-from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
 from ovs.extensions.healthcheck.decorators import cluster_check
+from ovs.extensions.healthcheck.config.error_codes import ErrorCodes
+from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.services.servicefactory import ServiceFactory
 from ovs.log.log_handler import LogHandler
@@ -112,7 +113,8 @@ class ArakoonHealthCheck(object):
                     if len(missing_ids) > 0:
                         for missing_id in missing_ids:
                             node_config = node_info[missing_id]
-                            result_handler.failure('{0} is missing node: {1}'.format(identifier, '{0} ({1}:{2})'.format(node_config.name, node_config.ip, node_config.client_port)))
+                            result_handler.failure('{0} is missing node: {1}'.format(identifier, '{0} ({1}:{2})'.format(node_config.name, node_config.ip, node_config.client_port)),
+                                                   code=ErrorCodes.node_missing)
                     highest_id = max(node_is.iteritems(), key=operator.itemgetter(1))[0]
                     for node_id, transactions in node_is.iteritems():
                         if node_id == highest_id:
@@ -122,16 +124,17 @@ class ArakoonHealthCheck(object):
                         log = 'Node {0} ({1}:{2}) for {3} {{0}} ({4}/{5})'.format(node_config.name, node_config.ip, node_config.client_port,
                                                                                   identifier, transactions_behind, max_transactions_behind)
                         if transactions == 0:
-                            result_handler.warning(log.format('is catching up'))
+                            result_handler.warning(log.format('is catching up'), code=ErrorCodes.slave_catch_up)
                         elif transactions_behind > max_transactions_behind:
-                            result_handler.failure(log.format('is behind the master'))
+                            result_handler.failure(log.format('is behind the master'), code=ErrorCodes.master_behind)
                         else:
-                            result_handler.success(log.format('is up to date'))
+                            result_handler.success(log.format('is up to date'), code=ErrorCodes.node_up_to_date)
                 except (ArakoonNoMaster, ArakoonNoMasterResult) as ex:
-                    result_handler.failure('{0} cannot find a master. (Message: {1})'.format(identifier, cluster_name, str(ex)))
+                    result_handler.failure('{0} cannot find a master. (Message: {1})'.format(identifier, cluster_name, str(ex)), code=ErrorCodes.master_none)
                 except Exception as ex:
                     cls.logger.exception('Unhandled exception during the nodes check')
-                    result_handler.exception('Testing {0} threw an unhandled exception. (Message: {1})'.format(identifier, cluster_name, str(ex)))
+                    result_handler.exception('Testing {0} threw an unhandled exception. (Message: {1})'.format(identifier, cluster_name, str(ex)),
+                                             code=ErrorCodes.unhandled_exception)
 
     @classmethod
     @cluster_check
@@ -168,12 +171,14 @@ class ArakoonHealthCheck(object):
                                 except Exception:
                                     message = 'Connection to {0} could not be established due to an unhandled exception.'.format(identifier_log)
                                     cls.logger.exception(message)
-                                    result_handler.exception(message)
+                                    result_handler.exception(message, code=ErrorCodes.unhandled_exception)
                         continue
                     if stats['result'] is True:
-                        result_handler.success('Connection established to {0}'.format(identifier_log))
+                        result_handler.success('Connection established to {0}'.format(identifier_log),
+                                               code=ErrorCodes.arakoon_connection_ok)
                     else:
-                        result_handler.failure('Connection could not be established to {0}'.format(identifier_log))
+                        result_handler.failure('Connection could not be established to {0}'.format(identifier_log),
+                                               code=ErrorCodes.arakoon_connection_failure)
 
     @classmethod
     def _get_port_connections(cls, result_handler, arakoon_clusters, batch_size=10):
@@ -275,34 +280,35 @@ class ArakoonHealthCheck(object):
                                     # Raise the thrown exception
                                     raise exception
                                 except TimeOutException:
-                                    result_handler.warning('Connection to {0} has timed out'.format(identifier_log))
+                                    result_handler.warning('Connection to {0} has timed out'.format(identifier_log), code=ErrorCodes.ssh_connection_time)
                                 except (socket.error, UnableToConnectException):
                                     result_handler.failure(
-                                        'Connection to {0} could not be established'.format(identifier_log))
+                                        'Connection to {0} could not be established'.format(identifier_log), code=ErrorCodes.ssh_connection_fail)
                                 except NotAuthenticatedException:
-                                    result_handler.skip(
-                                        'Connection to {0} could not be authenticated. This node has no access to the Arakoon node.'.format(identifier_log))
+                                    result_handler.skip('Connection to {0} could not be authenticated. This node has no access to the Arakoon node.'.format(identifier_log),
+                                                        code=ErrorCodes.ssh_connection_authentication)
                                 except Exception:
                                     message = 'Connection to {0} could not be established due to an unhandled exception.'.format(identifier_log)
                                     cls.logger.exception(message)
-                                    result_handler.exception(message)
+                                    result_handler.exception(message, code=ErrorCodes.unhandled_exception)
                             elif step == 'stat_dir':
                                 try:
                                     raise exception
                                 except Exception:
                                     message = 'Unable to list the contents of the tlog directory ({0}) for {1}'.format(node.tlog_dir, identifier_log)
                                     cls.logger.exception(message)
-                                    result_handler.exception(message)
+                                    result_handler.exception(message, code=ErrorCodes.unhandled_exception)
                         continue
                     tlx_files = stats['result']['tlx']
                     tlog_files = stats['result']['tlog']
                     if any(item is None for item in [tlx_files, tlog_files]):
                         # Exception occurred but no errors were logged
-                        result_handler.exception('Neither the tlx or tlog files could be found in the tlog directory ({0}) for {1}'.format(node.tlog_dir, identifier_log))
+                        result_handler.exception('Neither the tlx or tlog files could be found in the tlog directory ({0}) for {1}'.format(node.tlog_dir, identifier_log),
+                                                 code=ErrorCodes.tlx_tlog_not_found)
                         continue
                     if len(tlog_files) == 0:
                         # A tlog should always be present
-                        result_handler.failure('{0} has no open tlog'.format(identifier_log))
+                        result_handler.failure('{0} has no open tlog'.format(identifier_log), code=ErrorCodes.tlog_not_found)
                         continue
                     if len(tlx_files) < min_tlx_amount:
                         result_handler.skip('{0} only has {1} tlx, not worth collapsing (required: {2})'.format(identifier_log, len(tlx_files), min_tlx_amount))
@@ -310,9 +316,11 @@ class ArakoonHealthCheck(object):
                     # Compare youngest tlog and oldest tlx timestamp
                     seconds_difference = int(tlog_files[-1][0]) - int(tlx_files[0][0])
                     if max_age_seconds > seconds_difference:
-                        result_handler.success('{0} should not be collapsed. The oldest tlx is at least {1} days younger than the youngest tlog (actual age: {2})'.format(identifier_log, max_collapse_age, str(timedelta(seconds=seconds_difference))))
+                        result_handler.success('{0} should not be collapsed. The oldest tlx is at least {1} days younger than the youngest tlog (actual age: {2})'.format(identifier_log, max_collapse_age, str(timedelta(seconds=seconds_difference))),
+                                               code=ErrorCodes.collapse_ok)
                     else:
-                        result_handler.failure('{0} should be collapsed. The oldest tlx is currently {1} old'.format(identifier_log, str(timedelta(seconds=seconds_difference))))
+                        result_handler.failure('{0} should be collapsed. The oldest tlx is currently {1} old'.format(identifier_log, str(timedelta(seconds=seconds_difference))),
+                                               code=ErrorCodes.collapse_not_ok)
 
     @classmethod
     def _retrieve_stats(cls, result_handler, arakoon_clusters, batch_size=10):
@@ -426,12 +434,14 @@ class ArakoonHealthCheck(object):
                 cluster_name = cluster['cluster_name']
                 try:
                     arakoon_client.nop()
-                    result_handler.success('Arakoon {0} responded'.format(cluster_name))
+                    result_handler.success('Arakoon {0} responded'.format(cluster_name), code=ErrorCodes.arakoon_responded)
                 except (ArakoonNoMaster, ArakoonNoMasterResult) as ex:
-                    result_handler.failure('Arakoon {0} cannot find a master. (Message: {1})'.format(cluster_name, str(ex)))
+                    result_handler.failure('Arakoon {0} cannot find a master. (Message: {1})'.format(cluster_name, str(ex)),
+                                           code=ErrorCodes.master_none)
                 except Exception as ex:
                     cls.logger.exception('Unhandled exception during the integrity check')
-                    result_handler.exception('Arakoon {0} threw an unhandled exception. (Message: {1})'.format(cluster_name, str(ex)))
+                    result_handler.exception('Arakoon {0} threw an unhandled exception. (Message: {1})'.format(cluster_name, str(ex)),
+                                             code=ErrorCodes.unhandled_exception)
 
     @classmethod
     @cluster_check
@@ -475,34 +485,37 @@ class ArakoonHealthCheck(object):
                                     # Raise the thrown exception
                                     raise exception
                                 except TimeOutException:
-                                    result_handler.warning('Connection to {0} has timed out'.format(identifier_log))
+                                    result_handler.warning('Connection to {0} has timed out'.format(identifier_log), code=ErrorCodes.ssh_connection_time)
                                 except (socket.error, UnableToConnectException):
                                     result_handler.failure(
-                                        'Connection to {0} could not be established'.format(identifier_log))
+                                        'Connection to {0} could not be established'.format(identifier_log), code=ErrorCodes.ssh_connection_fail)
                                 except NotAuthenticatedException:
-                                    result_handler.skip(
-                                        'Connection to {0} could not be authenticated. This node has no access to the Arakoon node.'.format(identifier_log))
+                                    result_handler.skip('Connection to {0} could not be authenticated. This node has no access to the Arakoon node.'.format(identifier_log),
+                                                        code=ErrorCodes.ssh_connection_authentication)
                                 except Exception:
                                     message = 'Connection to {0} could not be established due to an unhandled exception.'.format(identifier_log)
                                     cls.logger.exception(message)
-                                    result_handler.exception(message)
+                                    result_handler.exception(message, code=ErrorCodes.unhandled_exception)
                             elif step == 'lsof':
                                 try:
                                     raise exception
                                 except Exception:
                                     message = 'Unable to list the file descriptors for {0}'.format(identifier_log)
                                     cls.logger.exception(message)
-                                    result_handler.exception(message)
+                                    result_handler.exception(message, ErrorCodes.unhandled_exception)
                         continue
                     fds = stats['result']['fds']
                     filtered_fds = [i for i in fds if i.split()[-1].strip('(').strip(')') in passed_connections]
                     if len(filtered_fds) >= warning_threshold:
                         if len(filtered_fds) >= error_threshold:
-                            result_handler.warning('Number of TCP connections exceeded the 95% warning threshold for {0}, ({1}/{2})'.format(identifier_log, len(filtered_fds), fd_limit))
+                            result_handler.warning('Number of TCP connections exceeded the 95% warning threshold for {0}, ({1}/{2})'.format(identifier_log, len(filtered_fds), fd_limit),
+                                                   code=ErrorCodes.arakoon_fd_95)
                         else:
-                            result_handler.warning('Number of TCP connections exceeded the 80% warning threshold for {0}, ({1}/{2})'.format(identifier_log, len(filtered_fds), fd_limit))
+                            result_handler.warning('Number of TCP connections exceeded the 80% warning threshold for {0}, ({1}/{2})'.format(identifier_log, len(filtered_fds), fd_limit),
+                                                   code=ErrorCodes.arakoon_fd_80)
                     else:
-                        result_handler.success('Number of TCP connections for {0} is healthy ({1}/{2})'.format(identifier_log, len(filtered_fds), fd_limit))
+                        result_handler.success('Number of TCP connections for {0} is healthy ({1}/{2})'.format(identifier_log, len(filtered_fds), fd_limit),
+                                               code=ErrorCodes.arakoon_fd_ok)
 
     @classmethod
     def _get_filedescriptors(cls, result_handler, arakoon_clusters, batch_size=10):
