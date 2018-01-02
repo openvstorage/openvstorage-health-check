@@ -32,7 +32,10 @@ class ErrorCodesType(type):
     This class is meant to be a metaclass
     """
     def __getattr__(self, item):
-        return self._internal_codes[item]
+        if item in self._internal_codes:
+            return self._internal_codes[item]
+        else:
+            raise AttributeError("{0} object has no attribute {1}".format(type(self).__name__, item))
 
     def __dir__(self):
         res = dir(type(self)) + list(self.__dict__.keys())

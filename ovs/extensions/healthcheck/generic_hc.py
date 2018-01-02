@@ -129,9 +129,9 @@ class OpenvStorageHealthCheck(object):
             result_handler.info('Checking port {0} of service {1}.'.format(port, key), add_to_result=False)
             result = NetworkHelper.check_port_connection(port, ip)
             if result:
-                result_handler.success('Connection successfully established to service {0} on {1}:{2}'.format(key, ip, port), code=getattr(ErrorCodes, 'port_'.format(key)))
+                result_handler.success('Connection successfully established to service {0} on {1}:{2}'.format(key, ip, port), code=getattr(ErrorCodes, 'port_{0}'.format(key)))
             else:
-                result_handler.failure('Connection FAILED to service {0} on {1}:{2}'.format(key, ip, port), code=getattr(ErrorCodes, 'port_'.format(key)))
+                result_handler.failure('Connection FAILED to service {0} on {1}:{2}'.format(key, ip, port), code=getattr(ErrorCodes, 'port_{0}'.format(key)))
 
     @staticmethod
     @expose_to_cli(MODULE, 'celery-ports-test', HealthCheckCLIRunner.ADDON_TYPE)
