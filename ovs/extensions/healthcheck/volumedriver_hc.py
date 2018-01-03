@@ -61,9 +61,9 @@ class VolumedriverHealthCheck(object):
             vdisk = VDisk(vdisk_guid)
             vdisk.invalidate_dynamics(['dtl_status', 'info'])
             if vdisk.dtl_status == 'ok_standalone' or vdisk.dtl_status == 'disabled':
-                result_handler.success('VDisk {0}s DTL is disabled'.format(vdisk.name))
+                result_handler.success('VDisk {0}s DTL is disabled'.format(vdisk.name), code=ErrorCodes.volume_dtl_standalone)
             elif vdisk.dtl_status == 'ok_sync':
-                result_handler.success('VDisk {0}s DTL is enabled and running.'.format(vdisk.name))
+                result_handler.success('VDisk {0}s DTL is enabled and running.'.format(vdisk.name), code=ErrorCodes.volume_dtl_ok)
             elif vdisk.dtl_status == 'degraded':
                 result_handler.warning('VDisk {0}s DTL is degraded.'.format(vdisk.name), code=ErrorCodes.volume_dtl_degraded)
             elif vdisk.dtl_status == 'checkup_required':
@@ -225,7 +225,7 @@ class VolumedriverHealthCheck(object):
                     break
 
             if storagedriver is None:
-                result_handler.failure('Could not associate a storagedriver with this StorageRouter')
+                result_handler.failure('Could not associate a storagedriver with this StorageRouter', code=ErrorCodes.std_no_str)
                 return
 
             volume_states = {'max_redir': [], 'connection': [], 'not_found': [], 'halted': []}
@@ -239,7 +239,7 @@ class VolumedriverHealthCheck(object):
                 # Filter out for this machine, object registry client goes to the arakoon, when these exceptions occur,
                 # just raise (will give an error to ops, just like the arakoon checks will)
                 volumes = [volume for volume in volumes if objectregistry_client.find(volume).node_id() == storagedriver.storagedriver_id]
-                result_handler.info('Found the following volumes on this machine: {0}'.format(', '.join(volumes)))
+                result_handler.info('Found the following volumes on this machine: {0}'.format(', '.join(volumes)), add_to_result=False)
                 for volume in volumes:
                     try:
                         # Check if the information can be retrieved about the volume

@@ -43,7 +43,7 @@ class RabbitMQ(object):
         # check if rabbitmq is available on the ip
         if not RabbitMQ._check_rabbitmq_ip(ip):
             raise ValueError('RabbitMQ on {0} could not be found.'.format(ip))
-
+        self._service_manager = ServiceFactory.get_manager()
         self.ip = ip
         if RabbitMQ.INTERNAL:
             self._storagerouter = StorageRouterList.get_by_ip(ip)
@@ -51,8 +51,6 @@ class RabbitMQ(object):
 
         if not self.check_management_plugin():
             self.enable_management_plugin()
-
-        self._service_manager = ServiceFactory.get_manager()
 
     def list_queues(self):
         """

@@ -28,6 +28,7 @@ from ovs.dal.lists.vpoollist import VPoolList
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.generic.system import System
+from ovs.extensions.healthcheck.config.error_codes import ErrorCodes
 from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
 from ovs.extensions.healthcheck.helpers.filesystem import FilesystemHelper
 from ovs.extensions.healthcheck.helpers.helper import Helper
@@ -81,15 +82,15 @@ class OpenvStorageHealthCheck(object):
             # check if logfile is larger than max_size
             if os.stat(c_files).st_size < 1024 ** 2 * max_log_size:
                 good_size.append(c_files)
-                result_handler.success('Logfile {0} size is fine!'.format(c_files))
+                result_handler.success('Logfile {0} size is fine!'.format(c_files), code=ErrorCodes.log_file_size)
             else:
                 too_big.append(c_files)
-                result_handler.warning('Logfile {0} is larger than {1} MB!'.format(c_files, max_log_size))
+                result_handler.warning('Logfile {0} is larger than {1} MB!'.format(c_files, max_log_size), code=ErrorCodes.log_file_size)
 
         if len(too_big) != 0:
-            result_handler.warning('The following log files are too big: {0}.'.format(', '.join(too_big)))
+            result_handler.warning('The following log files are too big: {0}.'.format(', '.join(too_big)), code=ErrorCodes.log_file_size)
         else:
-            result_handler.success('All log files are ok!')
+            result_handler.success('All log files are ok!', code=ErrorCodes.log_file_size)
 
     @staticmethod
     @expose_to_cli(MODULE, 'port-ranges-test', HealthCheckCLIRunner.ADDON_TYPE)
@@ -154,9 +155,9 @@ class OpenvStorageHealthCheck(object):
             result_handler.info('Checking port {0} of service {1}.'.format(port, key), add_to_result=False)
             result = NetworkHelper.check_port_connection(port, ip)
             if result:
-                result_handler.success('Connection successfully established to service {0} on {1}:{2}'.format(key, ip, port))
+                result_handler.success('Connection successfully established to service {0} on {1}:{2}'.format(key, ip, port), code=getattr(ErrorCodes, 'port_{0}'.format(key)))
             else:
-                result_handler.failure('Connection FAILED to service {0} on {1}:{2}'.format(key, ip, port))
+                result_handler.failure('Connection FAILED to service {0} on {1}:{2}'.format(key, ip, port), code=getattr(ErrorCodes, 'port_{0}'.format(key)))
 
     @staticmethod
     @expose_to_cli(MODULE, 'celery-ports-test', HealthCheckCLIRunner.ADDON_TYPE)
@@ -179,16 +180,16 @@ class OpenvStorageHealthCheck(object):
             from celery.task.control import inspect
             stats = inspect().stats()
             if stats:
-                result_handler.success('Successfully connected to Celery on all nodes.')
+                result_handler.success('Successfully connected to Celery on all nodes.', code=ErrorCodes.port_celery)
             else:
-                result_handler.failure('No running Celery workers were found.')
+                result_handler.failure('No running Celery workers were found.', code=ErrorCodes.port_celery)
         except IOError as ex:
             msg = 'Could not connect to Celery. Got {0}.'.format(ex)
             if len(ex.args) > 0 and errorcode.get(ex.args[0]) == 'ECONNREFUSED':
                 msg += ' Check that the RabbitMQ server is running.'
-                result_handler.failure(msg)
+                result_handler.failure(msg, code=ErrorCodes.port_celery)
         except ImportError as ex:
-            result_handler.failure('Could not import the celery module. Got {}'.format(str(ex)))
+            result_handler.failure('Could not import the celery module. Got {}'.format(str(ex)), code=ErrorCodes.port_celery)
 
     @staticmethod
     @expose_to_cli(MODULE, 'packages-test', HealthCheckCLIRunner.ADDON_TYPE)
@@ -211,10 +212,12 @@ class OpenvStorageHealthCheck(object):
             version = installed.get(package)
             if version:
                 version = str(version)
-                result_handler.success('Package {0} is installed with version {1}'.format(package, version))
+                result_handler.success('Package {0} is installed with version {1}'.format(package, version),
+                                       code=ErrorCodes.package_required)
             else:
                 if package in base_packages:
-                    result_handler.warning('Package {0} is not installed.'.format(package))
+                    result_handler.warning('Package {0} is not installed.'.format(package),
+                                           code=ErrorCodes.package_required)
                 elif package in extra_packages:
                     result_handler.skip('Package {0} is not installed.'.format(package))
 
@@ -229,16 +232,16 @@ class OpenvStorageHealthCheck(object):
         :rtype: NoneType
         """
         logger.info('Checking local ovs services.')
-        client = SSHClient(OpenvStorageHealthCheck.LOCAL_SR)
+        client = SSHClient(System.get_my_storagerouter())
         service_manager = ServiceFactory.get_manager()
         services = [service for service in service_manager.list_services(client=client) if service.startswith(OpenvStorageHealthCheck.MODULE)]
         if len(services) == 0:
             logger.warning('Found no local ovs services.')
         for service_name in services:
             if service_manager.get_service_status(service_name, client) == 'active':
-                logger.success('Service {0} is running!'.format(service_name))
+                logger.success('Service {0} is running!'.format(service_name), code=ErrorCodes.process_fwk)
             else:
-                logger.failure('Service {0} is not running, please check this.'.format(service_name))
+                logger.failure('Service {0} is not running, please check this.'.format(service_name), code=ErrorCodes.process_fwk)
 
     @staticmethod
     @timeout(CELERY_CHECK_TIME)
@@ -268,17 +271,16 @@ class OpenvStorageHealthCheck(object):
         :rtype: NoneType
         """
         result_handler.info('Checking if OVS-WORKERS are running smoothly.', add_to_result=False)
-
-        # checking celery
+        # Checking celery
         try:
-            # basic celery check
+            # Basic celery check
             OpenvStorageHealthCheck._check_celery()
-            result_handler.success('The OVS-WORKERS are working smoothly!')
+            result_handler.success('The OVS-WORKERS are working smoothly!', code=ErrorCodes.process_celery_timeout)
         except TimeoutError:
-            # apparently the basic check failed, so we are going crazy
-            result_handler.failure('The test timed out after {0}s! Is RabbitMQ and ovs-workers running?'.format(OpenvStorageHealthCheck.CELERY_CHECK_TIME))
+            # Apparently the basic check failed, so we are going crazy
+            result_handler.failure('The test timed out after {0}s! Is RabbitMQ and ovs-workers running?'.format(OpenvStorageHealthCheck.CELERY_CHECK_TIME), code=ErrorCodes.process_celery_timeout)
         except Exception as ex:
-            result_handler.failure('The celery check has failed with {0}'.format(str(ex)))
+            result_handler.failure('The celery check has failed with {0}'.format(str(ex)), code=ErrorCodes.process_celery_timeout)
 
     @staticmethod
     @expose_to_cli(MODULE, 'directories-test', HealthCheckCLIRunner.ADDON_TYPE)
@@ -290,15 +292,16 @@ class OpenvStorageHealthCheck(object):
         :return: None
         :rtype: NoneType
         """
-        result_handler.info('Checking if OWNERS are set correctly on certain maps.', add_to_result=False)
+        result_handler.info('Checking if owner rights are set correctly on certain directories.', add_to_result=False)
         for dirname, owner_settings in Helper.owners_files.iteritems():
             # check if directory/file exists
             if os.path.exists(dirname):
                 if owner_settings.get('user') == FilesystemHelper.get_owner_of_file(dirname) \
                         and owner_settings.get('group') == FilesystemHelper.get_group_of_file(dirname):
-                    result_handler.success('Directory {0} has correct owners!'.format(dirname))
+                    result_handler.success('Directory {0} has correct owners!'.format(dirname), code=ErrorCodes.directory_ownership_incorrect)
                 else:
-                    result_handler.warning('Directory {0} has INCORRECT owners! It must be OWNED by USER={1} and GROUP={2}'.format(dirname, owner_settings.get('user'), owner_settings.get('group')))
+                    result_handler.warning('Directory {0} has INCORRECT owners! It must be OWNED by USER={1} and GROUP={2}'.format(dirname, owner_settings.get('user'), owner_settings.get('group')),
+                                           code=ErrorCodes.directory_ownership_incorrect)
             else:
                 result_handler.skip('Directory {0} does not exists!'.format(dirname))
 
@@ -307,9 +310,10 @@ class OpenvStorageHealthCheck(object):
             # check if directory/file exists
             if os.path.exists(dirname):
                 if FilesystemHelper.check_rights_of_file(dirname, rights):
-                    result_handler.success('Directory {0} has correct rights!'.format(dirname))
+                    result_handler.success('Directory {0} has correct rights!'.format(dirname), code=ErrorCodes.directory_rights_incorrect)
                 else:
-                    result_handler.warning('Directory {0} has INCORRECT rights! It must be CHMOD={1} '.format(dirname, rights))
+                    result_handler.warning('Directory {0} has INCORRECT rights! It must be CHMOD={1} '.format(dirname, rights),
+                                           code=ErrorCodes.directory_rights_incorrect)
             else:
                 result_handler.skip('Directory {0} does not exists!'.format(dirname))
 
@@ -328,9 +332,10 @@ class OpenvStorageHealthCheck(object):
         result_handler.info('Checking DNS resolving.', add_to_result=False)
         result = NetworkHelper.check_if_dns_resolves(fqdn)
         if result is True:
-            result_handler.success('DNS resolving works!')
+            result_handler.success('DNS resolving works!', code=ErrorCodes.dns_resolve_fail)
         else:
-            result_handler.warning('DNS resolving doesnt work, please check /etc/resolv.conf or add correct DNS server and make it immutable: "sudo chattr +i /etc/resolv.conf"!')
+            result_handler.warning('DNS resolving doesnt work, please check /etc/resolv.conf or add correct DNS server and make it immutable: "sudo chattr +i /etc/resolv.conf"!',
+                                   code=ErrorCodes.dns_resolve_fail)
 
     @staticmethod
     @expose_to_cli(MODULE, 'zombie-processes-test', HealthCheckCLIRunner.ADDON_TYPE)
@@ -347,7 +352,7 @@ class OpenvStorageHealthCheck(object):
 
         result_handler.info('Checking for zombie/dead processes.', add_to_result=False)
 
-        # check for zombie'd and dead processes
+        # Check for zombie'd and dead processes
         for proc in psutil.process_iter():
             try:
                 pinfo = proc.as_dict(attrs=['pid', 'name', 'status'])
@@ -360,17 +365,19 @@ class OpenvStorageHealthCheck(object):
                 if pinfo.get('status') == psutil.STATUS_DEAD:
                     dead_processes.append('{0}({1})'.format(pinfo.get('name'), pinfo.get('pid')))
 
-        # check if there zombie processes
+        # Check if there zombie processes
         if len(zombie_processes) == 0:
-            result_handler.success('There are no zombie processes on this node!')
+            result_handler.success('There are no zombie processes on this node!', code=ErrorCodes.process_zombie_found)
         else:
-            result_handler.warning('We DETECTED zombie processes on this node: {0}'.format(', '.join(zombie_processes)))
+            result_handler.warning('We DETECTED zombie processes on this node: {0}'.format(', '.join(zombie_processes)),
+                                   code=ErrorCodes.process_zombie_found)
 
-        # check if there dead processes
+        # Check if there dead processes
         if len(dead_processes) == 0:
-            result_handler.success('There are no dead processes on this node!')
+            result_handler.success('There are no dead processes on this node!', code=ErrorCodes.process_dead_found)
         else:
-            result_handler.warning('We DETECTED dead processes on this node: {0}'.format(', '.join(dead_processes)))
+            result_handler.warning('We DETECTED dead processes on this node: {0}'.format(', '.join(dead_processes)),
+                                   code=ErrorCodes.process_dead_found)
 
     @staticmethod
     @expose_to_cli(MODULE, 'model-test', HealthCheckCLIRunner.ADDON_TYPE)
@@ -396,34 +403,37 @@ class OpenvStorageHealthCheck(object):
                 # noinspection PyArgumentList
                 voldrv_volume_list = vp.storagedriver_client.list_volumes()
             except (ClusterNotReachableException, RuntimeError) as ex:
-                result_handler.warning('Seems like the volumedriver {0} is not running. Got {1}'.format(vp.name, str(ex)))
+                result_handler.warning('Seems like the volumedriver {0} is not running. Got {1}'.format(vp.name, str(ex)),
+                                       code=ErrorCodes.voldrv_connection_problem)
                 continue
 
             vdisk_volume_ids = []
-            # cross-reference model vs. volumedriver
+            # Cross-reference model vs. volumedriver
             for vdisk in vp.vdisks:
                 vdisk_volume_ids.append(vdisk.volume_id)
                 if vdisk.volume_id not in voldrv_volume_list:
                     missing_in_volumedriver.append(vdisk.guid)
                 else:
                     voldrv_volume_list.remove(vdisk.volume_id)
-            # cross-reference volumedriver vs. model
+            # Cross-reference volumedriver vs. model
             for voldrv_id in voldrv_volume_list:
                 if voldrv_id not in vdisk_volume_ids:
                     missing_in_model.append(voldrv_id)
 
-            # display discrepancies for vPool
+            # Display discrepancies for vPool
             if len(missing_in_volumedriver) != 0:
                 result_handler.warning('Detected volumes that are MISSING in volumedriver but are in ovsdb in vpool: {0} - vdisk guid(s):{1}.'
-                                       .format(vp.name, ' '.join(missing_in_volumedriver)))
+                                       .format(vp.name, ' '.join(missing_in_volumedriver)),
+                                       code=ErrorCodes.missing_volumedriver)
             else:
-                result_handler.success('No discrepancies found for ovsdb in vPool {0}'.format(vp.name))
+                result_handler.success('No discrepancies found for ovsdb in vPool {0}'.format(vp.name), code=ErrorCodes.missing_volumedriver)
 
             if len(missing_in_model) != 0:
                 result_handler.warning('Detected volumes that are AVAILABLE in volumedriver but are not in ovsdb in vpool: {0} - vdisk volume id(s):{1}'
-                                       .format(vp.name, ', '.join(missing_in_model)))
+                                       .format(vp.name, ', '.join(missing_in_model)),
+                                       code=ErrorCodes.missing_ovsdb)
             else:
-                result_handler.success('No discrepancies found for voldrv in vpool {0}'.format(vp.name))
+                result_handler.success('No discrepancies found for voldrv in vpool {0}'.format(vp.name), code=ErrorCodes.missing_ovsdb)
 
     @staticmethod
     @expose_to_cli(MODULE, 'verify-rabbitmq-test', HealthCheckCLIRunner.ADDON_TYPE)
@@ -441,9 +451,9 @@ class OpenvStorageHealthCheck(object):
             r = RabbitMQ(ip=OpenvStorageHealthCheck.LOCAL_SR.ip)
             partitions = r.partition_status()
             if len(partitions) == 0:
-                result_handler.success('RabbitMQ has no partition issues!')
+                result_handler.success('RabbitMQ has no partition issues!', code=ErrorCodes.process_rabbit_mq)
             else:
-                result_handler.failure('RabbitMQ has partition issues: {0}'.format(', '.join(partitions)))
+                result_handler.failure('RabbitMQ has partition issues: {0}'.format(', '.join(partitions)), code=ErrorCodes.process_rabbit_mq)
         else:
             result_handler.skip('RabbitMQ is not running/active on this server!')
 
