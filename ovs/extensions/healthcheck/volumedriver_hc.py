@@ -28,7 +28,8 @@ from ovs.extensions.healthcheck.logger import Logger
 from ovs.extensions.storageserver.storagedriver import StorageDriverConfiguration
 from ovs.lib.vdisk import VDiskController
 from timeout_decorator.timeout_decorator import TimeoutError
-from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, FileExistsException, LocalStorageRouterClient, MaxRedirectsExceededException, ObjectNotFoundException
+from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, FileExistsException, LocalStorageRouterClient,\
+    MaxRedirectsExceededException, ObjectNotFoundException
 
 
 class VolumedriverHealthCheck(object):
@@ -61,9 +62,9 @@ class VolumedriverHealthCheck(object):
             vdisk = VDisk(vdisk_guid)
             vdisk.invalidate_dynamics(['dtl_status', 'info'])
             if vdisk.dtl_status == 'ok_standalone' or vdisk.dtl_status == 'disabled':
-                result_handler.success('VDisk {0}s DTL is disabled'.format(vdisk.name))
+                result_handler.success('VDisk {0}s DTL is disabled'.format(vdisk.name), code=ErrorCodes.volume_dtl_standalone)
             elif vdisk.dtl_status == 'ok_sync':
-                result_handler.success('VDisk {0}s DTL is enabled and running.'.format(vdisk.name))
+                result_handler.success('VDisk {0}s DTL is enabled and running.'.format(vdisk.name), code=ErrorCodes.volume_dtl_ok)
             elif vdisk.dtl_status == 'degraded':
                 result_handler.warning('VDisk {0}s DTL is degraded.'.format(vdisk.name), code=ErrorCodes.volume_dtl_degraded)
             elif vdisk.dtl_status == 'checkup_required':
@@ -225,7 +226,7 @@ class VolumedriverHealthCheck(object):
                     break
 
             if storagedriver is None:
-                result_handler.failure('Could not associate a storagedriver with this StorageRouter')
+                result_handler.failure('Could not associate a storagedriver with this StorageRouter', code=ErrorCodes.std_no_str)
                 return
 
             volume_states = {'max_redir': [], 'connection': [], 'not_found': [], 'halted': []}
@@ -239,7 +240,7 @@ class VolumedriverHealthCheck(object):
                 # Filter out for this machine, object registry client goes to the arakoon, when these exceptions occur,
                 # just raise (will give an error to ops, just like the arakoon checks will)
                 volumes = [volume for volume in volumes if objectregistry_client.find(volume).node_id() == storagedriver.storagedriver_id]
-                result_handler.info('Found the following volumes on this machine: {0}'.format(', '.join(volumes)))
+                result_handler.info('Found the following volumes on this machine: {0}'.format(', '.join(volumes)), add_to_result=False)
                 for volume in volumes:
                     try:
                         # Check if the information can be retrieved about the volume
@@ -404,7 +405,7 @@ class VolumedriverHealthCheck(object):
         for std in VolumedriverHealthCheck.LOCAL_SR.storagedrivers:
             try:
                 std_config = StorageDriverConfiguration(std.vpool_guid, std.storagedriver_id)
-                client = src.LocalStorageRouterClient(std_config.remote_path)
+                client = LocalStorageRouterClient(std_config.remote_path)
                 for std_info in client.sco_cache_mount_point_info(str(std.storagedriver_id)):
                     if std_info.offlined is True:
                         result_handler.warning('Mountpoint at location {0} of storagedriver {1} is in offline state'.format(std_info.path, std.storagedriver_id))
