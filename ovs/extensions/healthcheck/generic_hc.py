@@ -204,17 +204,24 @@ class OpenvStorageHealthCheck(object):
         result_handler.info('Checking OVS packages: ', add_to_result=False)
         client = SSHClient(OpenvStorageHealthCheck.LOCAL_SR)
         package_manager = PackageFactory.get_manager()
-        base_packages = package_manager.package_names
-        extra_packages = list(Helper.packages)
-        all_packages = base_packages + extra_packages
-        installed = package_manager.get_installed_versions(client=client, package_names=all_packages)
-        for package in all_packages:
+        # Get all base packages
+        base_packages = set()
+        for names in package_manager.package_info['names'].itervalues():
+            base_packages = base_packages.union(names)
+        base_packages = list(base_packages)
+        extra_packages = Helper.packages
+        installed = package_manager.get_installed_versions(client=client, package_names=base_packages)
+        installed.update(package_manager.get_installed_versions(client=client, package_names=Helper.packages))
+        for package in base_packages + extra_packages:
             version = installed.get(package)
             if version:
                 version = str(version)
                 result_handler.success('Package {0} is installed with version {1}'.format(package, version),
                                        code=ErrorCodes.package_required)
             else:
+                if package in package_manager.package_info['mutually_exclusive']:
+                    # Mutually excluse package, so ignore
+                    continue
                 if package in base_packages:
                     result_handler.warning('Package {0} is not installed.'.format(package),
                                            code=ErrorCodes.package_required)

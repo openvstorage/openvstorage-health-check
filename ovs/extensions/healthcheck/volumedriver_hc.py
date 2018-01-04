@@ -28,7 +28,8 @@ from ovs.extensions.healthcheck.logger import Logger
 from ovs.extensions.storageserver.storagedriver import StorageDriverConfiguration
 from ovs.lib.vdisk import VDiskController
 from timeout_decorator.timeout_decorator import TimeoutError
-from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, FileExistsException, LocalStorageRouterClient, MaxRedirectsExceededException, ObjectNotFoundException
+from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException, FileExistsException, LocalStorageRouterClient,\
+    MaxRedirectsExceededException, ObjectNotFoundException
 
 
 class VolumedriverHealthCheck(object):
@@ -404,7 +405,7 @@ class VolumedriverHealthCheck(object):
         for std in VolumedriverHealthCheck.LOCAL_SR.storagedrivers:
             try:
                 std_config = StorageDriverConfiguration(std.vpool_guid, std.storagedriver_id)
-                client = src.LocalStorageRouterClient(std_config.remote_path)
+                client = LocalStorageRouterClient(std_config.remote_path)
                 for std_info in client.sco_cache_mount_point_info(str(std.storagedriver_id)):
                     if std_info.offlined is True:
                         result_handler.warning('Mountpoint at location {0} of storagedriver {1} is in offline state'.format(std_info.path, std.storagedriver_id))
