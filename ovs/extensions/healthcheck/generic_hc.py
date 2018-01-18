@@ -90,7 +90,7 @@ class OpenvStorageHealthCheck(object):
     @expose_to_cli('ovs', 'nginx-ports-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_nginx_ports(result_handler):
         """
-        Checks the extra ports from ovs
+        Checks if this node can connect to it's own Nginx
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
         :return: None
@@ -102,36 +102,41 @@ class OpenvStorageHealthCheck(object):
     @expose_to_cli(MODULE, 'memcached-ports-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_memcached_ports(result_handler):
         """
-        Checks the extra ports from ovs
+        Checks the connection of this node to all Memcached endpoints
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
         :return: None
         :rtype: NoneType
         """
-        return OpenvStorageHealthCheck._check_extra_ports(result_handler, 'memcached')
+        memcached_ips = [endpoint.rsplit(':')[0] for endpoint in Configuration.get('ovs/framework/memcache|endpoints', default=[])]
+        return OpenvStorageHealthCheck._check_extra_ports(result_handler, 'memcached', ips=memcached_ips)
 
     @staticmethod
-    def _check_extra_ports(result_handler, key):
+    def _check_extra_ports(result_handler, key, ips=None):
         """
         Checks the extra ports for key specified in the settings.json
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
         :param key: check all ports for this key
         :type key: string
+        :param ips: IPs to check the port on. Default the local IP
+        :type ips: list
         :return: None
         :rtype: NoneType
         """
+        if ips is None:
+            ips = [OpenvStorageHealthCheck.LOCAL_SR.ip]
         result_handler.info('Checking {0} ports'.format(key), add_to_result=False)
-        ip = OpenvStorageHealthCheck.LOCAL_SR.ip
         if key not in Helper.extra_ports:
             raise RuntimeError('Settings.json is incorrect! The extra ports to check do not have {0}'.format(key))
         for port in Helper.extra_ports[key]:
-            result_handler.info('Checking port {0} of service {1}.'.format(port, key), add_to_result=False)
-            result = NetworkHelper.check_port_connection(port, ip)
-            if result:
-                result_handler.success('Connection successfully established to service {0} on {1}:{2}'.format(key, ip, port), code=getattr(ErrorCodes, 'port_{0}'.format(key)))
-            else:
-                result_handler.failure('Connection FAILED to service {0} on {1}:{2}'.format(key, ip, port), code=getattr(ErrorCodes, 'port_{0}'.format(key)))
+            for ip in ips:
+                result_handler.info('Checking socket {0}:{1} of service {2}.'.format(ip, port, key), add_to_result=False)
+                result = NetworkHelper.check_port_connection(port, ip)
+                if result:
+                    result_handler.success('Connection successfully established to service {0} on {1}:{2}'.format(key, ip, port), code=getattr(ErrorCodes, 'port_{0}'.format(key)))
+                else:
+                    result_handler.failure('Connection FAILED to service {0} on {1}:{2}'.format(key, ip, port), code=getattr(ErrorCodes, 'port_{0}'.format(key)))
 
     @staticmethod
     @expose_to_cli(MODULE, 'celery-ports-test', HealthCheckCLIRunner.ADDON_TYPE)
