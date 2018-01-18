@@ -13,9 +13,7 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
-import shlex
 import socket
-import subprocess
 
 
 class NetworkHelper(object):
