@@ -302,26 +302,11 @@ class ArakoonHealthCheck(object):
                         continue
                     tlx_files = stats['result']['tlx']
                     tlog_files = stats['result']['tlog']
-                    headdb_files = stats['result']['headDB']
-                    avail_size = stats['result']['avail_size']
-
-                    if any(item is None for item in [tlx_files, tlog_files, avail_size]):
+                    if any(item is None for item in [tlx_files, tlog_files]):
                         # Exception occurred but no errors were logged
-                        result_handler.exception('Either the tlx or tlog files or available size could be found in/of the tlog directory ({0}) for {1}'.format(node.tlog_dir, identifier_log),
+                        result_handler.exception('Neither the tlx or tlog files could be found in the tlog directory ({0}) for {1}'.format(node.tlog_dir, identifier_log),
                                                  code=ErrorCodes.tlx_tlog_not_found)
                         continue
-                    if len(headdb_files) > 0:
-                        headdb_size = sum((f[2] for f in headdb_files))
-                        collapse_size_msg = 'Spare space for local collapse is '
-                        if avail_size >= headdb_size * 4:
-                            result_handler.success(collapse_size_msg + 'sufficient (n > 4x head.db size)')
-                        elif avail_size >= headdb_size * 3:
-                            result_handler.warning(collapse_size_msg + 'running short (n > 3x head.db size)')
-                        elif avail_size >= headdb_size * 2:
-                            result_handler.failure(collapse_size_msg + 'just enough (n > 2x head.db size')
-                        else:
-                            result_handler.failure(collapse_size_msg + 'insufficient (n <2 x head.db size')
-
                     if len(tlog_files) == 0:
                         # A tlog should always be present
                         result_handler.failure('{0} has no open tlog'.format(identifier_log), code=ErrorCodes.tlog_not_found)
@@ -335,7 +320,8 @@ class ArakoonHealthCheck(object):
                         result_handler.success('{0} should not be collapsed. The oldest tlx is at least {1} days younger than the youngest tlog (actual age: {2})'.format(identifier_log, max_collapse_age, str(timedelta(seconds=seconds_difference))),
                                                code=ErrorCodes.collapse_ok)
                     else:
-                        result_handler.failure('{0} should be collapsed. The oldest tlx is currently {1} old'.format(identifier_log, str(timedelta(seconds=seconds_difference))), code=ErrorCodes.collapse_not_ok)
+                        result_handler.failure('{0} should be collapsed. The oldest tlx is currently {1} old'.format(identifier_log, str(timedelta(seconds=seconds_difference))),
+                                               code=ErrorCodes.collapse_not_ok)
 
     @classmethod
     def _retrieve_stats(cls, result_handler, arakoon_clusters, batch_size=10):
@@ -369,9 +355,7 @@ class ArakoonHealthCheck(object):
                 for node_config in arakoon_config.nodes:
                     result = {'errors': [],
                               'result': {'tlx': [],
-                                         'tlog': [],
-                                         'headDB': [],
-                                         'avail_size': None}}
+                                         'tlog': []}}
                     # Build SSHClients outside the threads to avoid GIL
                     try:
                         client = clients.get(node_config.ip)
@@ -414,23 +398,18 @@ class ArakoonHealthCheck(object):
                 path = os.path.join(tlog_dir, '*')
                 try:
                     # List the contents of the tlog directory and sort by oldest modification date
-                    # Example output: (timestamp, name, size (bits)
-                    # 01111 file.tlog 101
-                    # 01112 file2.tlog 102
-                    timestamp_files = _client.run('stat -c "%Y %n %s" {0}'.format(path), allow_insecure=True)
-                    output['avail_size'] = _client.run("df {0} | tail -1 | awk '{{print $4}}'".format(path), allow_insecure=True)
+                    # Example output:
+                    # 01111 file.tlog
+                    # 01112 file2.tlog
+                    timestamp_files = _client.run('stat -c "%Y %n" {0}'.format(path), allow_insecure=True)
                 except Exception as _ex:
                     errors.append(('stat_dir', _ex))
                     raise
                 # Sort and separate the timestamp item files
-                for split_entry in sorted((timestamp_file.split() for timestamp_file in timestamp_files.splitlines()), key=lambda split: int(split[0])):
-                    file_name = split_entry[1]
-                    if file_name.endswith('tlx'):
-                        output['tlx'].append(split_entry)
-                    elif file_name.endswith('tlog'):
-                        output['tlog'].append(split_entry)
-                    elif file_name.startswith('head.db'):
-                        output['headDB'].append(split_entry)
+                output['tlx'] = sorted((timestamp_file.split() for timestamp_file in timestamp_files.splitlines()
+                                        if timestamp_file.split()[1].endswith('tlx')), key=lambda split: int(split[0]))
+                output['tlog'] = sorted((timestamp_file.split() for timestamp_file in timestamp_files.splitlines()
+                                         if timestamp_file.split()[1].endswith('tlog')), key=lambda split: int(split[0]))
             except Exception as _ex:
                 result_handler.warning('Could not retrieve the collapse information for {0} ({1})'.format(identifier, str(_ex)), add_to_result=False)
             finally:
