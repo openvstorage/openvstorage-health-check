@@ -311,16 +311,16 @@ class ArakoonHealthCheck(object):
                                                  code=ErrorCodes.tlx_tlog_not_found)
                         continue
                     if len(headdb_files) > 0:
-                        headdb_size = sum((f[2] for f in headdb_files))
+                        headdb_size = sum([int(i[2]) for i in headdb_files])
                         collapse_size_msg = 'Spare space for local collapse is '
                         if avail_size >= headdb_size * 4:
-                            result_handler.success(collapse_size_msg + 'sufficient (n > 4x head.db size)')
+                            result_handler.success('{0} sufficient (n > 4x head.db size)'.format(collapse_size_msg))
                         elif avail_size >= headdb_size * 3:
-                            result_handler.warning(collapse_size_msg + 'running short (n > 3x head.db size)')
+                            result_handler.warning('{0} running short (n > 3x head.db size)'.format(collapse_size_msg))
                         elif avail_size >= headdb_size * 2:
-                            result_handler.failure(collapse_size_msg + 'just enough (n > 2x head.db size')
+                            result_handler.failure('{0} just enough (n > 2x head.db size'.format(collapse_size_msg))
                         else:
-                            result_handler.failure(collapse_size_msg + 'insufficient (n <2 x head.db size')
+                            result_handler.failure('{0} insufficient (n <2 x head.db size'.format(collapse_size_msg))
 
                     if len(tlog_files) == 0:
                         # A tlog should always be present
@@ -429,7 +429,7 @@ class ArakoonHealthCheck(object):
                         output['tlx'].append(split_entry)
                     elif file_name.endswith('tlog'):
                         output['tlog'].append(split_entry)
-                    elif file_name.startswith('head.db'):
+                    elif file_name.rsplit('/')[-1].startswith('head.db'):
                         output['headDB'].append(split_entry)
             except Exception as _ex:
                 result_handler.warning('Could not retrieve the collapse information for {0} ({1})'.format(identifier, str(_ex)), add_to_result=False)
