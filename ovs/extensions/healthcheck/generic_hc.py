@@ -15,8 +15,15 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
+
+"""
+Generic healthcheck module
+"""
+
 import os
 import psutil
+from ovs.dal.hybrids.storagerouter import StorageRouter
+from ovs.dal.lists.domainlist import DomainList
 from ovs.dal.lists.vpoollist import VPoolList
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.generic.sshclient import SSHClient
@@ -32,7 +39,6 @@ from ovs.extensions.services.servicefactory import ServiceFactory
 from ovs.lib.storagerouter import StorageRouterController
 from timeout_decorator import timeout
 from timeout_decorator.timeout_decorator import TimeoutError
-from volumedriver.storagerouter import storagerouterclient as src
 from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException
 
 
@@ -87,7 +93,27 @@ class OpenvStorageHealthCheck(object):
             result_handler.success('All log files are ok!', code=ErrorCodes.log_file_size)
 
     @staticmethod
-    @expose_to_cli('ovs', 'nginx-ports-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'port-ranges-test', HealthCheckCLIRunner.ADDON_TYPE)
+    def check_port_ranges(result_handler, requested_ports=20):
+        """
+        Checks whether the expected amount of ports is available for the requested amount of ports
+        :param result_handler: logging object
+        :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :param requested_ports: minimal number of ports without warning
+        :type requested_ports: int
+        :return: None
+        :rtype: NoneType
+        """
+        # @todo: check other port ranges too
+        port_range = Configuration.get('/ovs/framework/hosts/{0}/ports|storagedriver'.format(OpenvStorageHealthCheck.LOCAL_ID))
+        expected_ports = System.get_free_ports(selected_range=port_range, nr=0)
+        if len(expected_ports) >= requested_ports:
+            result_handler.success('{} ports free'.format(len(expected_ports)))
+        else:
+            result_handler.warning('{} ports found, less than {}'.format(len(expected_ports), requested_ports))
+
+    @staticmethod
+    @expose_to_cli(MODULE, 'nginx-ports-test', HealthCheckCLIRunner.ADDON_TYPE)
     def check_nginx_ports(result_handler):
         """
         Checks if this node can connect to it's own Nginx
@@ -182,31 +208,30 @@ class OpenvStorageHealthCheck(object):
         """
         result_handler.info('Checking OVS packages: ', add_to_result=False)
         client = SSHClient(OpenvStorageHealthCheck.LOCAL_SR)
-        # PackageManager.SDM_PACKAGE_NAMES for sdm
         package_manager = PackageFactory.get_manager()
-        all_packages = list(package_manager.package_names)
-        extra_packages = list(Helper.packages)
-        ee_relation = {'alba': 'alba-ee', 'arakoon': 'arakoon', 'volumedriver-no-dedup-server': 'volumedriver-ee-server'}  # Key = non-ee, value = ee
-        if OpenvStorageHealthCheck.LOCAL_SR.features['alba']['edition'] == 'community':
-            required_packages = [package_name for package_name in all_packages if package_name in ee_relation.keys()]
-        else:
-            required_packages = [package_name for package_name in all_packages if package_name in ee_relation.values()]
-        installed = package_manager.get_installed_versions(client=client, package_names=list(required_packages + extra_packages))
-
-        while len(required_packages) > 0:
-            package = required_packages.pop()
+        # Get all base packages
+        base_packages = set()
+        for names in package_manager.package_info['names'].itervalues():
+            base_packages = base_packages.union(names)
+        base_packages = list(base_packages)
+        extra_packages = Helper.packages
+        installed = package_manager.get_installed_versions(client=client, package_names=base_packages)
+        installed.update(package_manager.get_installed_versions(client=client, package_names=Helper.packages))
+        for package in base_packages + extra_packages:
             version = installed.get(package)
             if version:
-                result_handler.success('Package {0} is installed with version {1}'.format(package, version.replace('\n', '')), code=ErrorCodes.package_required)
+                version = str(version)
+                result_handler.success('Package {0} is installed with version {1}'.format(package, version),
+                                       code=ErrorCodes.package_required)
             else:
-                result_handler.warning('Package {0} is not installed.'.format(package), code=ErrorCodes.package_required)
-        while len(extra_packages) > 0:
-            package = extra_packages.pop()
-            version = installed.get(package)
-            if version:
-                result_handler.success('Package {0} is installed with version {1}'.format(package, version.replace('\n', '')))
-            else:
-                result_handler.skip('Package {0} is not installed.'.format(package))
+                if package in package_manager.package_info['mutually_exclusive']:
+                    # Mutually excluse package, so ignore
+                    continue
+                if package in base_packages:
+                    result_handler.warning('Package {0} is not installed.'.format(package),
+                                           code=ErrorCodes.package_required)
+                elif package in extra_packages:
+                    result_handler.skip('Package {0} is not installed.'.format(package))
 
     @staticmethod
     @expose_to_cli(MODULE, 'processes-test', HealthCheckCLIRunner.ADDON_TYPE)
@@ -238,9 +263,8 @@ class OpenvStorageHealthCheck(object):
         """
         # try if celery works smoothly
         try:
-            guid = OpenvStorageHealthCheck.LOCAL_SR.guid
             machine_id = OpenvStorageHealthCheck.LOCAL_SR.machine_id
-            obj = StorageRouterController.get_support_info.s(guid).apply_async(routing_key='sr.{0}'.format(machine_id)).get()
+            obj = StorageRouterController.get_support_info.s().apply_async(routing_key='sr.{0}'.format(machine_id)).get()
         except TimeoutError as ex:
             raise TimeoutError('{0}: Process is taking to long!'.format(ex.value))
         if obj:
@@ -387,13 +411,11 @@ class OpenvStorageHealthCheck(object):
             result_handler.info('Checking consistency of volumedriver vs. ovsdb for {0}: '.format(vp.name), add_to_result=False)
             missing_in_volumedriver = []
             missing_in_model = []
-            config_file = Configuration.get_configuration_path('/ovs/vpools/{0}/hosts/{1}/config'.format(vp.guid, vp.storagedrivers[0].name))
             try:
-                voldrv_client = src.LocalStorageRouterClient(config_file)
                 # noinspection PyArgumentList
-                voldrv_volume_list = voldrv_client.list_volumes()
+                voldrv_volume_list = vp.storagedriver_client.list_volumes()
             except (ClusterNotReachableException, RuntimeError) as ex:
-                result_handler.warning('Seems like the volumedriver {0} is not running. Got {1}'.format(vp.name, ex.message),
+                result_handler.warning('Seems like the volumedriver {0} is not running. Got {1}'.format(vp.name, str(ex)),
                                        code=ErrorCodes.voldrv_connection_problem)
                 continue
 
@@ -446,3 +468,25 @@ class OpenvStorageHealthCheck(object):
                 result_handler.failure('RabbitMQ has partition issues: {0}'.format(', '.join(partitions)), code=ErrorCodes.process_rabbit_mq)
         else:
             result_handler.skip('RabbitMQ is not running/active on this server!')
+
+    @staticmethod
+    @expose_to_cli(MODULE, 'recovery-domain-test', HealthCheckCLIRunner.ADDON_TYPE)
+    def check_recovery_domains(result_handler):
+        result_handler.info('Checking recovery domains:')
+        prim_domains = [domain.name for domain in DomainList.get_domains() if len(domain.storage_router_layout['regular']) >= 1]
+        for domain in DomainList.get_domains():
+            layout = domain.storage_router_layout
+            recovery = layout['recovery']
+            regular = layout['regular']
+            # Check recovery usage
+            if len(recovery) >= 1 and domain.name not in prim_domains:
+                sr_ips = ', '.join([StorageRouter(guid).ip for guid in recovery])
+                result_handler.warning('Domain {0} set as recovery domain on storagerouter(s) {1}, but nowhere as regular domain'.format(domain.name, sr_ips))
+            else:
+                result_handler.info('Domain {0} passed test, set {1} time(s) as regular domain'.format(domain.name, len(regular)))
+
+            # Check for double usage
+            intersection = set(recovery).intersection(regular)
+            if intersection:
+                sr_ips = ', '.join([StorageRouter(guid).ip for guid in intersection])
+                result_handler.warning('Recovery domain {0} is also found to be a regular domain in {1}.'.format(domain.name, sr_ips))

@@ -1,4 +1,4 @@
-# Copyright (C) 2016 iNuron NV
+# Copyright (C) 2017 iNuron NV
 #
 # This file is part of Open vStorage Open Source Edition (OSE),
 # as available from
@@ -13,22 +13,10 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
-from ovs.dal.lists.storagerouterlist import StorageRouterList
+
+from ovs.extensions.generic.logger import Logger as _Logger
 
 
-class StoragerouterHelper(object):
-
-    """
-    StoragerouterHelper class
-    """
-
-    @staticmethod
-    def get_by_machine_id(machine_id):
-        """
-        Fetch a dal machine by id
-
-        :param machine_id: id of the machine
-        :return:
-        """
-
-        return StorageRouterList.get_by_machine_id(machine_id)
+class Logger(_Logger):
+    def __init__(self, name):
+        super(Logger, self).__init__(name, forced_target_type='file')

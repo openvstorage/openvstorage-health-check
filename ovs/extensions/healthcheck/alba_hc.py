@@ -36,13 +36,14 @@ from ovs.extensions.healthcheck.decorators import cluster_check
 from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
 from ovs.extensions.healthcheck.helpers.albacli import AlbaCLI
 from ovs.extensions.healthcheck.helpers.backend import BackendHelper
-from ovs.extensions.healthcheck.helpers.exceptions import AlbaException, ConnectionFailedException, ConfigNotMatchedException, DiskNotFoundException, ObjectNotFoundException
+from ovs.extensions.healthcheck.helpers.exceptions import AlbaException, AlbaTimeOutException,  ConfigNotMatchedException,\
+    ConnectionFailedException, DiskNotFoundException, ObjectNotFoundException
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.helpers.service import ServiceHelper
+from ovs.extensions.healthcheck.logger import Logger
 from ovs.extensions.services.servicefactory import ServiceFactory
 from ovs.lib.alba import AlbaController
 from ovs.lib.helpers.toolbox import Toolbox
-from ovs.log.log_handler import LogHandler
 
 
 class AlbaHealthCheck(object):
@@ -58,7 +59,7 @@ class AlbaHealthCheck(object):
     NAMESPACE_TIMEOUT = 30  # In seconds
     BASE_NAMESPACE_KEY = 'ovs-healthcheck-'
 
-    logger = LogHandler.get('healthcheck', 'healthcheck_alba')
+    logger = Logger("healthcheck-healthcheck_alba")
 
     @classmethod
     def _check_backend_asds(cls, result_handler, asds, backend_name, config):
@@ -223,7 +224,7 @@ class AlbaHealthCheck(object):
                             AlbaCLI.run(command='deliver-messages', config=abm_config)
                         while True:
                             if time.time() - namespace_start_time > AlbaHealthCheck.NAMESPACE_TIMEOUT:
-                                raise RuntimeError('Creation namespace has timed out after {0}s'.format(time.time() - namespace_start_time))
+                                raise AlbaTimeOutException('Creating namespace has timed out after {0}s'.format(time.time() - namespace_start_time), 'deliver-messages')
                             list_ns_osds_output = AlbaCLI.run(command='list-ns-osds', config=abm_config, extra_params=[namespace_key])
                             # Example output: [[0, [u'Active']], [3, [u'Active']]]
                             namespace_ready = True
@@ -305,6 +306,8 @@ class AlbaHealthCheck(object):
                     except ObjectNotFoundException as ex:
                         amount_of_presets_not_working.append(preset_name)
                         result_handler.failure('Failed to put object on namespace {0} failed on proxy {1}with preset {2} With error {3}'.format(namespace_key, service.name, preset_name, ex))
+                    except AlbaTimeOutException as ex:
+                        result_handler.failure(str(ex))
                     except AlbaException as ex:
                         code = ErrorCodes.alba_cmd_fail
                         if ex.alba_command == 'proxy-create-namespace':
@@ -323,39 +326,49 @@ class AlbaHealthCheck(object):
                         # Delete the created namespace and preset
                         subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_LOC)], stdout=fnull, stderr=subprocess.STDOUT)
                         subprocess.call(['rm', str(AlbaHealthCheck.TEMP_FILE_FETCHED_LOC)], stdout=fnull, stderr=subprocess.STDOUT)
-                        namespaces = AlbaCLI.run(command='list-namespaces', config=abm_config)
-                        namespaces_to_remove = []
-                        proxy_named_params = {'host': ip, 'port': service.ports[0]}
-                        for namespace in namespaces:
-                            if namespace['name'].startswith(namespace_key_prefix):
-                                namespaces_to_remove.append(namespace['name'])
-                        for namespace_name in namespaces_to_remove:
-                            if namespace_name == namespace_key:
-                                result_handler.info('Deleting namespace {0}.'.format(namespace_name))
-                            else:
-                                result_handler.warning('Deleting namespace {0} which was leftover from a previous run.'.format(namespace_name))
+                        try:
+                            namespaces = AlbaCLI.run(command='list-namespaces', config=abm_config)
+                            namespaces_to_remove = []
+                            proxy_named_params = {'host': ip, 'port': service.ports[0]}
+                            for namespace in namespaces:
+                                if namespace['name'].startswith(namespace_key_prefix):
+                                    namespaces_to_remove.append(namespace['name'])
+                            for namespace_name in namespaces_to_remove:
+                                if namespace_name == namespace_key:
+                                    result_handler.info('Deleting namespace {0}.'.format(namespace_name))
+                                else:
+                                    result_handler.warning('Deleting namespace {0} which was leftover from a previous run.'.format(namespace_name))
 
-                            AlbaCLI.run(command='proxy-delete-namespace',
-                                        named_params=proxy_named_params,
-                                        extra_params=[namespace_name])
-
-                            namespace_delete_start = time.time()
-                            while True:
-                                try:
-                                    AlbaCLI.run(command='show-namespace', config=abm_config, extra_params=[namespace_name])  # Will fail if the namespace does not exist
-                                except AlbaException:
-                                    result_handler.success('Namespace {0} successfully removed.'.format(namespace_name))
-                                    break
-                                if time.time() - namespace_delete_start > AlbaHealthCheck.NAMESPACE_TIMEOUT:
-                                    raise RuntimeError('Delete namespace has timed out after {0}s'.format(time.time() - namespace_start_time))
-
-                            # be tidy, and make the proxy forget the namespace
-                            try:
-                                AlbaCLI.run(command='proxy-statistics',
+                                AlbaCLI.run(command='proxy-delete-namespace',
                                             named_params=proxy_named_params,
-                                            extra_params=['--forget', namespace_name])
-                            except:
-                                result_handler.warning('Failed to make proxy forget namespace {0}.'.format(namespace_name))
+                                            extra_params=[namespace_name])
+
+                                namespace_delete_start = time.time()
+                                while True:
+                                    try:
+                                        AlbaCLI.run(command='show-namespace', config=abm_config, extra_params=[namespace_name])  # Will fail if the namespace does not exist
+                                    except AlbaException:
+                                        result_handler.success('Namespace {0} successfully removed.'.format(namespace_name))
+                                        break
+                                    if time.time() - namespace_delete_start > AlbaHealthCheck.NAMESPACE_TIMEOUT:
+                                        raise AlbaTimeOutException('Delete namespace has timed out after {0}s'.format(time.time() - namespace_start_time), 'show-namespace')
+
+                                # be tidy, and make the proxy forget the namespace
+                                try:
+                                    AlbaCLI.run(command='proxy-statistics',
+                                                named_params=proxy_named_params,
+                                                extra_params=['--forget', namespace_name])
+                                except:
+                                    result_handler.warning('Failed to make proxy forget namespace {0}.'.format(namespace_name))
+                        except AlbaException as ex:
+                            if ex.alba_command == 'list-namespaces':
+                                result_handler.failure(
+                                    'list namespaces has failed with {0} on namespace {1} with proxy {2} with preset {3}'.format(
+                                        str(ex), namespace_key, service.name, preset_name))
+                            elif ex.alba_command == 'proxy-delete-namespace':
+                                result_handler.failure(
+                                    'Delete namespace has failed with {0} on namespace {1} with proxy {2} with preset {3}'.format(
+                                        str(ex), namespace_key, service.name, preset_name))
 
             except subprocess.CalledProcessError as ex:
                 # this should stay for the deletion of the remaining files
@@ -381,44 +394,28 @@ class AlbaHealthCheck(object):
         for alba_backend in BackendHelper.get_albabackends():
             # check if backend would be available for vpool
             try:
-                available = False
-                for preset in alba_backend.presets:
-                    if preset.get('is_available'):
-                        available = True
-
-                # collect ASDs connected to a backend
-                asds = []
-                for stack in alba_backend.local_stack.values():
-                    for osds in stack.values():
-                        for asd in osds['asds'].values():
-                            if alba_backend.guid != asd.get('alba_backend_guid'):
+                # collect OSDs connected to a backend
+                osds = []
+                for local_stack in alba_backend.local_stack.itervalues():
+                    for osd_stack in local_stack.itervalues():
+                        for osd in osd_stack['osds'].itervalues():
+                            if alba_backend.guid != osd.get('claimed_by'):
                                 continue
-                            asd_id = asd['asd_id']
-                            arakoon_path = '/ovs/alba/asds/{0}/config|port'.format(asd_id)
-                            try:
-                                asd['port'] = Configuration.get(arakoon_path)
-                            except NotFoundException as ex:
-                                result_handler.failure('Could not find {0} in Arakoon. Got {1}'.format(arakoon_path, str(ex)),
-                                                       code=ErrorCodes.configuration_not_found)
-                                raise
-                            except Exception as ex:
-                                result_handler.failure('Could not connect to the Arakoon due to an uncaught exception: {0}.'.format(str(ex)),
-                                                       code=ErrorCodes.arakoon_connection_failure)
-                                raise ConnectionFailedException(str(ex))
                             else:
-                                asds.append(asd)
+                                osds.append(osd)
+
                 # create result
                 result.append({
                     'name': alba_backend.name,
                     'alba_id': alba_backend.alba_id,
-                    'is_available_for_vpool': available,
+                    'is_available_for_vpool': any(preset for preset in alba_backend.presets if preset.get('is_available') is True),
                     'guid': alba_backend.guid,
                     'backend_guid': alba_backend.backend_guid,
-                    'disks': asds,
+                    'disks': osds,
                     'type': alba_backend.scaling
                 })
             except RuntimeError as ex:
-                result_handler.warning('Error occurred while unpacking alba backend {0}. Got {1}.'.format(alba_backend.name, str(ex)))
+                result_handler.warning('Error occurred while unpacking alba backend {0}. Got {1}.'.format(alba_backend.name, ex))
         return result
 
     @staticmethod
@@ -656,7 +653,7 @@ class AlbaHealthCheck(object):
             max_load = Configuration.get('ovs/framework/plugins/alba/config|nsm.maxload')
             sorted_nsm_clusters = sorted(alba_backend.nsm_clusters, key=lambda k: k.number)
             for nsm_cluster in sorted_nsm_clusters:
-                nsm_loads[nsm_cluster.number] = AlbaController._get_load(nsm_cluster)
+                nsm_loads[nsm_cluster.number] = AlbaController.get_load(nsm_cluster)
             overloaded = min(nsm_loads.values()) >= max_load
             if overloaded is False:
                 result_handler.success('NSMs for backend {0} are not overloaded'.format(alba_backend.name),

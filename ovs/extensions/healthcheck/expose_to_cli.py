@@ -1,4 +1,4 @@
-# Copyright (C) 2016 iNuron NV
+# Copyright (C) 2017 iNuron NV
 #
 # This file is part of Open vStorage Open Source Edition (OSE),
 # as available from
@@ -13,6 +13,7 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
+
 import imp
 import os
 import inspect
@@ -21,7 +22,7 @@ from ovs.extensions.healthcheck.helpers.helper import Helper
 from ovs.extensions.healthcheck.decorators import node_check
 from ovs.extensions.healthcheck.result import HCResults
 from ovs.extensions.storage.volatilefactory import VolatileFactory
-from ovs.log.log_handler import LogHandler
+from ovs.extensions.healthcheck.logger import Logger
 
 
 class ModuleNotRecognizedException(Exception):
@@ -57,8 +58,7 @@ class CLIRunner(object):
     """
     Runs a method exposed by the expose_to_cli decorator. Serves as a base for all extensions using expose_to_cli
     """
-    logger = LogHandler.get("healthcheck", "clirunner")
-
+    logger = Logger("healthcheck-ovs_clirunner")
     START_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
     CACHE_KEY = 'ovs_discover_method'
 
@@ -248,7 +248,7 @@ class HealthCheckCLIRunner(CLIRunner):
     Healthcheck adaptation of CLIRunner
     Injects a result_handler instance with shared resources to every test to collect the results.
     """
-    logger = LogHandler.get("healthcheck", "clirunner")
+    logger = Logger("healthcheck-healthcheck_clirunner")
     START_PATH = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir)), 'healthcheck')
     ADDON_TYPE = 'healthcheck'
 
@@ -319,6 +319,7 @@ class HealthCheckCLIRunner(CLIRunner):
                     raise
                 except Exception as ex:
                     result_handler.exception('Unhandled exception caught when executing {0}. Got {1}'.format(found_method.__name__, str(ex)))
+                    HealthCheckCLIRunner.logger.exception('Unhandled exception caught when executing {0}'.format(found_method.__name__))
             return HealthCheckCLIRunner.get_results(result_handler, module_name, method_name)
         except KeyboardInterrupt:
             HealthCheckCLIRunner.logger.warning('Caught keyboard interrupt. Output may be incomplete!')
