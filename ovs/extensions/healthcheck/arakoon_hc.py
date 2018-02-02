@@ -40,6 +40,7 @@ from ovs.extensions.services.servicefactory import ServiceFactory
 from ovs.lib.helpers.arakoon import ArakoonHelper
 
 
+
 class ArakoonHealthCheck(object):
     """
     A healthcheck for the arakoon persistent store
@@ -229,6 +230,7 @@ class ArakoonHealthCheck(object):
         for cluster_name, cluster in arakoon_stats.iteritems():
             result_handler.info('Testing the collapse of {0} Arakoons'.format(cluster_name), add_to_result=False)
             collapse_result = cluster['collapse_result']
+            collapse_result = OrderedDict(sorted(collapse_result.items(), key=lambda item: ExtensionsToolbox.advanced_sort(item[0].ip, separator='.')))
             for node, stats in collapse_result.iteritems():
                 identifier_log = 'Arakoon cluster {0} on node {1}'.format(cluster_name, node)
                 if len(stats['errors']) > 0:
