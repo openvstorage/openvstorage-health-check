@@ -355,6 +355,8 @@ class ArakoonHealthCheck(object):
                     result = {'errors': [],
                               'result': {'tlx': [],
                                          'tlog': []}}
+                    cluster['collapse_result'][node_config] = result
+
                     # Build SSHClients outside the threads to avoid GIL
                     try:
                         client = clients.get(node_config.ip)
@@ -364,7 +366,6 @@ class ArakoonHealthCheck(object):
                     except Exception as ex:
                         result['errors'].append(('build_client', ex))
                         continue
-                    cluster['collapse_result'][node_config] = result
                     queue.put((cluster_name, node_config, result))
 
         for _ in xrange(batch_size):
