@@ -355,7 +355,6 @@ class ArakoonHealthCheck(object):
                     result = {'errors': [],
                               'result': {'tlx': [],
                                          'tlog': []}}
-
                     cluster['collapse_result'][node_config] = result
 
                     # Build SSHClients outside the threads to avoid GIL
