@@ -181,7 +181,7 @@ class ArakoonHealthCheck(object):
                                                code=ErrorCodes.arakoon_connection_failure)
 
     @classmethod
-    def _get_port_connections(cls, result_handler, arakoon_clusters, batch_size=10):
+    def _get_port_connections(cls, result_handler, arakoon_clusters, batch_size=5):
         """
         Retrieve tlog/tlx stat information for a Arakoon cluster concurrently
         Note: this will mutate the given arakoon_clusters dict
@@ -519,7 +519,7 @@ class ArakoonHealthCheck(object):
                                                code=ErrorCodes.arakoon_fd_ok)
 
     @classmethod
-    def _get_filedescriptors(cls, result_handler, arakoon_clusters, batch_size=10):
+    def _get_filedescriptors(cls, result_handler, arakoon_clusters, batch_size=5):
         """
         Retrieve tlog/tlx stat information for a Arakoon cluster concurrently
         Note: this will mutate the given arakoon_clusters dict
