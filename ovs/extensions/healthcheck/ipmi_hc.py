@@ -18,7 +18,7 @@
 
 from ovs.dal.lists.albanodelist import AlbaNodeList
 from ovs.extensions.generic.configuration import Configuration
-from ovs_extensions.generic.ipmi import IPMIController
+from ovs_extensions.generic.ipmi import IPMIController, IPMITimeOutException, IPMICallException
 from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
@@ -42,9 +42,9 @@ class IPMIHealthCheck(object):
         """
         for albanode in AlbaNodeList.get_albanodes():
             node_id = albanode.node_id
-            if Configuration.exists(IPMIController.IPMI_INFO_LOCATION.format(albanode.node_id)):
+            if Configuration.exists(IPMIController.IPMI_INFO_LOCATION.format(node_id)):
                 try:
-                    ipmi_config = dict(Configuration.get(IPMIController.IPMI_INFO_LOCATION.format(node_id)))
+                    ipmi_config = Configuration.get(IPMIController.IPMI_INFO_LOCATION.format(node_id))
 
                     ip = ipmi_config.get('ip')
                     controller = IPMIController(ip=ip,
@@ -57,10 +57,12 @@ class IPMIHealthCheck(object):
                             result_handler.success('IPMI node {0} status is POWER ON'.format(node_id))
                         elif status == IPMIController.IPMI_POWER_OFF:
                             result_handler.warning('IPMI node {0} status is POWER OFF'.format(node_id))
-                    except RuntimeError as ex:
-                        result_handler.exception('IPMI node {0} timed out {1}'.format(node_id, ex))
+                    except IPMITimeOutException as ex:
+                        result_handler.failure("IPMI node {0} timed out : '{1}'".format(node_id, ex))
+                    except IPMICallException as ex:
+                        result_handler.failure("IPMI node {0} call failed: '{1}'".format(node_id, ex))
                     except Exception as ex:
-                        result_handler.exception("IPMI node exited with error: '{0}'".format(ex))
+                        result_handler.exception("IPMI node {0} exited with error: '{0}'".format(node_id, ex))
                 except ValueError or RuntimeError as ex:
                     raise ValueError(ex)
             else:
