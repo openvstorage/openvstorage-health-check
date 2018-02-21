@@ -153,8 +153,15 @@ class ErrorCodes(object):
         'vpool_not_local': ErrorCode('VOL0001', 'vPool not on this node', 'Extend vPool to this node'),
         # Volume states
         'volume_not_found': ErrorCode('VOL0100', 'Volumedriver does not recognize this volume', 'Verify whether this volume is still present'),
-        'volume_max_redir': ErrorCode('VOL0101', 'Volumedriver can\'t retrieve information about the volume. This indicates the volume might be down', 'Verify whether this volume is running'),
+        'volume_max_redirect': ErrorCode('VOL0101', 'Volumedriver can\'t retrieve information about the volume. This indicates the volume might be down', 'Verify whether this volume is running'),
         'volume_halted': ErrorCode('VOL0102', 'Volume is in the \'halted\' state. The volume could still be failing over to another node', 'A possible solution is restarting this volume (after the failover is done)'),
+        'volume_ok': ErrorCode('VOL0103', 'Volume is running. No action required', no_action),
+        'volume_fenced': ErrorCode('VOL0104', 'Volume has been fenced. Cleanup of fencing data required', 'Clean up the leftover data that was left behind because of fencing'),
+        # Volume states combined with fencing
+        'volume_fenced_not_found': ErrorCode('VOL0110', 'Volumedriver does not recognize this fenced volume', 'Verify whether this volume is still present and perform the fencing cleanup (see VOL0104)'),
+        'volume_fenced_max_redirect': ErrorCode('VOL0111', 'Volumedriver can\'t retrieve information about the fenced volume. This indicates the volume might be down', 'Verify whether this volume is running and perform the fencing cleanup (see VOL0104)'),
+        'volume_fenced_halted': ErrorCode('VOL0112', 'Volume is in the \'halted\' state. The fenced volume could still be failing over to another node', 'A possible solution is restarting this volume (after the failover is done and perform the fencing cleanup (see VOL0104))'),
+        'volume_fenced_ok': ErrorCode('VOL0113', 'The fenced volume is running. Cleanup of fencing data required', 'Clean up the leftover data that was left behind because of fencing'),
         # Volume DTL
         'volume_dtl_unknown': ErrorCode('VOL0200', 'The volume\'s DTL state which is not recognized', engineer_report),
         'volume_dtl_catch_up': ErrorCode('VOL0201', 'The volume\'s DTL state is still syncing', 'Wait for the sync to finish'),
@@ -164,6 +171,7 @@ class ErrorCodes(object):
         'volume_dtl_standalone': ErrorCode('VOL0205', 'The volume\'s DTL is disabled', 'No action required for this volume'),
         # General
         'voldrv_connection_problem': ErrorCode('VOL0300', 'Volumedriver is not responding to calls (fast enough)', 'Verify whether this Volumedriver is running'),
+        'voldr_unknown_problem': ErrorCode('VOL0301', 'An unidentified issue occurred when consulting the Volumedriver', engineer_report)
         }
 
     @classmethod
