@@ -16,8 +16,9 @@
 import os
 import subprocess
 import timeout_decorator
-from ovs.dal.lists.vpoollist import VPoolList
+from ovs.dal.dataobject import DataObject
 from ovs.dal.hybrids.vdisk import VDisk
+from ovs.dal.lists.vpoollist import VPoolList
 from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
 from ovs.extensions.healthcheck.config.error_codes import ErrorCodes
@@ -33,33 +34,35 @@ class VolumedriverHealthCheck(object):
     """
     A healthcheck for the volumedriver components
     """
-    logger = LogHandler.get('healthcheck', 'healthcheck_volumedriver')
-
     MODULE = 'volumedriver'
-    LOCAL_SR = System.get_my_storagerouter()
     LOCAL_ID = System.get_my_machine_id()
+    LOCAL_SR = System.get_my_storagerouter()
     VDISK_CHECK_SIZE = 1024 ** 3  # 1GB in bytes
+    VDISK_HALTED_STATES = DataObject.enumerator('Halted_status', ['HALTED', 'FENCED'])
     VDISK_TIMEOUT_BEFORE_DELETE = 0.5
-    VOLDR_ISSUE_STATUS_MAP = {'max_redirect': {'status': VDisk.STATUSES.NON_RUNNING,
-                                               'severity': 'failure',
-                                               'fenced': ('These volumes are not running: {0}', ErrorCodes.volume_max_redirect),
-                                               'normal': ('These volumes are fenced and are not running: {0}', ErrorCodes.volume_fenced_max_redirect)},
-                              'halted': {'status': VDisk.STATUSES.HALTED,
-                                         'severity': 'failure',
-                                         'fenced': ('These volumes are halted: {0}', ErrorCodes.volume_halted),
-                                         'normal': ('These volumes are fenced and are halted: {0}', ErrorCodes.volume_fenced_halted)},
-                              'connection_fail': {'status': 'UNKNOWN',
-                                                  'severity': 'failure',
-                                                  'fenced': ('These volumes experienced a connectivity/timeout problem: {0}', ErrorCodes.voldrv_connection_problem),
-                                                  'normal': ('These volumes are fenced and experienced a connectivity/timeout problem: {0}', ErrorCodes.voldrv_connection_problem)},
-                              'ok': {'status': VDisk.STATUSES.RUNNING,
-                                     'severity': 'success',
-                                     'fenced': ('These volumes are running: {0}', ErrorCodes.volume_ok),
-                                     'normal': ('These volumes are fenced and are running: {0}', ErrorCodes.volume_fenced_ok)},
-                              'not_found': {'status': 'NOT_FOUND',
-                                            'severity': 'warning',
-                                            'fenced': ('These volumes could not be queried for information: {0}', ErrorCodes.volume_not_found),
-                                            'normal': ('These volumes are fenced but could not be queried for information: {0}', ErrorCodes.volume_fenced_not_found)}}
+    # Only used to check status of a fenced volume. This should not be used to link a status of a non-halted/fenced volume
+    FENCED_HALTED_STATUS_MAP = {'max_redirect': {'status': VDisk.STATUSES.NON_RUNNING,
+                                                 'severity': 'failure',
+                                                 'halted': ('These volumes are not running: {0}', ErrorCodes.volume_max_redirect),
+                                                 'fenced': ('These volumes are fenced and but not running on another node: {0}', ErrorCodes.volume_fenced_max_redirect)},
+                                'halted': {'status': VDisk.STATUSES.HALTED,
+                                           'severity': 'failure',
+                                           'halted': ('These volumes are halted: {0}', ErrorCodes.volume_halted),
+                                           'fenced': ('These volumes are fenced and but halted on another node: {0}', ErrorCodes.volume_fenced_halted)},
+                                'connection_fail': {'status': 'UNKNOWN',
+                                                    'severity': 'failure',
+                                                    'halted': ('These volumes experienced a connectivity/timeout problem: {0}', ErrorCodes.voldrv_connection_problem),
+                                                    'fenced': ('These volumes are fenced but experienced a connectivity/timeout problem on another node: {0}', ErrorCodes.voldrv_connection_problem)},
+                                'ok': {'status': VDisk.STATUSES.RUNNING,
+                                       'severity': 'failure',
+                                       'halted': ('These volumes are running: {0}', ErrorCodes.volume_ok),
+                                       'fenced': ('These volumes are fenced and but running on another node: {0}', ErrorCodes.volume_fenced_ok)},
+                                'not_found': {'status': 'NOT_FOUND',
+                                              'severity': 'warning',
+                                              'halted': ('These volumes could not be queried for information: {0}', ErrorCodes.volume_not_found),
+                                              'fenced': ('These volumes are fenced but could not be queried for information on another node: {0}', ErrorCodes.volume_fenced_not_found)}}
+
+    logger = LogHandler.get('healthcheck', 'healthcheck_volumedriver')
 
     @staticmethod
     @expose_to_cli(MODULE, 'dtl-test', HealthCheckCLIRunner.ADDON_TYPE)
@@ -231,13 +234,13 @@ class VolumedriverHealthCheck(object):
             result_handler.skip('No vPools found!'.format(len(vpools)), code=ErrorCodes.vpools_none)
             return
         for vpool in vpools:
-            log_start = 'Halted volumes for vPool {0}'.format(vpool.name)
+            log_start = 'Halted volumes test vPool {0}'.format(vpool.name)
             if vpool.guid not in local_sr.vpools_guids:
                 result_handler.skip('{0} - Skipping vPool {1} because it is not living here.'.format(log_start, vpool.name),
                                     code=ErrorCodes.vpool_not_local, add_to_result=False)
                 continue
 
-            result_handler.info('{0} - retrieving all information'.format(log_start, vpool.name), add_to_result=False)
+            result_handler.info('{0} - Retrieving all information'.format(log_start), add_to_result=False)
             storagedriver = None
             for std in vpool.storagedrivers:
                 if std.storagerouter_guid == local_sr.guid:
@@ -249,8 +252,10 @@ class VolumedriverHealthCheck(object):
                                        code=ErrorCodes.std_no_str)
                 continue
 
-            volume_fenced_states = dict((key, []) for key in cls.VOLDR_ISSUE_STATUS_MAP.keys())
-            volume_lists = {'halted': [], 'fenced': []}
+            volume_fenced_states = dict((key, []) for key in cls.FENCED_HALTED_STATUS_MAP.keys())
+            volume_lists = {cls.VDISK_HALTED_STATES.HALTED: [], cls.VDISK_HALTED_STATES.FENCED: []}
+            volume_states = {cls.VDISK_HALTED_STATES.HALTED: {cls.VDISK_HALTED_STATES.HALTED: volume_lists[cls.VDISK_HALTED_STATES.HALTED]},
+                             cls.VDISK_HALTED_STATES.FENCED: volume_fenced_states}  # Less loops to write for outputting
             result_handler.info('{0} - Scanning for halted volumes'.format(log_start), add_to_result=False)
             try:
                 voldrv_client = vpool.storagedriver_client
@@ -280,16 +285,16 @@ class VolumedriverHealthCheck(object):
                 try:
                     registry_entry = objectregistry_client.find(volume)
                     if registry_entry.node_id() == storagedriver.storagedriver_id:
-                        volume_lists['halted'].append(volume)
+                        volume_lists[cls.VDISK_HALTED_STATES.HALTED].append(volume)
                     else:
                         # Fenced
-                        volume_lists['fenced'].append(volume)
+                        volume_lists[cls.VDISK_HALTED_STATES.FENCED].append(volume)
                 except Exception:
                     msg = '{0} - Unable to consult the object registry client for volume \'{1}\''.format(log_start, volume)
                     cls.logger.exception(msg)
                     result_handler.exception(msg, code=ErrorCodes.voldr_unknown_problem)
             # Include fenced - OTHER state combo
-            for volume in volume_lists['fenced']:
+            for volume in volume_lists[cls.VDISK_HALTED_STATES.FENCED]:
                 try:
                     _, state = cls._get_volume_issue(voldrv_client, volume, log_start)
                     volume_fenced_states[state].append(volume)
@@ -297,15 +302,14 @@ class VolumedriverHealthCheck(object):
                     # Only unhandled at this point
                     result_handler.exception('{0} - Unable to the volume info for volume {1} due to an unidentified problem. Please check the logging'.format(log_start, volume),
                                              code=ErrorCodes.voldr_unknown_problem)
-            for state, volumes in volume_fenced_states.iteritems():  # Print later for easier overview
-                if state == 'ok':
-                    continue  # Skip OK
-                if len(volumes) == 0:
-                    continue
-                map_value = cls.VOLDR_ISSUE_STATUS_MAP[state]
-                log_func = getattr(result_handler, map_value['severity'])
-                message, code = map_value['fenced']
-                log_func(message.format(', '.join(volumes)), code=code)
+            for halted_state, volume_state_info in volume_states.iteritems():
+                for state, volumes in volume_state_info.iteritems():
+                    if len(volumes) == 0:
+                        continue  # Skip OK/empty lists
+                    map_value = cls.FENCED_HALTED_STATUS_MAP[state.lower()]
+                    log_func = getattr(result_handler, map_value['severity'])
+                    message, code = map_value[halted_state.lower()]
+                    log_func('{0} - {1}'.format(log_start, message.format(', '.join(volumes))), code=code)
             # Call success in case nothing is wrong
             if all(len(l) == 0 for l in volume_lists.values()):
                 result_handler.success('{0} - No volumes found in halted/fenced state'.format(log_start))
@@ -313,13 +317,13 @@ class VolumedriverHealthCheck(object):
     @classmethod
     def _get_volume_issue(cls, voldrv_client, volume_id, log_start):
         """
-        Maps all possible exceptions to a state. These states can be mapped to a status using the VOLDR_ISSUE_STATUS_MAP
+        Maps all possible exceptions to a state. These states can be mapped to a status using the FENCED_HALTED_STATUS_MAP
         because the volumedriver does not return a state itself
         :param voldrv_client: Storagedriver client
         :param volume_id: Id of the volume
         :raises: The unhandled exception when such an exception could occur (we try to identify all problems but one could slip past us)
         :return: The volume_id and state
-        :rtype: tuple(str,
+        :rtype: tuple(str, str)
         """
         state = 'ok'
         try:
