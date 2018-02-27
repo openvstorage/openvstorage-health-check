@@ -16,9 +16,9 @@
 import os
 import subprocess
 import timeout_decorator
-from ovs.dal.exceptions import ObjectNotFoundException
-from ovs.dal.lists.vpoollist import VPoolList
+from ovs.dal.dataobject import DataObject
 from ovs.dal.hybrids.vdisk import VDisk
+from ovs.dal.lists.vpoollist import VPoolList
 from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
 from ovs.extensions.healthcheck.config.error_codes import ErrorCodes
@@ -36,13 +36,35 @@ class VolumedriverHealthCheck(object):
     """
     A healthcheck for the volumedriver components
     """
-    logger = Logger('healthcheck-ovs_volumedriver')
-
     MODULE = 'volumedriver'
-    LOCAL_SR = System.get_my_storagerouter()
     LOCAL_ID = System.get_my_machine_id()
+    LOCAL_SR = System.get_my_storagerouter()
     VDISK_CHECK_SIZE = 1024 ** 3  # 1GB in bytes
+    VDISK_HALTED_STATES = DataObject.enumerator('Halted_status', ['HALTED', 'FENCED'])
     VDISK_TIMEOUT_BEFORE_DELETE = 0.5
+    # Only used to check status of a fenced volume. This should not be used to link a status of a non-halted/fenced volume
+    FENCED_HALTED_STATUS_MAP = {'max_redirect': {'status': VDisk.STATUSES.NON_RUNNING,
+                                                 'severity': 'failure',
+                                                 'halted': ('These volumes are not running: {0}', ErrorCodes.volume_max_redirect),
+                                                 'fenced': ('These volumes are fenced but not running on another node: {0}', ErrorCodes.volume_fenced_max_redirect)},
+                                'halted': {'status': VDisk.STATUSES.HALTED,
+                                           'severity': 'failure',
+                                           'halted': ('These volumes are halted: {0}', ErrorCodes.volume_halted),
+                                           'fenced': ('These volumes are fenced and but halted on another node: {0}', ErrorCodes.volume_fenced_halted)},
+                                'connection_fail': {'status': 'UNKNOWN',
+                                                    'severity': 'failure',
+                                                    'halted': ('These volumes experienced a connectivity/timeout problem: {0}', ErrorCodes.voldrv_connection_problem),
+                                                    'fenced': ('These volumes are fenced but experienced a connectivity/timeout problem on another node: {0}', ErrorCodes.voldrv_connection_problem)},
+                                'ok': {'status': VDisk.STATUSES.RUNNING,
+                                       'severity': 'failure',
+                                       'halted': ('These volumes are running: {0}', ErrorCodes.volume_ok),
+                                       'fenced': ('These volumes are fenced but running on another node: {0}', ErrorCodes.volume_fenced_ok)},
+                                'not_found': {'status': 'NOT_FOUND',
+                                              'severity': 'warning',
+                                              'halted': ('These volumes could not be queried for information: {0}', ErrorCodes.volume_not_found),
+                                              'fenced': ('These volumes are fenced but could not be queried for information on another node: {0}', ErrorCodes.volume_fenced_not_found)}}
+
+    logger = Logger('healthcheck-ovs_volumedriver')
 
     @staticmethod
     @expose_to_cli(MODULE, 'dtl-test', HealthCheckCLIRunner.ADDON_TYPE)
@@ -200,6 +222,8 @@ class VolumedriverHealthCheck(object):
     def check_for_halted_volumes(cls, result_handler):
         """
         Checks for halted volumes on a single or multiple vPools
+        This will only check the volume states on the current node. If any other volumedriver would be down,
+        only the HA'd volumes would pop-up as they could appear halted here (should be verified by the volumedriver team)
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
         :return: None
@@ -212,13 +236,13 @@ class VolumedriverHealthCheck(object):
             result_handler.skip('No vPools found!'.format(len(vpools)), code=ErrorCodes.vpools_none)
             return
         for vpool in vpools:
+            log_start = 'Halted volumes test vPool {0}'.format(vpool.name)
             if vpool.guid not in local_sr.vpools_guids:
-                result_handler.skip('Skipping vPool {0} because it is not living here.'.format(vpool.name), code=ErrorCodes.vpool_not_local)
+                result_handler.skip('{0} - Skipping vPool {1} because it is not living here.'.format(log_start, vpool.name),
+                                    code=ErrorCodes.vpool_not_local, add_to_result=False)
                 continue
 
-            result_handler.info('Checking vPool {0}'.format(vpool.name), add_to_result=False)
-            voldrv_client = vpool.storagedriver_client
-            objectregistry_client = vpool.objectregistry_client
+            result_handler.info('{0} - Retrieving all information'.format(log_start), add_to_result=False)
             storagedriver = None
             for std in vpool.storagedrivers:
                 if std.storagerouter_guid == local_sr.guid:
@@ -226,75 +250,108 @@ class VolumedriverHealthCheck(object):
                     break
 
             if storagedriver is None:
-                result_handler.failure('Could not associate a storagedriver with this StorageRouter', code=ErrorCodes.std_no_str)
-                return
+                result_handler.failure('{0} - Could not associate a StorageDriver with this StorageRouter'.format(log_start),
+                                       code=ErrorCodes.std_no_str)
+                continue
 
-            volume_states = {'max_redir': [], 'connection': [], 'not_found': [], 'halted': []}
-            no_volume_issues = True
-            result_handler.info('Checking the volumes their states in vPool {0} on this machine'.format(vpool.name), add_to_result=False)
+            volume_fenced_states = dict((key, []) for key in cls.FENCED_HALTED_STATUS_MAP.keys())
+            volume_lists = {cls.VDISK_HALTED_STATES.HALTED: [], cls.VDISK_HALTED_STATES.FENCED: []}
+            volume_states = {cls.VDISK_HALTED_STATES.HALTED: {cls.VDISK_HALTED_STATES.HALTED: volume_lists[cls.VDISK_HALTED_STATES.HALTED]},
+                             cls.VDISK_HALTED_STATES.FENCED: volume_fenced_states}  # Less loops to write for outputting
+            result_handler.info('{0} - Scanning for halted volumes'.format(log_start), add_to_result=False)
             try:
-                # Leveraging off the Volumedrivers list halted volumes (instead of info volume) as it detects stolen volumes
-                volume_states['halted'].extend(voldrv_client.list_halted_volumes(str(storagedriver.storagedriver_id)))
-                # Listing all volumes is required. Providing a node_id would only return the runing volumes
-                volumes = voldrv_client.list_volumes()
-                # Filter out for this machine, object registry client goes to the arakoon, when these exceptions occur,
-                # just raise (will give an error to ops, just like the arakoon checks will)
-                volumes = [volume for volume in volumes if objectregistry_client.find(volume).node_id() == storagedriver.storagedriver_id]
-                result_handler.info('Found the following volumes on this machine: {0}'.format(', '.join(volumes)), add_to_result=False)
-                for volume in volumes:
-                    try:
-                        # Check if the information can be retrieved about the volume
-                        voldrv_client.info_volume(volume, req_timeout_secs=5)
-                    except Exception as ex:
-                        cls.logger.exception('Exception occurred when fetching the info for volume {0} on vPool {1}'.format(volume, vpool.name))
-                        no_volume_issues = False
-                        if isinstance(ex, ObjectNotFoundException):
-                            # Ignore ovsdb invalid entrees as model consistency will handle it.
-                            volume_states['not_found'].append(volume)
-                        elif isinstance(ex, MaxRedirectsExceededException):
-                            # This means the volume is not halted but detached or unreachable for the Volumedriver
-                            volume_states['max_redir'].append(volume)
-                            # @todo replace RuntimeError with NodeNotReachableException
-                        elif any(isinstance(ex, exception) for exception in [ClusterNotReachableException, RuntimeError]):
-                            if cls._is_volumedriver_timeout(ex) is False:
-                                # Unhandled exception at this point
-                                raise
-                            # Timeout / connection problems
-                            volume_states['connection'].append(volume)
-                        else:
-                            # Something to be looked at
-                            raise
+                voldrv_client = vpool.storagedriver_client
+                objectregistry_client = vpool.objectregistry_client
+            except Exception:
+                cls.logger.exception('{0} - Unable to instantiate the required clients'.format(log_start))
+                result_handler.exception('{0} - Unable to load the Volumedriver clients'.format(log_start),
+                                         code=ErrorCodes.voldr_unknown_problem)
+                continue
+            try:
+                # Listing all halted volumes with the volumedriver client as it detects stolen volumes too (fenced instances)
+                volumes = voldrv_client.list_halted_volumes(str(storagedriver.storagedriver_id))
+            except Exception as ex:
+                cls.logger.exception('{0} - Exception occurred when listing volumes'.format(log_start))
+                if cls._is_volumedriver_timeout(ex) is False:
+                    # Unhandled exception at this point
+                    result_handler.exception('{0} - Unable to list the Volumes due to an unidentified problem. Please check the logging'.format(log_start),
+                                             code=ErrorCodes.voldr_unknown_problem)
+                else:
+                    result_handler.failure('{0} - Could not list the volumes for due to a connection problem.'.format(log_start),
+                                           code=ErrorCodes.voldrv_connection_problem)
+                continue
+            # Retrieve the parent of the current volume. If this id would not be identical to the one we fetched for, that would mean it is fenced
+            # Object registry goes to Arakoon
+            # Capturing any possible that would occur to provide a clearer vision of what went wrong
+            for volume in volumes:
+                try:
+                    registry_entry = objectregistry_client.find(volume)
+                    if registry_entry.node_id() == storagedriver.storagedriver_id:
+                        volume_lists[cls.VDISK_HALTED_STATES.HALTED].append(volume)
+                    else:
+                        # Fenced
+                        volume_lists[cls.VDISK_HALTED_STATES.FENCED].append(volume)
+                except Exception:
+                    msg = '{0} - Unable to consult the object registry client for volume \'{1}\''.format(log_start, volume)
+                    cls.logger.exception(msg)
+                    result_handler.exception(msg, code=ErrorCodes.voldr_unknown_problem)
+            # Include fenced - OTHER state combo
+            for volume in volume_lists[cls.VDISK_HALTED_STATES.FENCED]:
+                try:
+                    _, state = cls._get_volume_issue(voldrv_client, volume, log_start)
+                    volume_fenced_states[state].append(volume)
+                except Exception:
+                    # Only unhandled at this point
+                    result_handler.exception('{0} - Unable to the volume info for volume {1} due to an unidentified problem. Please check the logging'.format(log_start, volume),
+                                             code=ErrorCodes.voldr_unknown_problem)
+            for halted_state, volume_state_info in volume_states.iteritems():
+                for state, volumes in volume_state_info.iteritems():
+                    if len(volumes) == 0:
+                        continue  # Skip OK/empty lists
+                    map_value = cls.FENCED_HALTED_STATUS_MAP[state.lower()]
+                    log_func = getattr(result_handler, map_value['severity'])
+                    message, code = map_value[halted_state.lower()]
+                    log_func('{0} - {1}'.format(log_start, message.format(', '.join(volumes))), code=code)
+            # Call success in case nothing is wrong
+            if all(len(l) == 0 for l in volume_lists.values()):
+                result_handler.success('{0} - No volumes found in halted/fenced state'.format(log_start))
+
+    @classmethod
+    def _get_volume_issue(cls, voldrv_client, volume_id, log_start):
+        """
+        Maps all possible exceptions to a state. These states can be mapped to a status using the FENCED_HALTED_STATUS_MAP
+        because the volumedriver does not return a state itself
+        :param voldrv_client: Storagedriver client
+        :param volume_id: Id of the volume
+        :raises: The unhandled exception when such an exception could occur (we try to identify all problems but one could slip past us)
+        :return: The volume_id and state
+        :rtype: tuple(str, str)
+        """
+        state = 'ok'
+        try:
+            # Check if the information can be retrieved about the volume
+            vol_info = voldrv_client.info_volume(volume_id, req_timeout_secs=5)
+            if vol_info.halted is True:
+                state = 'halted'
+        except Exception as ex:
+            cls.logger.exception('{0} - Exception occurred when fetching the info for volume \'{1}\''.format(log_start, volume_id))
+            if isinstance(ex, ObjectNotFoundException):
+                # Ignore ovsdb invalid entrees as model consistency will handle it.
+                state = 'not_found'
+            elif isinstance(ex, MaxRedirectsExceededException):
+                # This means the volume is not halted but detached or unreachable for the Volumedriver
+                state = 'max_redirect'
             # @todo replace RuntimeError with NodeNotReachableException
-            except (ClusterNotReachableException, RuntimeError) as ex:
+            elif any(isinstance(ex, exception) for exception in [ClusterNotReachableException, RuntimeError]):
                 if cls._is_volumedriver_timeout(ex) is False:
                     # Unhandled exception at this point
                     raise
-                cls.logger.exception('Exception occurred when listing volumes')
-                result_handler.failure('Could not list the volumes for vPool {0} due to a connection problem.'.format(vpool.name), code=ErrorCodes.voldrv_connection_problem)
-                continue
-
-            for state, volumes in volume_states.iteritems():
-                if state == 'not_found':
-                    log_func = result_handler.warning
-                    message = 'These volumes could not be queried for information: {0}'
-                    code = ErrorCodes.volume_not_found
-                elif state == 'max_redir':
-                    log_func = result_handler.failure
-                    message = 'These volumes are not running (maximum redirection on call): {0}'
-                    code = ErrorCodes.volume_max_redir
-                elif state == 'connection':
-                    log_func = result_handler.failure
-                    message = 'These volumes experienced a connectivity/timeout problem: {0}'
-                    code = ErrorCodes.voldrv_connection_problem
-                else:  # Halted
-                    log_func = result_handler.failure
-                    message = 'These volumes are currently halted: {0}'
-                    code = ErrorCodes.volume_halted
-                if len(volumes) > 0:
-                    log_func(message.format(', '.join(volumes)), code=code)
-            # Call success in case nothing is wrong
-            if no_volume_issues is True:
-                result_handler.success('All volumes should be up and running')
+                # Timeout / connection problems
+                state = 'connection_fail'
+            else:
+                # Something to be looked at
+                raise
+        return volume_id, state
 
     @staticmethod
     @timeout_decorator.timeout(5)
