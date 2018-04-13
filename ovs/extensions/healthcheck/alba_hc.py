@@ -43,7 +43,7 @@ from ovs.extensions.healthcheck.helpers.service import ServiceHelper
 from ovs.extensions.healthcheck.logger import Logger
 from ovs.extensions.services.servicefactory import ServiceFactory
 from ovs.lib.alba import AlbaController
-from ovs.lib.helpers.toolbox import Toolbox
+from ovs_extensions.generic.toolbox import ExtensionsToolbox
 
 
 class AlbaHealthCheck(object):
@@ -269,7 +269,7 @@ class AlbaHealthCheck(object):
                         result_handler.success('Namespace successfully created on proxy {0} with preset {1}!'.format(service.name, preset_name),
                                                code=ErrorCodes.proxy_namespace_create)
                         namespace_info = AlbaCLI.run(command='show-namespace', config=abm_config, extra_params=[namespace_key])
-                        Toolbox.verify_required_params(required_params=namespace_params, actual_params=namespace_info)
+                        ExtensionsToolbox.verify_required_params(required_params=namespace_params, actual_params=namespace_info)
                         result_handler.success('Namespace successfully fetched on proxy {0} with preset {1}!'.format(service.name, preset_name),
                                                code=ErrorCodes.proxy_namespace_fetch)
 
