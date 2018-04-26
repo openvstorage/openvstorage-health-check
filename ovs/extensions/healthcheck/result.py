@@ -105,10 +105,10 @@ class HCResults(object):
         self.to_json = to_json
 
         self.print_progress = not(to_json or unattended)
-        # Setup HC counters
-        self.counters = {}
+        # Setup HC counter
+        self.counter = collections.Counter()
         for severity in Severities.get_severities():
-            self.counters[severity.print_value] = 0
+            self.counter[severity.print_value] = 0
 
         # Result of healthcheck in dict form
         self.result_dict = {}
@@ -144,7 +144,7 @@ class HCResults(object):
                 if severity.value > result_severity.value:
                     self.result_dict[test_name]['state'] = print_value
                 self.result_dict[test_name]["messages"] = messages
-        self.counters[print_value] += 1
+        self.counter[print_value] += 1
         if self.print_progress:
             print "{0}[{1}] {2}{3}".format(severity.color, print_value, self.LINE_COLOR, str(message))
 
