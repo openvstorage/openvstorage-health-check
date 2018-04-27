@@ -26,6 +26,10 @@ from ovs.extensions.healthcheck.result import HCResults
 from ovs.extensions.storage.volatilefactory import VolatileFactory
 from ovs.extensions.healthcheck.logger import Logger
 
+"""
+Expose to CLI module. Depends on the python-click library
+"""
+
 
 # noinspection PyPep8Naming
 class expose_to_cli(object):
@@ -149,7 +153,6 @@ class CLI(click.MultiCommand):
             :rtype: dict
             """
             # Build cache
-            # Executed from lib, want to go to extensions/healthcheck
             found_items = {'expires': time.time() + cls.CACHE_EXPIRE_HOURS * 60 ** 2}
             path = start_path
             for root, dirnames, filenames in os.walk(path):
@@ -199,6 +202,15 @@ class CLI(click.MultiCommand):
         del exposed_methods['expires']
         return exposed_methods
 
+    @classmethod
+    def clear_cache(cls):
+        """
+        Clear all cache related to discovering methods
+        :return: None
+        :rtype: NoneType
+        """
+        cls._volatile_client.delete(cls.CACHE_KEY)
+
 ###############################
 # Healthcheck implementations #
 ###############################
@@ -220,15 +232,31 @@ class HealthcheckCLiContext(CLIContext):
         self.modules = {}
 
 
-class HealthcheckAddonGroup(CLI):
+class HealthcheckMultigroup(CLI):
+    """
+    Healthcheck MultiGroup class
+    Serves as a base for the Addon and CLi
+    """
+    ADDON_TYPE = 'healthcheck'
+    CACHE_KEY = 'ovs_healthcheck_discover_method'
+
+    logger = Logger("healthcheck-ovs_clirunner")
+
+    def __init__(self, *args, **kwargs):
+        super(HealthcheckMultigroup, self).__init__(*args, **kwargs)
+
+
+class HealthcheckAddonGroup(HealthcheckMultigroup):
     """
     Healthcheck Addon group class
     A second separation was required to inject the correct result handler instance
     """
-    ADDON_TYPE = 'healthcheck'
 
     def __init__(self, *args, **kwargs):
-        super(HealthcheckAddonGroup, self).__init__(*args, **kwargs)
+        # Allow modules to be invoked without any other options behind them for backwards compatibility
+        super(HealthcheckAddonGroup, self).__init__(invoke_without_command=True,
+                                                    callback=click.pass_context(self.run_methods_in_module),
+                                                    *args, **kwargs)
 
     def list_commands(self, ctx):
         """
@@ -298,14 +326,28 @@ class HealthcheckAddonGroup(CLI):
             return node_check(new_function)
         return wrapper
 
+    @staticmethod
+    def run_methods_in_module(ctx):
+        """
+        Invoked when no test option was passed
+        Runs all tests part of this module
+        :param ctx: Context object
+        """
+        # When run with subcommand, allow it to passthrough for default behaviour
+        if ctx.invoked_subcommand is None:
+            # Invoked without sub command. Run all functions.
+            group_instance = ctx.command  # type: HealthcheckAddonGroup
+            for sub_command in group_instance.list_commands(ctx):
+                ctx.invoke(group_instance.get_command(ctx, sub_command))
+            return
 
-class HealthcheckCLI(CLI):
+
+class HealthcheckCLI(HealthcheckMultigroup):
     """
     Click CLI which dynamically loads all possible commands
     """
     UNATTENDED = '--unattended'
     TO_JSON = '--to-json'
-    ADDON_TYPE = 'healthcheck'
     GROUP_MODULE_CLASS = HealthcheckAddonGroup
 
     logger = Logger("healthcheck-ovs_clirunner")
@@ -315,8 +357,9 @@ class HealthcheckCLI(CLI):
         Initializes a CLI instance
         Injects a healthcheck specific callback
         """
-        super(HealthcheckCLI, self).__init__(*args, **kwargs)
-        self.result_callback = self.healthcheck_result_handler
+        super(HealthcheckCLI, self).__init__(invoke_without_command=True,
+                                             result_callback=self.healthcheck_result_handler,
+                                             *args, **kwargs)
 
     def parse_args(self, ctx, args):
         """
@@ -344,8 +387,7 @@ class HealthcheckCLI(CLI):
         discovery_data = self._discover_methods()
         if name in discovery_data.keys():
             # The current passed name is a module. Wrap it up in a group and add all commands under it dynamically
-            module_commands = {}
-            ret = self.GROUP_MODULE_CLASS(name, module_commands)
+            ret = self.GROUP_MODULE_CLASS(name=name)
             return ret
 
     @staticmethod
@@ -371,6 +413,17 @@ class HealthcheckCLI(CLI):
         # returns dict with minimal and detailed information
         return {'result': result, 'recap': dict(recount)}
 
+    def main(self, args=None, prog_name=None, complete_var=None, standalone_mode=True, **extra):
+        try:
+            super(HealthcheckCLI, self).main(args, prog_name, complete_var, standalone_mode, **extra)
+        except click.Abort:
+            try:
+                self.logger.warning('Caught keyboard interrupt. Output may be incomplete!')
+                return
+            except:
+                self.logger.exception('Could not instantiate the context. Someone must be wrong while loading in all modules')
+                return
+
 
 @click.group(cls=HealthcheckCLI)
 @click.option('--unattended', is_flag=True, help='Only output the results in a compact format')
@@ -385,21 +438,21 @@ def healthcheck_entry_point(ctx, unattended, to_json):
     ctx.obj = HealthcheckCLiContext(result_handler)
     result_handler.info('Starting OpenvStorage Healthcheck version {0}'.format(Helper.get_healthcheck_version()))
     result_handler.info("======================")
-
-
-# @todo remove
-class HealthCheckCLIRunner(object):
-    """
-    Healthcheck adaptation of CLIRunner
-    Injects a result_handler instance with shared resources to every test to collect the results.
-    """
-    logger = Logger("healthcheck-healthcheck_clirunner")
-    START_PATH = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir)), 'healthcheck')
-    ADDON_TYPE = 'healthcheck'
+    # When run with subcommand, allow it to passthrough for default behaviour
+    if ctx.invoked_subcommand is None:
+        # Invoked without sub command. Run all functions.
+        cli_instance = ctx.command  # type: HealthcheckCLI
+        for sub_command in cli_instance.list_commands(ctx):
+            try:
+                ctx.invoke(cli_instance.get_command(ctx, sub_command))
+            except click.Abort:
+                raise
+            except Exception:
+                result_handler.exception('Unhandled exception caught when executing {0}'.format(sub_command))
+                HealthcheckCLI.logger.exception('Unhandled exception caught when executing {0}'.format(sub_command))
+        return
 
 
 if __name__ == '__main__':
-    # @todo remove
-    HealthcheckCLI._volatile_client.delete(HealthcheckCLI.CACHE_KEY)
-    # healthcheck_entry_point(['arakoon', '--help'])
-    healthcheck_entry_point()
+    context = healthcheck_entry_point(['alba'], standalone_mode=False)
+

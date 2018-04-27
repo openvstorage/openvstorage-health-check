@@ -21,7 +21,7 @@ from ovs.extensions.generic.configuration import Configuration
 from ovs_extensions.generic.ipmi import IPMIController, IPMITimeOutException, IPMICallException
 from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.generic.system import System
-from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
+from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthcheckCLI
 from ovs.extensions.healthcheck.logger import Logger
 
 
@@ -33,7 +33,9 @@ class IPMIHealthCheck(object):
     logger = Logger("healthcheck-healthcheck_ipmi")
 
     @classmethod
-    @expose_to_cli(MODULE, 'ipmi-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'ipmi-test', HealthcheckCLI.ADDON_TYPE,
+                   help='Verify that AlbaNodes can be controlled through IPMI',
+                   short_help='Test if AlbaNodes their IPMI info is correct')
     def ipmi_check(cls, result_handler):
         """
         :param result_handler: logging object

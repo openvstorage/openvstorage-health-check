@@ -3,3 +3,6 @@
 chown ovs:ovs /opt/OpenvStorage/scripts/healthcheck.sh
 chmod 755 /opt/OpenvStorage/scripts/healthcheck.sh
 chmod +x /opt/OpenvStorage/scripts/healthcheck.sh
+
+# Clear the cache
+python -c "from ovs.extensions.healthcheck.expose_to_cli import HealthcheckCLI; HealthcheckCLI.clear_cache()"

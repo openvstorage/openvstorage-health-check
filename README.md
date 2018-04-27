@@ -44,26 +44,25 @@ ovs healthcheck MODULE METHOD
 Will run the method for the specified module
 ### 3.3. In-code usage
 
-All code is currently handled by the HealthCheckCLIRunner. This way we kept our testing flexible and expandable.
+Running Healthcheck tests throughout a Python interface is a little tougher as it is written to be used through the CLI interface
+However if you do wish to use the Python interface:
+- All tests require a HCResults instance to be passed
 ```
-In [1]: from ovs.extensions.healthcheck.expose_to_cli import HealthCheckCLIRunner
-
-In [2]: HealthCheckCLIRunner.run_method()
-Out[2]: 
-{'recap': {'EXCEPTION': 0,
-  'FAILED': 0,
-  'SKIPPED': 11,
-  'SUCCESS': 182,
-  'WARNING': 0},
- 'result': {'alba-backend-test': {'messages': OrderedDict([('error', []), ('exception', []), ('skip', []), ('success', [{'message': 'We found 3 backend(s)!', 'code': 'HC000'}, {'message': 'ASD test with DISK_ID t5X9va8aO6bnxifPlRjk7FxIeMFeeUEi succeeded!', 'code': 'HC000'}, {'message': 'ASD test with DISK_ID ZnIec3oF1c9zaWcmA8X9N4BN1PMZLtEq succeeded!', 'code': 'HC000'}, {'message': 'ASD test with DISK_ID kxvqKj3DH69tAmVPWwtpBwlgwGTOCYsE succeeded!', 'code': 'HC000'}, {'message': 'ASD test with DISK_ID R5P6oRaRZrVlnT6bHvW6Jr60PTNqMgBY succeeded!', 'code': 'HC000'}, {'message': 'ASD test with DISK_ID oqBbYRDrDZUr941YcjBeuDNgwa54x5B8 succeeded!', 'code': 'HC000'}, {'message': 'ASD test with DISK_ID t15miMiMTXtPAlvBOUIVUXReVKwEcGEK succeeded!', 'code': 'HC000'}, {'message': 'Alba backend mybackend02 should be available for VPool use. All asds are working fine!', 'code': 'HC000'}, {'message': 'ASD test with DISK_ID F8q0gti78jBiBtIZMOWubYgXyo5MFhJJ succeeded!', 'code': 'HC000'}, {'message': 'ASD test with DISK_ID uMeRaJSV4YFzX2KmGGRZL0lInTBvtyAS succeeded!', 'code': 'HC000'}, {'message': 'ASD test with DISK_ID iNnUDyOb4v1aIDc5kzsf6u7uV6uv50ax succeeded!', 'code': 'HC000'}, {'message': 'ASD test with DISK_ID YrgPKQlFHvEv3HKikLZ85N0lfLzZbiY2 succeeded!', 'code': 'HC000'}, {'message': 'ASD test with DISK_ID ixbskq2MUnWpioEHAkkyrLAqOxQuNx30 succeeded!', 'code': 'HC000'}, {'message': 'ASD test with DISK_ID lg0gR9pGJKY8SZauTU3QjtfhlI6g1ST6 succeeded!', 'code': 'HC000'}, {'message': 'ASD test with DISK_ID ErDkFxfe28JUMzlHQjZUmVfDO6vhtBlU succeeded!', 'code': 'HC000'}, {'message': 'ASD test with DISK_ID 70R56wudQYpJixzeQ0vj4pSS0a1KgCDJ succeeded!', 'code': 'HC000'}, {'message': 'ASD test with DISK_ID RQJkYgrICOflecO5QrD8llYEaZt2CoAT succeeded!', 'code': 'HC000'}, {'message': 'ASD test with DISK_ID oHaT2TpprxJr7WHfyXSfEAkfbaTjFVfZ succeeded!', 'code': 'HC000'}, {'message': 'ASD test with DISK_ID 80YRsH75fS9mN8S6t6A3QZ7HqEaDYeKF succeeded!', 'code': 'HC000'}, {'message': 'ASD test with DISK_ID q8iEivSKPwOfA1rJJL7ShOSkAMiO4uNS succeeded!', 'code': 'HC000'}, {'message': 'Alba backend mybackend should be available for VPool use. All asds are working fine!', 'code': 'HC000'}]), ('warning', [])]),
-   'state': 'SUCCESS'},
-  'alba-disk-safety-test': {'messages': OrderedDict([('error', []), ('exception', []), ('skip', []), ('success', [{'message': 'All data is safe on backend mybackend02 with 1 namespace(s)', 'code': 'HC000'}, {'message': 'All data is safe on backend mybackend with 1 namespace(s)', 'code': 'HC000'}]), ('warning', [])]),
-   'state': 'SUCCESS'},
-
-
-  ...
+from ovs.extensions.healthcheck.result import HCResults
+from ovs.extensions.healthcheck.arakoon_hc import ArakoonHealthCheck
+result = HCResults()
+ArakoonHealthCheck.check_collapse(result)
 ```
-All the checks will still log by printing but the return value can be captured in a value.
+If you wish to capture output: a named HCResults must be passed. This way a single result instance can capture all test outputs
+```
+from ovs.extensions.healthcheck.result import HCResults
+from ovs.extensions.healthcheck.arakoon_hc import ArakoonHealthCheck
+result = HCResults()
+ArakoonHealthCheck.check_collapse(result.HCResultCollector(result=result, test_name='collapse-test'))
+# Output
+print result.counter
+print result.result_dict
+```
 
 ## 4. Important to know!
 * No files in the vPools may be named after: `ovs-healthcheck-test-{storagerouter_id}.xml`
