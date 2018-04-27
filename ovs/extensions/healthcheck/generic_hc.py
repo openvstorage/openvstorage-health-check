@@ -106,7 +106,7 @@ class OpenvStorageHealthCheck(object):
         """
         # @todo: check other port ranges too
         port_range = Configuration.get('/ovs/framework/hosts/{0}/ports|storagedriver'.format(OpenvStorageHealthCheck.LOCAL_ID))
-        expected_ports = System.get_free_ports(selected_range=port_range, nr=0)
+        expected_ports = System.get_free_ports(selected_range=port_range, amount=0)
         if len(expected_ports) >= requested_ports:
             result_handler.success('{} ports free'.format(len(expected_ports)))
         else:

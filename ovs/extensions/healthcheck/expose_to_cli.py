@@ -19,6 +19,7 @@ import imp
 import time
 import click
 import inspect
+from functools import wraps
 from ovs.extensions.healthcheck.decorators import node_check
 from ovs.extensions.healthcheck.helpers.helper import Helper
 from ovs.extensions.healthcheck.result import HCResults
@@ -30,17 +31,37 @@ from ovs.extensions.healthcheck.logger import Logger
 class expose_to_cli(object):
     """
     Class decorator which adds certain attributes so the method can be exposed
+    Arguments can be passed using the python-click option decorator
+    Example:
+        import click
+        @click.option('--to-json', default=False) -> will set to_json to False or w/e provided in the underlying function
     """
-    def __init__(self, module_name, method_name, addon_type=None):
-        self.module_name = module_name
-        self.method_name = method_name
-        self.addon_type = addon_type
+    attribute = '__expose_to_cli__'
+
+    def __init__(self, module_name, method_name, addon_type=None, help=None, short_help=None):
+        # Change all arguments to a dict
+        function_data = locals()
+        function_data.pop('self', None)  # Exclude 'self'
+        self.function_data = function_data
 
     def __call__(self, func):
-        func.expose_to_cli = {'module_name': self.module_name,
-                              'method_name': self.method_name,
-                              'addon_type': self.addon_type}
+        setattr(func, self.attribute, self.function_data)
         return func
+
+    @staticmethod
+    def option(*param_decls, **attrs):
+        """
+        Decorator to create an option value for the exposed method
+        Wraps around the click decorator
+        :param param_decls: All possible param declarations (eg '--to-json', '-t')
+        :param attrs: All possible attributes. See click.Option for all possible items
+        """
+        def wrapper(func):
+            @wraps(func)
+            def new_function(*args, **kwargs):
+                return func(*args, **kwargs)
+            return click.option(*param_decls, **attrs)(new_function)
+        return wrapper
 
 
 ######################################################################
@@ -121,8 +142,6 @@ class CLI(click.MultiCommand):
         start_path = cls.CMD_FOLDER
         addon_type = cls.ADDON_TYPE
 
-        # @todo remove
-        cls._volatile_client.delete(cls.CACHE_KEY)
         def discover():
             """
             Build a dict listing all discovered methods with @expose_to_cli
@@ -141,13 +160,13 @@ class CLI(click.MultiCommand):
                     file_path = os.path.join(root, filename)
                     # Import file
                     mod = imp.load_source(name, file_path)
-                    for member in inspect.getmembers(mod):
-                        if not (inspect.isclass(member[1]) and member[1].__module__ == name and 'object' in [base.__name__ for base in member[1].__bases__]):
+                    for member_name, member_value in inspect.getmembers(mod):
+                        if not (inspect.isclass(member_value) and member_value.__module__ == name and 'object' in [base.__name__ for base in member_value.__bases__]):
                             continue
-                        for submember in inspect.getmembers(member[1]):
-                            if not hasattr(submember[1], 'expose_to_cli'):
+                        for submember_name, submember_value in inspect.getmembers(member_value):
+                            if not hasattr(submember_value, expose_to_cli.attribute):
                                 continue
-                            exposed_data = submember[1].expose_to_cli
+                            exposed_data = getattr(submember_value, expose_to_cli.attribute)
                             method_module_name = exposed_data['module_name']
                             method_name = exposed_data['method_name']
                             method_addon_type = exposed_data['addon_type'] if 'addon_type' in exposed_data else None
@@ -155,14 +174,12 @@ class CLI(click.MultiCommand):
                                 found_items[method_module_name] = {}
                             # Only return when the addon type matches
                             if method_addon_type == addon_type:
-                                # noinspection PyUnresolvedReferences
-                                found_items[method_module_name][method_name] = {'method_name': method_name,
-                                                                                'module_name': name,
-                                                                                'function': submember[1].__name__,
-                                                                                'class': member[1].__name__,
-                                                                                'location': file_path,
-                                                                                'version': version_id,
-                                                                                'addon_type': method_addon_type}
+                                function_metadata = {'function': submember_value.__name__,
+                                                     'class': member_value.__name__,
+                                                     'location': file_path,
+                                                     'version': version_id}
+                                function_metadata.update(exposed_data)  # Add all exposed data for further re-use
+                                found_items[method_module_name][method_name] = function_metadata
             return found_items
 
         try:
@@ -213,6 +230,19 @@ class HealthcheckAddonGroup(CLI):
     def __init__(self, *args, **kwargs):
         super(HealthcheckAddonGroup, self).__init__(*args, **kwargs)
 
+    def list_commands(self, ctx):
+        """
+        Lists all possible commands found for this addon group
+        All modules are retrieved
+        :param ctx: Passed context
+        :return: List of files to look for commands
+        """
+        current_module_name = ctx.command.name
+        discovery_data = self._discover_methods()  # Will be coming from cache
+        sub_commands = discovery_data.get(current_module_name, {}).keys()
+        sub_commands.sort()
+        return sub_commands
+
     def get_command(self, ctx, name):
         """
         Retrieves a command to execute
@@ -233,9 +263,40 @@ class HealthcheckAddonGroup(CLI):
                 method_to_run = getattr(cl, function_data['function'])
                 # node_check(found_method)(result_handler.HCResultCollector(result=result_handler, test_name=test_name))  # Wrapped in nodecheck for callback
                 result_collector = result_handler.HCResultCollector(result=result_handler, test_name=name)
-                # Wrapping the function in a nodecheck to only test once at the same time
-                # @todo support arguments passed in expose to cli
-                return click.Command(name, callback=lambda: node_check(method_to_run)(result_collector))
+                wrapped_function = (self.healthcheck_wrapper(result_collector, str(name))(method_to_run))  # Inject our Healthcheck arguments
+                # Wrap around the click decorator to extract the option arguments
+                click_command = click.command(name=name,
+                                              help=function_data.get('help'),
+                                              short_help=function_data.get('short_help'))
+                return click_command(wrapped_function)
+
+    @staticmethod
+    def healthcheck_wrapper(result_collector, new_func_name):
+        """
+        Healthcheck function decorator to run Healthcheck test methods while preserving all context
+        - changes the name of the passed function to the new desired one
+        - Injects the result collector instance
+        - Preserves all other options
+        """
+        def wrapper(func):
+            """
+            Wrapper function
+            :param func: Then function to wrap
+            :type func: callable
+            :return: New wrapped function
+            :rtype: callable
+            """
+            @wraps(func)
+            def new_function(*args, **kwargs):
+                """
+                Wrapping function. Injects the result collector
+                """
+                return func(result_handler=result_collector, *args, **kwargs)
+            # Change the name to the desired one
+            new_function.__name__ = new_func_name
+            # Wrap around a node check to only test once per node
+            return node_check(new_function)
+        return wrapper
 
 
 class HealthcheckCLI(CLI):
@@ -338,5 +399,7 @@ class HealthCheckCLIRunner(object):
 
 
 if __name__ == '__main__':
-    healthcheck_entry_point(['arakoon', 'ports-test', '--to-json'])
-    # healthcheck_entry_point()
+    # @todo remove
+    HealthcheckCLI._volatile_client.delete(HealthcheckCLI.CACHE_KEY)
+    # healthcheck_entry_point(['arakoon', '--help'])
+    healthcheck_entry_point()

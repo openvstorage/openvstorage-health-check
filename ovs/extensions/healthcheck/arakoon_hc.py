@@ -83,7 +83,10 @@ class ArakoonHealthCheck(object):
 
     @classmethod
     @cluster_check
-    @expose_to_cli(MODULE, 'nodes-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'nodes-test', HealthCheckCLIRunner.ADDON_TYPE,
+                   help='Verify if nodes are missing and if nodes are catching up to the master',
+                   short_help='Test if there are nodes missing/catching up')
+    @expose_to_cli.option('--max-transactions-behind', type=int, default=10, help='The number of transactions that a slave can be behind a master before logging a failure')
     def check_node_status(cls, result_handler, max_transactions_behind=10):
         """
         Checks the status of every node within the Arakoon cluster
@@ -139,7 +142,9 @@ class ArakoonHealthCheck(object):
 
     @classmethod
     @cluster_check
-    @expose_to_cli(MODULE, 'ports-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'ports-test', HealthCheckCLIRunner.ADDON_TYPE,
+                   help='Verifies that the Arakoon clusters still respond to connections',
+                   short_help='Test if Arakoons accepts connections')
     def check_arakoon_ports(cls, result_handler):
         """
         Verifies that the Arakoon clusters still respond to connections
@@ -245,7 +250,11 @@ class ArakoonHealthCheck(object):
 
     @classmethod
     @cluster_check
-    @expose_to_cli(MODULE, 'collapse-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'collapse-test', HealthCheckCLIRunner.ADDON_TYPE,
+                   help='Verifies collapsing has occurred for all Arakoons',
+                   short_help='Test if Arakoon collapsing is not failing')
+    @expose_to_cli.option('--max_collapse-age', type=int, default=3, help='Maximum age in days for TLX')
+    @expose_to_cli.option('--min-tlx-amount', type=int, default=10, help='Minimum amount of TLX files before testing')
     def check_collapse(cls, result_handler, max_collapse_age=3, min_tlx_amount=10):
         """
         Verifies collapsing has occurred for all Arakoons
@@ -438,7 +447,9 @@ class ArakoonHealthCheck(object):
 
     @classmethod
     @cluster_check
-    @expose_to_cli(MODULE, 'integrity-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'integrity-test', HealthCheckCLIRunner.ADDON_TYPE,
+                   help='Verifies that all Arakoon clusters are still responding to client calls',
+                   short_help='Test if Arakoon clusters are still responding')
     def verify_integrity(cls, result_handler):
         """
         Verifies that all Arakoon clusters are still responding to client calls
@@ -467,7 +478,10 @@ class ArakoonHealthCheck(object):
 
     @classmethod
     @cluster_check
-    @expose_to_cli(MODULE, 'file-descriptors-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'file-descriptors-test', HealthCheckCLIRunner.ADDON_TYPE,
+                   help='Verify the number of File Descriptors on every Arakoon does not exceed the limit',
+                   short_help='Test if #FD does not exceed the limit')
+    @expose_to_cli.option('--fd-limit', type=int, default=30, help='Threshold for the number number of tcp connections for which to start logging warnings')
     def check_arakoon_fd(cls, result_handler, fd_limit=30, passed_connections=None):
         """
         Checks all current open tcp file descriptors for all Arakoon clusters in the OVS cluster
