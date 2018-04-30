@@ -16,12 +16,13 @@
 
 import os
 import imp
+import sys
+import copy
 import time
 import click
 import inspect
 from functools import wraps
 from ovs.extensions.healthcheck.decorators import node_check
-from ovs.extensions.healthcheck.helpers.helper import Helper
 from ovs.extensions.healthcheck.result import HCResults
 from ovs.extensions.storage.volatilefactory import VolatileFactory
 from ovs.extensions.healthcheck.logger import Logger
@@ -29,6 +30,8 @@ from ovs.extensions.healthcheck.logger import Logger
 """
 Expose to CLI module. Depends on the python-click library
 """
+
+# @todo Make it recursive. Current layout enforces SUBMODULE COMMAND, SUBMODULE, SUB, COMMAND is not possible
 
 
 # noinspection PyPep8Naming
@@ -43,17 +46,20 @@ class expose_to_cli(object):
     attribute = '__expose_to_cli__'
 
     def __init__(self, module_name, method_name, addon_type=None, help=None, short_help=None):
+        # type: (str, str, str, str, str) -> None
         # Change all arguments to a dict
         function_data = locals()
         function_data.pop('self', None)  # Exclude 'self'
         self.function_data = function_data
 
     def __call__(self, func):
+        # type: (callable) -> callable
         setattr(func, self.attribute, self.function_data)
         return func
 
     @staticmethod
     def option(*param_decls, **attrs):
+        # type: (*any, **any) -> callable
         """
         Decorator to create an option value for the exposed method
         Wraps around the click decorator
@@ -102,9 +108,11 @@ class CLI(click.MultiCommand):
     _discovery_cache = {}
 
     def __init__(self, *args, **kwargs):
+        # type: (*any, **any) -> None
         super(CLI, self).__init__(*args, **kwargs)
 
     def list_commands(self, ctx):
+        # type: (click.Context) -> list[str]
         """
         Lists all possible commands found within the directory of this file
         All modules are retrieved
@@ -116,6 +124,7 @@ class CLI(click.MultiCommand):
         return sub_commands
 
     def get_command(self, ctx, name):
+        # type: (click.Context, str) -> callable
         """
         Retrieves a command to execute
         :param ctx: Passed context
@@ -129,7 +138,8 @@ class CLI(click.MultiCommand):
             module_commands = {}
             for function_name, function_data in discovery_data[name].iteritems():
                 # Register the decorated function as callback to click
-                mod = imp.load_source(function_data['module_name'], function_data['location'])
+                # Try to avoid name collision with other modules. Might lead to unexpected results
+                mod = imp.load_source('ovs_cli_{0}'.format(function_data['module_name']), function_data['location'])
                 cl = getattr(mod, function_data['class'])()
                 module_commands[function_name] = click.Command(function_name, callback=getattr(cl, function_data['function']))
             ret = self.GROUP_MODULE_CLASS(name, module_commands)
@@ -137,6 +147,7 @@ class CLI(click.MultiCommand):
 
     @classmethod
     def _discover_methods(cls):
+        # type: () -> dict
         """
         Discovers all methods with the expose_to_cli decorator
         :return: dict that contains the required info based on module_name and method_name
@@ -159,12 +170,16 @@ class CLI(click.MultiCommand):
                 for filename in filenames:
                     if not (filename.endswith('.py') and filename != '__init__.py'):
                         continue
-                    name = filename.replace('.py', '')
+                    module_name = filename.replace('.py', '')
                     file_path = os.path.join(root, filename)
-                    # Import file
-                    mod = imp.load_source(name, file_path)
+                    relative_path = os.path.relpath(file_path, path)
+                    relative_module_name = ''.join(os.path.split(relative_path.replace('.py', '')))
+                    # Import file, making it relative to the start path to avoid name collision.
+                    # Without it, the module contents would be merged (eg. alba.py and testing/alba.py would be merged, overriding the path
+                    # imp.load_source is different from importing. Therefore using the relative-joined name is safe
+                    mod = imp.load_source(relative_module_name, file_path)
                     for member_name, member_value in inspect.getmembers(mod):
-                        if not (inspect.isclass(member_value) and member_value.__module__ == name and 'object' in [base.__name__ for base in member_value.__bases__]):
+                        if not (inspect.isclass(member_value) and member_value.__module__ == module_name and 'object' in [base.__name__ for base in member_value.__bases__]):
                             continue
                         for submember_name, submember_value in inspect.getmembers(member_value):
                             if not hasattr(submember_value, expose_to_cli.attribute):
@@ -185,8 +200,14 @@ class CLI(click.MultiCommand):
                                 found_items[method_module_name][method_name] = function_metadata
             return found_items
 
+        def get_and_cache():
+            found_items = cls._volatile_client.get(cls.CACHE_KEY)
+            if found_items:
+                cls._discovery_cache.update(found_items)
+            return found_items
+
         try:
-            exposed_methods = cls._discovery_cache or cls._volatile_client.get(cls.CACHE_KEY)
+            exposed_methods = copy.deepcopy(cls._discovery_cache) or get_and_cache()
             if exposed_methods and exposed_methods['expires'] > time.time():
                 # Able to use the cache, has not expired yet
                 del exposed_methods['expires']
@@ -204,6 +225,7 @@ class CLI(click.MultiCommand):
 
     @classmethod
     def clear_cache(cls):
+        # type: () -> None
         """
         Clear all cache related to discovering methods
         :return: None
@@ -211,9 +233,77 @@ class CLI(click.MultiCommand):
         """
         cls._volatile_client.delete(cls.CACHE_KEY)
 
+
+class CLIAddonGroup(CLI):
+    """
+    Handles retrieving the right command
+    """
+    # @todo make it recurive here. The depth of the relation should indicate returning a command or antoher CLIAddonGroup
+
+    def __init__(self, *args, **kwargs):
+        # type: (*any, **any) -> None
+        super(CLIAddonGroup, self).__init__(*args, **kwargs)
+
+    def list_commands(self, ctx):
+        # type: (click.Context) -> list[str]
+        """
+        Lists all possible commands found for this addon group
+        All modules are retrieved
+        :param ctx: Passed context
+        :return: List of files to look for commands
+        """
+        current_module_name = ctx.command.name
+        discovery_data = self._discover_methods()  # Will be coming from cache
+        sub_commands = discovery_data.get(current_module_name, {}).keys()
+        sub_commands.sort()
+        return sub_commands
+
+    def run_methods_in_module(self, ctx):
+        # type: (click.Context) -> None
+        """
+        Invoked when no test option was passed
+        Runs all tests part of this module
+        :param ctx: Context object
+        """
+        # When run with subcommand, allow it to passthrough for default behaviour
+        if ctx.invoked_subcommand is None:
+            # Invoked without sub command. Run all functions.
+            with self.make_context(ctx.invoked_subcommand, self.list_commands(ctx), parent=ctx) as context:
+                self.invoke(context)
+            return
+
+    def get_command(self, ctx, name):
+        # type: (click.Context, str) -> click.Command
+        """
+        Retrieves a command to execute
+        :param ctx: Passed context
+        :param name: Name of the command
+        :return: Function pointer to the command or None when no import could happen
+        :rtype: callable
+        """
+        # @todo Make recursive with other groups
+        discovery_data = self._discover_methods()  # Will be coming from cache
+        current_module_name = ctx.command.name
+        if current_module_name in discovery_data.keys():
+            if name in discovery_data[current_module_name]:
+                function_data = discovery_data[current_module_name][name]
+                mod = imp.load_source(function_data['module_name'], function_data['location'])
+                cl = getattr(mod, function_data['class'])()
+                method_to_run = getattr(cl, function_data['function'])
+                click_command = click.command(name=name,
+                                              help=function_data.get('help'),
+                                              short_help=function_data.get('short_help'))
+                return click_command(method_to_run)
+
 ###############################
 # Healthcheck implementations #
 ###############################
+
+
+class HealthcheckTerminatedException(KeyboardInterrupt):
+    """
+    Thrown when a test would be terminated by the user
+    """
 
 
 class HealthcheckCLiContext(CLIContext):
@@ -232,33 +322,57 @@ class HealthcheckCLiContext(CLIContext):
         self.modules = {}
 
 
-class HealthcheckMultigroup(CLI):
+class HealthCheckShared(object):
     """
-    Healthcheck MultiGroup class
-    Serves as a base for the Addon and CLi
+    Constants for the HealthcheckCLI
     """
+
     ADDON_TYPE = 'healthcheck'
     CACHE_KEY = 'ovs_healthcheck_discover_method'
 
     logger = Logger("healthcheck-ovs_clirunner")
 
-    def __init__(self, *args, **kwargs):
-        super(HealthcheckMultigroup, self).__init__(*args, **kwargs)
+    @staticmethod
+    def get_healthcheck_results(result_handler):
+        # type (HCResults) -> dict
+        """
+        Output the Healthcheck results
+        :param result_handler: HCResults instance
+        """
+        recap_executer = 'Health Check'
+        result = result_handler.get_results()
+        result_handler.info("Recap of {0}!".format(recap_executer))
+        result_handler.info("======================")
+        recount = []  # Order matters
+        for severity in ['SUCCESS', 'FAILED', 'SKIPPED', 'WARNING', 'EXCEPTION']:
+            recount.append((severity, result_handler.counter[severity]))
+        result_handler.info(' '.join('{0}={1}'.format(s, v) for s, v in recount))
+        # returns dict with minimal and detailed information
+        return {'result': result, 'recap': dict(recount)}
 
 
-class HealthcheckAddonGroup(HealthcheckMultigroup):
+class HealthcheckAddonGroup(CLIAddonGroup):
     """
     Healthcheck Addon group class
     A second separation was required to inject the correct result handler instance
     """
+    # Explicitly setting these here because if this class would inherit from Shared too:
+    # MRO would point to CLIAddonGroup first to resolve the attr
+    ADDON_TYPE = HealthCheckShared.ADDON_TYPE
+    CACHE_KEY = HealthCheckShared.CACHE_KEY
+
+    logger = HealthCheckShared.logger
 
     def __init__(self, *args, **kwargs):
+        # type: (*any, **any) -> None
         # Allow modules to be invoked without any other options behind them for backwards compatibility
-        super(HealthcheckAddonGroup, self).__init__(invoke_without_command=True,
+        super(HealthcheckAddonGroup, self).__init__(chain=True,
+                                                    invoke_without_command=True,
                                                     callback=click.pass_context(self.run_methods_in_module),
                                                     *args, **kwargs)
 
     def list_commands(self, ctx):
+        # type: (click.Context) -> list[str]
         """
         Lists all possible commands found for this addon group
         All modules are retrieved
@@ -272,6 +386,7 @@ class HealthcheckAddonGroup(HealthcheckMultigroup):
         return sub_commands
 
     def get_command(self, ctx, name):
+        # type: (click.Context, str) -> click.Command
         """
         Retrieves a command to execute
         :param ctx: Passed context
@@ -280,32 +395,37 @@ class HealthcheckAddonGroup(HealthcheckMultigroup):
         :rtype: callable
         """
         discovery_data = self._discover_methods()  # Will be coming from cache
-        result_handler = ctx.obj.result_handler
+        result_handler = ctx.obj.result_handler  # type: HCResults
         current_module_name = ctx.command.name
         if current_module_name in discovery_data.keys():
             if name in discovery_data[current_module_name]:
                 # Function found, inject the result handler
                 function_data = discovery_data[current_module_name][name]
-                mod = imp.load_source(function_data['module_name'], function_data['location'])
+                # Try to avoid name collision with other modules. Might lead to unexpected results
+                mod = imp.load_source('healthcheck_{0}'.format(function_data['module_name']), function_data['location'])
                 cl = getattr(mod, function_data['class'])()
                 method_to_run = getattr(cl, function_data['function'])
-                # node_check(found_method)(result_handler.HCResultCollector(result=result_handler, test_name=test_name))  # Wrapped in nodecheck for callback
-                result_collector = result_handler.HCResultCollector(result=result_handler, test_name=name)
-                wrapped_function = (self.healthcheck_wrapper(result_collector, str(name))(method_to_run))  # Inject our Healthcheck arguments
+                wrapped_function = (self.healthcheck_wrapper(result_handler, str(name))(method_to_run))  # Inject our Healthcheck arguments
                 # Wrap around the click decorator to extract the option arguments
                 click_command = click.command(name=name,
                                               help=function_data.get('help'),
                                               short_help=function_data.get('short_help'))
                 return click_command(wrapped_function)
 
-    @staticmethod
-    def healthcheck_wrapper(result_collector, new_func_name):
+    def healthcheck_wrapper(self, result_handler, test_name):
+        # type: (HCResults, str) -> callable
         """
         Healthcheck function decorator to run Healthcheck test methods while preserving all context
         - changes the name of the passed function to the new desired one
         - Injects the result collector instance
         - Preserves all other options
+        :param result_handler: The result handler instance
+        :type result_handler: HCResults
+        :param test_name: Name of the test to run
+        :type test_name: str
         """
+        result_collector = result_handler.HCResultCollector(result=result_handler, test_name=test_name)
+
         def wrapper(func):
             """
             Wrapper function
@@ -317,17 +437,27 @@ class HealthcheckAddonGroup(HealthcheckMultigroup):
             @wraps(func)
             def new_function(*args, **kwargs):
                 """
-                Wrapping function. Injects the result collector
+                Wrapping function. Injects the result collector and captures any exceptions that might occur
                 """
-                return func(result_handler=result_collector, *args, **kwargs)
+                if not result_handler.started:
+                    result_handler.log_start_of_application()
+
+                try:
+                    return func(result_handler=result_collector, *args, **kwargs)
+                except (click.Abort, KeyboardInterrupt):
+                    self.logger.warning('Caught keyboard interrupt during {0}. Output may be incomplete!'.format(test_name))
+                    HealthCheckShared.get_healthcheck_results(result_handler)
+                    raise HealthcheckTerminatedException()  # Will be handled more globally. The whole Healthcheck should abort
+                except:
+                    self.logger.exception('Unhandled exception caught when executing {0}'.format(test_name))
+                    result_handler.exception('Unhandled exception caught when executing {0}'.format(test_name))
             # Change the name to the desired one
-            new_function.__name__ = new_func_name
+            new_function.__name__ = test_name
             # Wrap around a node check to only test once per node
             return node_check(new_function)
         return wrapper
 
-    @staticmethod
-    def run_methods_in_module(ctx):
+    def run_methods_in_module(self, ctx):
         """
         Invoked when no test option was passed
         Runs all tests part of this module
@@ -336,13 +466,12 @@ class HealthcheckAddonGroup(HealthcheckMultigroup):
         # When run with subcommand, allow it to passthrough for default behaviour
         if ctx.invoked_subcommand is None:
             # Invoked without sub command. Run all functions.
-            group_instance = ctx.command  # type: HealthcheckAddonGroup
-            for sub_command in group_instance.list_commands(ctx):
-                ctx.invoke(group_instance.get_command(ctx, sub_command))
+            with self.make_context(ctx.invoked_subcommand, self.list_commands(ctx), parent=ctx) as context:
+                self.invoke(context)
             return
 
 
-class HealthcheckCLI(HealthcheckMultigroup):
+class HealthcheckCLI(CLI):
     """
     Click CLI which dynamically loads all possible commands
     """
@@ -350,18 +479,26 @@ class HealthcheckCLI(HealthcheckMultigroup):
     TO_JSON = '--to-json'
     GROUP_MODULE_CLASS = HealthcheckAddonGroup
 
-    logger = Logger("healthcheck-ovs_clirunner")
+    # Explicitly setting these here because if this class would inherit from Shared too:
+    # MRO would point to CLIAddonGroup first to resolve the attr
+    ADDON_TYPE = HealthCheckShared.ADDON_TYPE
+    CACHE_KEY = HealthCheckShared.CACHE_KEY
+
+    logger = HealthCheckShared.logger
 
     def __init__(self, *args, **kwargs):
+        # type: (*any, **any) -> None
         """
         Initializes a CLI instance
         Injects a healthcheck specific callback
         """
-        super(HealthcheckCLI, self).__init__(invoke_without_command=True,
+        super(HealthcheckCLI, self).__init__(chain=True,
+                                             invoke_without_command=True,
                                              result_callback=self.healthcheck_result_handler,
                                              *args, **kwargs)
 
     def parse_args(self, ctx, args):
+        # type: (click.Context, list) -> None
         """
         Parses arguments. This method slices off to-json or attended for backwards compatibility
         """
@@ -377,6 +514,7 @@ class HealthcheckCLI(HealthcheckMultigroup):
         super(HealthcheckCLI, self).parse_args(ctx, args)
 
     def get_command(self, ctx, name):
+        # type: (click.Context, str) -> HealthcheckAddonGroup
         """
         Retrieves a command to execute
         :param ctx: Passed context
@@ -393,36 +531,27 @@ class HealthcheckCLI(HealthcheckMultigroup):
     @staticmethod
     @click.pass_context
     def healthcheck_result_handler(ctx, result, *args, **kwargs):
+        # type: (click.Context, any, *any, **any) -> dict
         """
         Handle the result printing of the Healthcheck
         :param ctx: Context object
         :param result: Result of the executed command
-        :return:
         """
-        _ = result
+        _ = result, args, kwargs
         hc_context = ctx.obj
         result_handler = hc_context.result_handler
-        recap_executer = 'Health Check'
-        result = result_handler.get_results()
-        result_handler.info("Recap of {0}!".format(recap_executer))
-        result_handler.info("======================")
-        recount = []  # Order matters
-        for severity in ['SUCCESS', 'FAILED', 'SKIPPED', 'WARNING', 'EXCEPTION']:
-            recount.append((severity, result_handler.counter[severity]))
-        result_handler.info(' '.join('{0}={1}'.format(s, v) for s, v in recount))
-        # returns dict with minimal and detailed information
-        return {'result': result, 'recap': dict(recount)}
+        return HealthCheckShared.get_healthcheck_results(result_handler)
 
-    def main(self, args=None, prog_name=None, complete_var=None, standalone_mode=True, **extra):
+    def main(self, args=None, prog_name=None, complete_var=None, standalone_mode=False, **extra):
+        # type: (list, str, bool, bool, **any) -> None
         try:
             super(HealthcheckCLI, self).main(args, prog_name, complete_var, standalone_mode, **extra)
-        except click.Abort:
-            try:
-                self.logger.warning('Caught keyboard interrupt. Output may be incomplete!')
-                return
-            except:
-                self.logger.exception('Could not instantiate the context. Someone must be wrong while loading in all modules')
-                return
+        except (HealthcheckTerminatedException, click.Abort, KeyboardInterrupt):
+            # Raised when an invoked command was abborted. The invoked command will output all results and then raise the exception
+            pass
+        except click.ClickException as e:
+            e.show()
+            sys.exit(e.exit_code)
 
 
 @click.group(cls=HealthcheckCLI)
@@ -430,29 +559,18 @@ class HealthcheckCLI(HealthcheckMultigroup):
 @click.option('--to-json', is_flag=True, help='Only output the results in a JSON format')
 @click.pass_context
 def healthcheck_entry_point(ctx, unattended, to_json):
+    # type: (click.Context, bool, bool) -> None
     """
     OpenvStorage healthcheck command line interface
     """
+    # Will be the 'callback' method for the HealthcheckCLi instance
     # Provide a new instance of the results to collect all results within the complete healthcheck
     result_handler = HCResults(unattended=unattended, to_json=to_json)
     ctx.obj = HealthcheckCLiContext(result_handler)
-    result_handler.info('Starting OpenvStorage Healthcheck version {0}'.format(Helper.get_healthcheck_version()))
-    result_handler.info("======================")
-    # When run with subcommand, allow it to passthrough for default behaviour
+    # When run with subcommand, it will fetch the command to execute
     if ctx.invoked_subcommand is None:
         # Invoked without sub command. Run all functions.
         cli_instance = ctx.command  # type: HealthcheckCLI
         for sub_command in cli_instance.list_commands(ctx):
-            try:
-                ctx.invoke(cli_instance.get_command(ctx, sub_command))
-            except click.Abort:
-                raise
-            except Exception:
-                result_handler.exception('Unhandled exception caught when executing {0}'.format(sub_command))
-                HealthcheckCLI.logger.exception('Unhandled exception caught when executing {0}'.format(sub_command))
+            ctx.invoke(cli_instance.get_command(ctx, sub_command))
         return
-
-
-if __name__ == '__main__':
-    context = healthcheck_entry_point(['alba'], standalone_mode=False)
-

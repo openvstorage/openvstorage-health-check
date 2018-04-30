@@ -1,5 +1,4 @@
-#!/bin/bash
-# Copyright (C) 2016 iNuron NV
+# Copyright (C) 2018 iNuron NV
 #
 # This file is part of Open vStorage Open Source Edition (OSE),
 # as available from
@@ -15,5 +14,12 @@
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
 
-cd /opt/OpenvStorage
-python /opt/OpenvStorage/scripts/healthcheck_cli.py "$@"
+"""
+CLI entrypoint for the Healthcheck
+"""
+
+from ovs.extensions.healthcheck.expose_to_cli import healthcheck_entry_point
+
+
+if __name__ == '__main__':
+    healthcheck_entry_point()  # Calls HealthCheckCLI main
