@@ -1,3 +1,3 @@
 ovs                 opt/OpenvStorage
-scripts             opt/OpenvStorage/scripts
-config              opt/OpenvStorage/config
+scripts/            opt/OpenvStorage/scripts
+config/             opt/OpenvStorage/config
