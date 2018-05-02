@@ -16,4 +16,4 @@
 # but WITHOUT ANY WARRANTY of any kind.
 
 cd /opt/OpenvStorage
-python /opt/OpenvStorage/ovs/lib/healthcheck.py "$@"
+python /opt/OpenvStorage/scripts/healthcheck_cli.py "$@"

@@ -22,6 +22,7 @@ Result processing module for the health check
 import inspect
 import collections
 from ovs.extensions.healthcheck.config.error_codes import ErrorCode, ErrorCodes
+from ovs.extensions.healthcheck.helpers.helper import Helper
 
 
 class Severity(object):
@@ -103,12 +104,13 @@ class HCResults(object):
         """
         self.unattended = unattended
         self.to_json = to_json
+        self.started = False
 
         self.print_progress = not(to_json or unattended)
-        # Setup HC counters
-        self.counters = {}
+        # Setup HC counter
+        self.counter = collections.Counter()
         for severity in Severities.get_severities():
-            self.counters[severity.print_value] = 0
+            self.counter[severity.print_value] = 0
 
         # Result of healthcheck in dict form
         self.result_dict = {}
@@ -144,7 +146,7 @@ class HCResults(object):
                 if severity.value > result_severity.value:
                     self.result_dict[test_name]['state'] = print_value
                 self.result_dict[test_name]["messages"] = messages
-        self.counters[print_value] += 1
+        self.counter[print_value] += 1
         if self.print_progress:
             print "{0}[{1}] {2}{3}".format(severity.color, print_value, self.LINE_COLOR, str(message))
 
@@ -254,3 +256,13 @@ class HCResults(object):
         :return:
         """
         self._call(message=msg, add_to_result=add_to_result, code=code, severity=Severities.debug, **kwargs)
+
+    def log_start_of_application(self):
+        """
+        Logs the start of a Healthcheck run
+        :return: None
+        :rtype: NoneType
+        """
+        self.info('Starting OpenvStorage Healthcheck version {0}'.format(Helper.get_healthcheck_version()))
+        self.info("======================")
+        self.started = True
