@@ -183,6 +183,7 @@ class CLI(click.MultiCommand):
                         mod = imp.load_source(relative_module_name, file_path)
                     except ImportError:
                         cls.logger.exception('Unable to import module at {0}'.format(file_path))
+                        continue
                     for member_name, member_value in inspect.getmembers(mod):
                         if not (inspect.isclass(member_value) and member_value.__module__ == relative_module_name and 'object' in [base.__name__ for base in member_value.__bases__]):
                             continue
