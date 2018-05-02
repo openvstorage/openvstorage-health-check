@@ -253,7 +253,7 @@ class ArakoonHealthCheck(object):
     @expose_to_cli(MODULE, 'collapse-test', HealthcheckCLI.ADDON_TYPE,
                    help='Verifies collapsing has occurred for all Arakoons',
                    short_help='Test if Arakoon collapsing is not failing')
-    @expose_to_cli.option('--max_collapse-age', type=int, default=3, help='Maximum age in days for TLX')
+    @expose_to_cli.option('--max-collapse-age', type=int, default=3, help='Maximum age in days for TLX')
     @expose_to_cli.option('--min-tlx-amount', type=int, default=10, help='Minimum amount of TLX files before testing')
     def check_collapse(cls, result_handler, max_collapse_age=3, min_tlx_amount=10):
         """
