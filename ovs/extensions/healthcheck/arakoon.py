@@ -70,12 +70,18 @@ class ArakoonHealthCheck(object):
                 with open(Configuration.CACC_LOCATION) as config_file:
                     contents = config_file.read()
                 arakoon_config.read_config(contents=contents)
-                cluster_type = ServiceType.ARAKOON_CLUSTER_TYPES.CFG
+            try:
                 arakoon_client = ArakoonInstaller.build_client(arakoon_config)
-            else:
-                arakoon_client = ArakoonInstaller.build_client(arakoon_config)
-                metadata = json.loads(arakoon_client.get(ArakoonInstaller.METADATA_KEY))
-                cluster_type = metadata['cluster_type']
+            except (ArakoonNoMaster, ArakoonNoMasterResult) as ex:
+                result_handler.failure('Unable to find a master for Arakoon cluster {0}. (Message: {1})'.format(cluster_name, str(ex)),
+                                       code=ErrorCodes.master_none)
+            except Exception as ex:
+                msg = 'Unable to connect to Arakoon cluster {0}. (Message: {1})'.format(cluster_name, str(ex))
+                result_handler.exception(msg, code=ErrorCodes.unhandled_exception)
+                cls.logger.exception(msg)
+                continue
+            metadata = json.loads(arakoon_client.get(ArakoonInstaller.METADATA_KEY))
+            cluster_type = metadata['cluster_type']
             if cluster_type not in arakoon_clusters:
                 arakoon_clusters[cluster_type] = []
             arakoon_clusters[cluster_type].append({'cluster_name': cluster_name, 'client': arakoon_client, 'config': arakoon_config})
