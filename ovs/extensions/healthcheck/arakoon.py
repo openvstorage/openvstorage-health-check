@@ -196,7 +196,7 @@ class ArakoonHealthCheck(object):
         :param arakoon_clusters: Information about all arakoon clusters, sorted by type and given config
         :type arakoon_clusters: dict
         :param batch_size: Amount of workers to collect the Arakoon information.
-        The amount of workers are dependant on the MaxSessions in the sshd_config
+        Every worker will initiate a connection
         :return: Dict with tlog/tlx contents for every node config
         Example return:
         {CFG: {ovs.extensions.db.arakooninstaller.ArakoonClusterConfig object: {ovs_extensions.db.arakoon.arakooninstaller.ArakoonNodeConfig object: {'result': True,
@@ -356,7 +356,7 @@ class ArakoonHealthCheck(object):
         :param arakoon_clusters: Information about all arakoon clusters, sorted by type and given config
         :type arakoon_clusters: dict
         :param batch_size: Amount of workers to collect the Arakoon information.
-        The amount of workers are dependant on the MaxSessions in the sshd_config
+        Every worker means a connection towards a different node
         :return: Dict with tlog/tlx contents for every node config
         Example return:
         {CFG: {ovs.extensions.db.arakooninstaller.ArakoonClusterConfig object: {ovs_extensions.db.arakoon.arakooninstaller.ArakoonNodeConfig object: {'result': {'tlx': [['1513174398', '/opt/OpenvStorage/db/arakoon/config/tlogs/3393.tlx']],
@@ -392,8 +392,11 @@ class ArakoonHealthCheck(object):
                         result['errors'].append(('build_client', ex))
                         continue
                     queue.put((cluster_name, node_config, result))
-
-        for _ in xrange(batch_size):
+        # Limit to one session for every node.
+        # Every process will fork from this one, creating a new session instead of using the already existing channel
+        # There might be an issue issue if a ssh session would take too long causing all workers to connect to that one node
+        # and therefore hitting the MaxSessions again (theory)
+        for _ in xrange(min(len(clients.keys()), batch_size)):
             thread = Thread(target=cls._collapse_worker, args=(queue, clients, result_handler))
             thread.setDaemon(True)  # Setting threads as "daemon" allows main program to exit eventually even if these don't finish correctly.
             thread.start()
@@ -563,7 +566,7 @@ class ArakoonHealthCheck(object):
         :param arakoon_clusters: Information about all Arakoon clusters, sorted by type and given config
         :type arakoon_clusters: dict
         :param batch_size: Amount of workers to collect the Arakoon information.
-        The amount of workers are dependant on the MaxSessions in the sshd_config
+        Every worker means a connection towards a different node
         :return: Dict with file descriptors contents for every node config
         :rtype: dict
         """
@@ -590,7 +593,11 @@ class ArakoonHealthCheck(object):
                     cluster['fd_result'][node_config] = result
                     queue.put((cluster_name, node_config, result))
         service_manager = ServiceFactory.get_manager()
-        for _ in xrange(batch_size):
+        # Limit to one session for every node.
+        # Every process will fork from this one, creating a new session instead of using the already existing channel
+        # There might be an issue issue if a ssh session would take too long causing all workers to connect to that one node
+        # and therefore hitting the MaxSessions again (theory)
+        for _ in xrange(min(len(clients.keys()), batch_size)):
             thread = Thread(target=cls._fd_worker, args=(queue, clients, result_handler, service_manager))
             thread.setDaemon(True)  # Setting threads as "daemon" allows main program to exit eventually even if these don't finish correctly.
             thread.start()
