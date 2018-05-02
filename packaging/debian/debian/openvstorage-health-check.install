@@ -1,4 +1,3 @@
-ovs                 opt/OpenvStorage
-scripts             opt/OpenvStorage/scripts
-config/healthcheck  opt/OpenvStorage/config/healthcheck
-config/healthcheck  opt/OpenvStorage/config/healthcheck
+ovs         opt/OpenvStorage
+scripts     opt/OpenvStorage
+config      opt/OpenvStorage
