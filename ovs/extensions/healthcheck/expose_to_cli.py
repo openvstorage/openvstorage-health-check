@@ -14,6 +14,11 @@
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
 
+
+"""
+Expose to CLI module. Depends on the python-click library
+"""
+
 from __future__ import absolute_import
 
 import os
@@ -28,10 +33,6 @@ from ovs.extensions.healthcheck.decorators import node_check
 from ovs.extensions.healthcheck.result import HCResults
 from ovs.extensions.storage.volatilefactory import VolatileFactory
 from ovs.extensions.healthcheck.logger import Logger
-
-"""
-Expose to CLI module. Depends on the python-click library
-"""
 
 # @todo Make it recursive. Current layout enforces SUBMODULE COMMAND, SUBMODULE, SUB, COMMAND is not possible
 
@@ -172,16 +173,19 @@ class CLI(click.MultiCommand):
                 for filename in filenames:
                     if not (filename.endswith('.py') and filename != '__init__.py'):
                         continue
-                    module_name = filename.replace('.py', '')
                     file_path = os.path.join(root, filename)
                     relative_path = os.path.relpath(file_path, path)
                     relative_module_name = ''.join(os.path.split(relative_path.replace('.py', '')))
                     # Import file, making it relative to the start path to avoid name collision.
                     # Without it, the module contents would be merged (eg. alba.py and testing/alba.py would be merged, overriding the path
                     # imp.load_source is different from importing. Therefore using the relative-joined name is safe
-                    mod = imp.load_source(relative_module_name, file_path)
+                    try:
+                        mod = imp.load_source(relative_module_name, file_path)
+                    except ImportError:
+                        cls.logger.exception('Unable to import module at {0}'.format(file_path))
+                        continue
                     for member_name, member_value in inspect.getmembers(mod):
-                        if not (inspect.isclass(member_value) and member_value.__module__ == module_name and 'object' in [base.__name__ for base in member_value.__bases__]):
+                        if not (inspect.isclass(member_value) and member_value.__module__ == relative_module_name and 'object' in [base.__name__ for base in member_value.__bases__]):
                             continue
                         for submember_name, submember_value in inspect.getmembers(member_value):
                             if not hasattr(submember_value, expose_to_cli.attribute):
@@ -308,7 +312,7 @@ class HealthcheckTerminatedException(KeyboardInterrupt):
     """
 
 
-class HealthcheckCLiContext(CLIContext):
+class HealthCheckCLiContext(CLIContext):
     """
     Context object which holds some information
     """
@@ -473,7 +477,7 @@ class HealthcheckAddonGroup(CLIAddonGroup):
             return
 
 
-class HealthcheckCLI(CLI):
+class HealthCheckCLI(CLI):
     """
     Click CLI which dynamically loads all possible commands
     """
@@ -494,7 +498,7 @@ class HealthcheckCLI(CLI):
         Initializes a CLI instance
         Injects a healthcheck specific callback
         """
-        super(HealthcheckCLI, self).__init__(chain=True,
+        super(HealthCheckCLI, self).__init__(chain=True,
                                              invoke_without_command=True,
                                              result_callback=self.healthcheck_result_handler,
                                              *args, **kwargs)
@@ -513,7 +517,7 @@ class HealthcheckCLI(CLI):
         if self.TO_JSON in args:
             args.remove(self.TO_JSON)
             args.insert(0, self.TO_JSON)
-        super(HealthcheckCLI, self).parse_args(ctx, args)
+        super(HealthCheckCLI, self).parse_args(ctx, args)
 
     def get_command(self, ctx, name):
         # type: (click.Context, str) -> HealthcheckAddonGroup
@@ -547,16 +551,16 @@ class HealthcheckCLI(CLI):
     def main(self, args=None, prog_name=None, complete_var=None, standalone_mode=False, **extra):
         # type: (list, str, bool, bool, **any) -> None
         try:
-            super(HealthcheckCLI, self).main(args, prog_name, complete_var, standalone_mode, **extra)
+            super(HealthCheckCLI, self).main(args, prog_name, complete_var, standalone_mode, **extra)
         except (HealthcheckTerminatedException, click.Abort, KeyboardInterrupt):
-            # Raised when an invoked command was abborted. The invoked command will output all results and then raise the exception
+            # Raised when an invoked command was aborted. The invoked command will output all results and then raise the exception
             pass
         except click.ClickException as e:
             e.show()
             sys.exit(e.exit_code)
 
 
-@click.group(cls=HealthcheckCLI)
+@click.group(cls=HealthCheckCLI)
 @click.option('--unattended', is_flag=True, help='Only output the results in a compact format')
 @click.option('--to-json', is_flag=True, help='Only output the results in a JSON format')
 @click.pass_context
@@ -568,11 +572,11 @@ def healthcheck_entry_point(ctx, unattended, to_json):
     # Will be the 'callback' method for the HealthcheckCLi instance
     # Provide a new instance of the results to collect all results within the complete healthcheck
     result_handler = HCResults(unattended=unattended, to_json=to_json)
-    ctx.obj = HealthcheckCLiContext(result_handler)
+    ctx.obj = HealthCheckCLiContext(result_handler)
     # When run with subcommand, it will fetch the command to execute
     if ctx.invoked_subcommand is None:
         # Invoked without sub command. Run all functions.
-        cli_instance = ctx.command  # type: HealthcheckCLI
+        cli_instance = ctx.command  # type: HealthCheckCLI
         for sub_command in cli_instance.list_commands(ctx):
             ctx.invoke(cli_instance.get_command(ctx, sub_command))
         return

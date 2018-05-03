@@ -49,14 +49,14 @@ However if you do wish to use the Python interface:
 - All tests require a HCResults instance to be passed
 ```
 from ovs.extensions.healthcheck.result import HCResults
-from ovs.extensions.healthcheck.arakoon_hc import ArakoonHealthCheck
+from ovs.extensions.healthcheck.suites.arakoon_hc import ArakoonHealthCheck
 result = HCResults()
 ArakoonHealthCheck.check_collapse(result)
 ```
 If you wish to capture output: a named HCResults must be passed. This way a single result instance can capture all test outputs
 ```
 from ovs.extensions.healthcheck.result import HCResults
-from ovs.extensions.healthcheck.arakoon_hc import ArakoonHealthCheck
+from ovs.extensions.healthcheck.suites.arakoon_hc import ArakoonHealthCheck
 result = HCResults()
 ArakoonHealthCheck.check_collapse(result.HCResultCollector(result=result, test_name='collapse-test'))
 # Output
