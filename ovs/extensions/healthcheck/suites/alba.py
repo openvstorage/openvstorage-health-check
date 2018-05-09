@@ -33,7 +33,7 @@ from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.config.error_codes import ErrorCodes
 from ovs.extensions.healthcheck.decorators import cluster_check
-from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
+from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLI
 from ovs.extensions.healthcheck.helpers.albacli import AlbaCLI
 from ovs.extensions.healthcheck.helpers.backend import BackendHelper
 from ovs.extensions.healthcheck.helpers.exceptions import AlbaException, AlbaTimeOutException,  ConfigNotMatchedException,\
@@ -43,7 +43,7 @@ from ovs.extensions.healthcheck.helpers.service import ServiceHelper
 from ovs.extensions.healthcheck.logger import Logger
 from ovs.extensions.services.servicefactory import ServiceFactory
 from ovs.lib.alba import AlbaController
-from ovs.lib.helpers.toolbox import Toolbox
+from ovs_extensions.generic.toolbox import ExtensionsToolbox
 
 
 class AlbaHealthCheck(object):
@@ -148,7 +148,9 @@ class AlbaHealthCheck(object):
         return result
 
     @classmethod
-    @expose_to_cli(MODULE, 'proxy-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'proxy-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verifies that the proxies are able to perform basic operations',
+                   short_help='Test if proxy basic operations')
     def check_if_proxies_work(cls, result_handler):
         """
         Checks if all Alba Proxies work on a local machine, it creates a namespace and tries to put and object
@@ -269,7 +271,7 @@ class AlbaHealthCheck(object):
                         result_handler.success('Namespace successfully created on proxy {0} with preset {1}!'.format(service.name, preset_name),
                                                code=ErrorCodes.proxy_namespace_create)
                         namespace_info = AlbaCLI.run(command='show-namespace', config=abm_config, extra_params=[namespace_key])
-                        Toolbox.verify_required_params(required_params=namespace_params, actual_params=namespace_info)
+                        ExtensionsToolbox.verify_required_params(required_params=namespace_params, actual_params=namespace_info)
                         result_handler.success('Namespace successfully fetched on proxy {0} with preset {1}!'.format(service.name, preset_name),
                                                code=ErrorCodes.proxy_namespace_fetch)
 
@@ -420,7 +422,9 @@ class AlbaHealthCheck(object):
 
     @staticmethod
     @cluster_check
-    @expose_to_cli(MODULE, 'backend-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'backend-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verifies that the backends are still usable',
+                   short_help='Test if backends are usable')
     def check_backends(result_handler):
         """
         Checks Alba as a whole
@@ -480,7 +484,9 @@ class AlbaHealthCheck(object):
 
     @staticmethod
     @cluster_check
-    @expose_to_cli(MODULE, 'disk-safety-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'disk-safety-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verifies that namespaces have enough safety',
+                   short_help='Test if namespaces have enough safety')
     def check_disk_safety(result_handler):
         """
         Check safety of every namespace in every backend
@@ -587,7 +593,9 @@ class AlbaHealthCheck(object):
 
     # @todo: incorporate asd-manager code to check the service
     @staticmethod
-    @expose_to_cli(MODULE, 'processes-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'processes-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verifies that the local Alba processes are still running',
+                   short_help='Test if Alba processes are running')
     def check_alba_processes(result_handler):
         """
         Checks the availability of processes for Alba
@@ -612,7 +620,9 @@ class AlbaHealthCheck(object):
                                        code=ErrorCodes.alba_service_down)
 
     @staticmethod
-    @expose_to_cli(MODULE, 'proxy-port-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'proxy-port-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verifies that the proxies are still listening on their socket',
+                   short_help='Test if proxies are still listening')
     def check_alba_proxy_ports(result_handler):
         """
         Checks if all proxies are listening on their ports
@@ -634,7 +644,9 @@ class AlbaHealthCheck(object):
 
     @classmethod
     @cluster_check
-    @expose_to_cli(MODULE, 'nsm-load-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'nsm-load-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verifies that the Namespace Managers are not overloaded',
+                   short_help='Test if NSMs are not overloaded')
     def check_nsm_load(cls, result_handler):
         """
         Checks all NSM services registered within the Framework and will report their load

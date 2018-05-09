@@ -1,4 +1,4 @@
-# Copyright (C) 2016 iNuron NV
+# Copyright (C) 2018 iNuron NV
 #
 # This file is part of Open vStorage Open Source Edition (OSE),
 # as available from
@@ -15,12 +15,11 @@
 # but WITHOUT ANY WARRANTY of any kind.
 
 """
-Entrance point for bash (scripts/healthcheck.sh)
+CLI entrypoint for the Healthcheck
 """
+
+from ovs.extensions.healthcheck.expose_to_cli import healthcheck_entry_point
+
+
 if __name__ == '__main__':
-    import sys
-    from ovs.extensions.healthcheck.expose_to_cli import HealthCheckCLIRunner
-    arguments = sys.argv
-    # Remove filename
-    del arguments[0]
-    HealthCheckCLIRunner.run_method(*arguments)
+    healthcheck_entry_point()  # Calls HealthCheckCLI main

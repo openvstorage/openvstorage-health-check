@@ -13,8 +13,8 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
-import inspect
 import time
+import inspect
 from functools import wraps
 from ovs_extensions.generic.filemutex import file_mutex
 from ovs_extensions.generic.filemutex import NoLockAvailableException as NoFileLockAvailableException

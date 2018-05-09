@@ -29,7 +29,7 @@ from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.generic.sshclient import SSHClient
 from ovs.extensions.generic.system import System
 from ovs.extensions.healthcheck.config.error_codes import ErrorCodes
-from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
+from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLI
 from ovs.extensions.healthcheck.helpers.filesystem import FilesystemHelper
 from ovs.extensions.healthcheck.helpers.helper import Helper
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
@@ -53,7 +53,10 @@ class OpenvStorageHealthCheck(object):
     CELERY_CHECK_TIME = 7
 
     @staticmethod
-    @expose_to_cli(MODULE, 'log-files-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'log-files-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verify that all log files are not too big',
+                   short_help='Test if log files are not too big')
+    @expose_to_cli.option('--max-log-size', type=int, default=Helper.max_log_size, help='Maximum size of the file (in MB)')
     def check_size_of_log_files(result_handler, max_log_size=Helper.max_log_size):
         """
         Checks the size of the initialized log files
@@ -93,7 +96,10 @@ class OpenvStorageHealthCheck(object):
             result_handler.success('All log files are ok!', code=ErrorCodes.log_file_size)
 
     @staticmethod
-    @expose_to_cli(MODULE, 'port-ranges-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'port-ranges-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verify that there are enough ports remaining for OVS use',
+                   short_help='Test if there are enough ports remaining')
+    @expose_to_cli.option('--requested-ports', type=int, default=20, help='Minimal number of ports')
     def check_port_ranges(result_handler, requested_ports=20):
         """
         Checks whether the expected amount of ports is available for the requested amount of ports
@@ -106,14 +112,16 @@ class OpenvStorageHealthCheck(object):
         """
         # @todo: check other port ranges too
         port_range = Configuration.get('/ovs/framework/hosts/{0}/ports|storagedriver'.format(OpenvStorageHealthCheck.LOCAL_ID))
-        expected_ports = System.get_free_ports(selected_range=port_range, nr=0)
+        expected_ports = System.get_free_ports(selected_range=port_range, amount=0)
         if len(expected_ports) >= requested_ports:
             result_handler.success('{} ports free'.format(len(expected_ports)))
         else:
             result_handler.warning('{} ports found, less than {}'.format(len(expected_ports), requested_ports))
 
     @staticmethod
-    @expose_to_cli(MODULE, 'nginx-ports-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'nginx-ports-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verify that NGINX is reachable',
+                   short_help='Test if NGINX is reachable')
     def check_nginx_ports(result_handler):
         """
         Checks if this node can connect to it's own Nginx
@@ -125,7 +133,9 @@ class OpenvStorageHealthCheck(object):
         return OpenvStorageHealthCheck._check_extra_ports(result_handler, 'nginx')
 
     @staticmethod
-    @expose_to_cli(MODULE, 'memcached-ports-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'memcached-ports-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verify that memcached is reachable',
+                   short_help='Test if memcached is reachable')
     def check_memcached_ports(result_handler):
         """
         Checks the connection of this node to all Memcached endpoints
@@ -165,7 +175,9 @@ class OpenvStorageHealthCheck(object):
                     result_handler.failure('Connection FAILED to service {0} on {1}:{2}'.format(key, ip, port), code=getattr(ErrorCodes, 'port_{0}'.format(key)))
 
     @staticmethod
-    @expose_to_cli(MODULE, 'celery-ports-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'celery-ports-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verify that RabbitMQ is reachable',
+                   short_help='Test if RabbitMQ is reachable')
     def check_rabbitmq_ports(result_handler):
         """
         Checks all ports of Open vStorage components rabbitMQ and celery
@@ -197,7 +209,9 @@ class OpenvStorageHealthCheck(object):
             result_handler.failure('Could not import the celery module. Got {}'.format(str(ex)), code=ErrorCodes.port_celery)
 
     @staticmethod
-    @expose_to_cli(MODULE, 'packages-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'packages-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verify that all required packages are installed',
+                   short_help='Test if all required packages are installed')
     def check_ovs_packages(result_handler):
         """
         Checks the availability of packages for Open vStorage
@@ -225,7 +239,7 @@ class OpenvStorageHealthCheck(object):
                                        code=ErrorCodes.package_required)
             else:
                 if package in package_manager.package_info['mutually_exclusive']:
-                    # Mutually excluse package, so ignore
+                    # Mutually exclusive package, so ignore
                     continue
                 if package in base_packages:
                     result_handler.warning('Package {0} is not installed.'.format(package),
@@ -234,26 +248,28 @@ class OpenvStorageHealthCheck(object):
                     result_handler.skip('Package {0} is not installed.'.format(package))
 
     @staticmethod
-    @expose_to_cli(MODULE, 'processes-test', HealthCheckCLIRunner.ADDON_TYPE)
-    def check_ovs_processes(logger):
+    @expose_to_cli(MODULE, 'processes-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verify that all OVS related processes are running',
+                   short_help='Test if OVS processes are running')
+    def check_ovs_processes(result_handler):
         """
         Checks the availability of processes for Open vStorage
-        :param logger: logging object
-        :type logger: ovs.extensions.healthcheck.result.HCResults
+        :param result_handler: logging object
+        :type result_handler: ovs.extensions.healthcheck.result.HCResults
         :return: None
         :rtype: NoneType
         """
-        logger.info('Checking local ovs services.')
+        result_handler.info('Checking local ovs services.')
         client = SSHClient(System.get_my_storagerouter())
         service_manager = ServiceFactory.get_manager()
         services = [service for service in service_manager.list_services(client=client) if service.startswith(OpenvStorageHealthCheck.MODULE)]
         if len(services) == 0:
-            logger.warning('Found no local ovs services.')
+            result_handler.warning('Found no local ovs services.')
         for service_name in services:
             if service_manager.get_service_status(service_name, client) == 'active':
-                logger.success('Service {0} is running!'.format(service_name), code=ErrorCodes.process_fwk)
+                result_handler.success('Service {0} is running!'.format(service_name), code=ErrorCodes.process_fwk)
             else:
-                logger.failure('Service {0} is not running, please check this.'.format(service_name), code=ErrorCodes.process_fwk)
+                result_handler.failure('Service {0} is not running, please check this.'.format(service_name), code=ErrorCodes.process_fwk)
 
     @staticmethod
     @timeout(CELERY_CHECK_TIME)
@@ -273,7 +289,9 @@ class OpenvStorageHealthCheck(object):
             return False
 
     @staticmethod
-    @expose_to_cli(MODULE, 'workers-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'workers-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verify that the ovs-workers are working',
+                   short_help='Test if the ovs-workers are working')
     def check_ovs_workers(result_handler):
         """
         Extended check of the Open vStorage workers; When the simple check fails, it will execute a full/deep check.
@@ -295,7 +313,9 @@ class OpenvStorageHealthCheck(object):
             result_handler.failure('The celery check has failed with {0}'.format(str(ex)), code=ErrorCodes.process_celery_timeout)
 
     @staticmethod
-    @expose_to_cli(MODULE, 'directories-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'directories-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verify that all OVS related directories have correct ownership and rights',
+                   short_help='Test if directories their ownership and rights are correct')
     def check_required_dirs(result_handler):
         """
         Checks the directories their rights and owners for mistakes
@@ -330,7 +350,9 @@ class OpenvStorageHealthCheck(object):
                 result_handler.skip('Directory {0} does not exists!'.format(dirname))
 
     @staticmethod
-    @expose_to_cli(MODULE, 'dns-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'dns-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verify that the node can resolve DNS names',
+                   short_help='Test if the node can resolve DNS names')
     def check_if_dns_resolves(result_handler, fqdn='google.com'):
         """
         Checks if DNS resolving works on a local machine
@@ -350,7 +372,9 @@ class OpenvStorageHealthCheck(object):
                                    code=ErrorCodes.dns_resolve_fail)
 
     @staticmethod
-    @expose_to_cli(MODULE, 'zombie-processes-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'zombie-processes-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verify that no zombie processes are running on the machine',
+                   short_help='Test if there are zombie processes running')
     def check_zombied_and_dead_processes(result_handler):
         """
         Finds zombie or dead processes on a local machine
@@ -392,7 +416,9 @@ class OpenvStorageHealthCheck(object):
                                    code=ErrorCodes.process_dead_found)
 
     @staticmethod
-    @expose_to_cli(MODULE, 'model-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'model-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verify that the Framework model is in sync with the one from the Volumedriver',
+                   short_help='Test if Framework and Volumedriver model match')
     def check_model_consistency(result_handler):
         """
         Checks if the model consistency of OVSDB vs. VOLUMEDRIVER and does a preliminary check on RABBITMQ
@@ -448,7 +474,9 @@ class OpenvStorageHealthCheck(object):
                 result_handler.success('No discrepancies found for voldrv in vpool {0}'.format(vp.name), code=ErrorCodes.missing_ovsdb)
 
     @staticmethod
-    @expose_to_cli(MODULE, 'verify-rabbitmq-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'verify-rabbitmq-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verify that RabbitMQ is properly running',
+                   short_help='Test if RabbitMQ is properly running')
     def verify_rabbitmq(result_handler):
         """
         Verify rabbitmq
@@ -470,7 +498,9 @@ class OpenvStorageHealthCheck(object):
             result_handler.skip('RabbitMQ is not running/active on this server!')
 
     @staticmethod
-    @expose_to_cli(MODULE, 'recovery-domain-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'recovery-domain-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verify that all recovery domains are setup as regular domain',
+                   short_help='Test if all recovery domains are setup as regular domain')
     def check_recovery_domains(result_handler):
         result_handler.info('Checking recovery domains:')
         prim_domains = [domain.name for domain in DomainList.get_domains() if len(domain.storage_router_layout['regular']) >= 1]

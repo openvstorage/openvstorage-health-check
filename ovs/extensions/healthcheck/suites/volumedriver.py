@@ -20,7 +20,7 @@ from ovs.dal.dataobject import DataObject
 from ovs.dal.hybrids.vdisk import VDisk
 from ovs.dal.lists.vpoollist import VPoolList
 from ovs.extensions.generic.system import System
-from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
+from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLI
 from ovs.extensions.healthcheck.config.error_codes import ErrorCodes
 from ovs.extensions.healthcheck.helpers.exceptions import VDiskNotFoundError
 from ovs.extensions.healthcheck.helpers.vdisk import VDiskHelper
@@ -67,7 +67,9 @@ class VolumedriverHealthCheck(object):
     logger = Logger('healthcheck-ovs_volumedriver')
 
     @staticmethod
-    @expose_to_cli(MODULE, 'dtl-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'dtl-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verify that all VDisks their DTL is properly running',
+                   short_help='Test if DTL is properly running')
     def check_dtl(result_handler):
         """
         Checks the dtl for all vdisks on the local node
@@ -149,7 +151,9 @@ class VolumedriverHealthCheck(object):
                 return True
 
     @staticmethod
-    # @expose_to_cli(MODULE, 'volumedrivers-test', HealthCheckCLIRunner.ADDON_TYPE)
+    # @expose_to_cli(MODULE, 'volumedrivers-test', HealthCheckCLI.ADDON_TYPE,
+    #                help='Verify that the Volumedrivers are responding to events',
+    #                short_help='Test if Volumedrivers are responding to events')
     def check_volumedrivers(result_handler):
         """
         Checks if the VOLUMEDRIVERS work on a local machine (compatible with multiple vPools)
@@ -218,7 +222,9 @@ class VolumedriverHealthCheck(object):
         return isinstance(exception, ClusterNotReachableException) or isinstance(exception, RuntimeError) and 'failed to send XMLRPC request' in str(exception)
 
     @classmethod
-    @expose_to_cli(MODULE, 'halted-volumes-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'halted-volumes-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verify that there are no halted/fenced volumes within the cluster',
+                   short_help='Test if there  are no halted/fenced volumes')
     def check_for_halted_volumes(cls, result_handler):
         """
         Checks for halted volumes on a single or multiple vPools
@@ -383,7 +389,9 @@ class VolumedriverHealthCheck(object):
         return not os.path.exists('/mnt/{0}/ovs-healthcheck-test-*.xml'.format(vp_name))
 
     @staticmethod
-    # @expose_to_cli(MODULE, 'filedrivers-test', HealthCheckCLIRunner.ADDON_TYPE)
+    # @expose_to_cli(MODULE, 'filedrivers-test', HealthCheckCLI.ADDON_TYPE,
+    #                help='Verify that all Volumedrivers are accessible through FUSE',
+    #                short_help='Test if that the FUSE layer is responding')
     # @todo replace fuse test with edge test
     def check_filedrivers(result_handler):
         """
@@ -419,14 +427,17 @@ class VolumedriverHealthCheck(object):
                 result_handler.failure('Filedriver of vPool {0} seems to have `input/output` problems'.format(vp.name))
 
     @staticmethod
-    @expose_to_cli(MODULE, 'volume-potential-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'volume-potential-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verify that the Volumedrivers have enough VDisk potential left',
+                   short_help='Test if the Volumedrivers can create enough VDisks')
+    @expose_to_cli.option('--critical-vol-number', type=int, default=25, help='Minimum number of volumes left to create')
     def check_volume_potential(result_handler, critical_vol_number=25):
         """
         Checks all local storage drivers from a volume driver. Results in a success if enough volumes are available, a warning if the number of volumes is
         lower then a threshold value (critical_volume_number) and a failure if the nr of volumes ==0)
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
-        :param critical_vol_number: maximal number of volumes that result in a warning
+        :param critical_vol_number: Mimimal number of volumes that can be made before throwing a warning
         :type critical_vol_number: int
         """
         result_handler.info('Checking volume potential of storagedrivers')
@@ -450,7 +461,9 @@ class VolumedriverHealthCheck(object):
                 result_handler.exception('Unable to retrieve configuration for storagedriver {0}'.format(std.storagedriver_id))
 
     @staticmethod
-    @expose_to_cli(MODULE, 'sco-cache-mountpoint-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'sco-cache-mountpoint-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verify that sco-cache mountpoints are up and running',
+                   short_help='Test if sco-cache mountpoints are up and running')
     def check_sco_cache_mountpoints(result_handler):
         """
         Iterates over StorageDrivers of a local StorageRouter and will check all its sco cache mount points.

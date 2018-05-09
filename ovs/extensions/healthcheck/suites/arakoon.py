@@ -37,7 +37,7 @@ from ovs.extensions.generic.sshclient import SSHClient, TimeOutException, NotAut
 from ovs_extensions.generic.toolbox import ExtensionsToolbox
 from ovs.extensions.healthcheck.decorators import cluster_check
 from ovs.extensions.healthcheck.config.error_codes import ErrorCodes
-from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLIRunner
+from ovs.extensions.healthcheck.expose_to_cli import expose_to_cli, HealthCheckCLI
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.logger import Logger
 from ovs.extensions.services.servicefactory import ServiceFactory
@@ -70,12 +70,18 @@ class ArakoonHealthCheck(object):
                 with open(Configuration.CACC_LOCATION) as config_file:
                     contents = config_file.read()
                 arakoon_config.read_config(contents=contents)
-                cluster_type = ServiceType.ARAKOON_CLUSTER_TYPES.CFG
+            try:
                 arakoon_client = ArakoonInstaller.build_client(arakoon_config)
-            else:
-                arakoon_client = ArakoonInstaller.build_client(arakoon_config)
-                metadata = json.loads(arakoon_client.get(ArakoonInstaller.METADATA_KEY))
-                cluster_type = metadata['cluster_type']
+            except (ArakoonNoMaster, ArakoonNoMasterResult) as ex:
+                result_handler.failure('Unable to find a master for Arakoon cluster {0}. (Message: {1})'.format(cluster_name, str(ex)),
+                                       code=ErrorCodes.master_none)
+            except Exception as ex:
+                msg = 'Unable to connect to Arakoon cluster {0}. (Message: {1})'.format(cluster_name, str(ex))
+                result_handler.exception(msg, code=ErrorCodes.unhandled_exception)
+                cls.logger.exception(msg)
+                continue
+            metadata = json.loads(arakoon_client.get(ArakoonInstaller.METADATA_KEY))
+            cluster_type = metadata['cluster_type']
             if cluster_type not in arakoon_clusters:
                 arakoon_clusters[cluster_type] = []
             arakoon_clusters[cluster_type].append({'cluster_name': cluster_name, 'client': arakoon_client, 'config': arakoon_config})
@@ -83,7 +89,10 @@ class ArakoonHealthCheck(object):
 
     @classmethod
     @cluster_check
-    @expose_to_cli(MODULE, 'nodes-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'nodes-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verify if nodes are missing and if nodes are catching up to the master',
+                   short_help='Test if there are nodes missing/catching up')
+    @expose_to_cli.option('--max-transactions-behind', type=int, default=10, help='The number of transactions that a slave can be behind a master before logging a failure')
     def check_node_status(cls, result_handler, max_transactions_behind=10):
         """
         Checks the status of every node within the Arakoon cluster
@@ -139,7 +148,9 @@ class ArakoonHealthCheck(object):
 
     @classmethod
     @cluster_check
-    @expose_to_cli(MODULE, 'ports-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'ports-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verifies that the Arakoon clusters still respond to connections',
+                   short_help='Test if Arakoons accepts connections')
     def check_arakoon_ports(cls, result_handler):
         """
         Verifies that the Arakoon clusters still respond to connections
@@ -191,7 +202,7 @@ class ArakoonHealthCheck(object):
         :param arakoon_clusters: Information about all arakoon clusters, sorted by type and given config
         :type arakoon_clusters: dict
         :param batch_size: Amount of workers to collect the Arakoon information.
-        The amount of workers are dependant on the MaxSessions in the sshd_config
+        Every worker will initiate a connection
         :return: Dict with tlog/tlx contents for every node config
         Example return:
         {CFG: {ovs.extensions.db.arakooninstaller.ArakoonClusterConfig object: {ovs_extensions.db.arakoon.arakooninstaller.ArakoonNodeConfig object: {'result': True,
@@ -245,7 +256,11 @@ class ArakoonHealthCheck(object):
 
     @classmethod
     @cluster_check
-    @expose_to_cli(MODULE, 'collapse-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'collapse-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verifies collapsing has occurred for all Arakoons',
+                   short_help='Test if Arakoon collapsing is not failing')
+    @expose_to_cli.option('--max-collapse-age', type=int, default=3, help='Maximum age in days for TLX')
+    @expose_to_cli.option('--min-tlx-amount', type=int, default=10, help='Minimum amount of TLX files before testing')
     def check_collapse(cls, result_handler, max_collapse_age=3, min_tlx_amount=10):
         """
         Verifies collapsing has occurred for all Arakoons
@@ -312,7 +327,7 @@ class ArakoonHealthCheck(object):
                         continue
                     if len(headdb_files) > 0:
                         headdb_size = sum([int(i[2]) for i in headdb_files])
-                        collapse_size_msg = 'Spare space for local collapse is '
+                        collapse_size_msg = 'Spare space for local collapse is'
                         if avail_size >= headdb_size * 4:
                             result_handler.success('{0} sufficient (n > 4x head.db size)'.format(collapse_size_msg))
                         elif avail_size >= headdb_size * 3:
@@ -347,7 +362,7 @@ class ArakoonHealthCheck(object):
         :param arakoon_clusters: Information about all arakoon clusters, sorted by type and given config
         :type arakoon_clusters: dict
         :param batch_size: Amount of workers to collect the Arakoon information.
-        The amount of workers are dependant on the MaxSessions in the sshd_config
+        Every worker means a connection towards a different node
         :return: Dict with tlog/tlx contents for every node config
         Example return:
         {CFG: {ovs.extensions.db.arakooninstaller.ArakoonClusterConfig object: {ovs_extensions.db.arakoon.arakooninstaller.ArakoonNodeConfig object: {'result': {'tlx': [['1513174398', '/opt/OpenvStorage/db/arakoon/config/tlogs/3393.tlx']],
@@ -383,8 +398,11 @@ class ArakoonHealthCheck(object):
                         result['errors'].append(('build_client', ex))
                         continue
                     queue.put((cluster_name, node_config, result))
-
-        for _ in xrange(batch_size):
+        # Limit to one session for every node.
+        # Every process will fork from this one, creating a new session instead of using the already existing channel
+        # There might be an issue issue if a ssh session would take too long causing all workers to connect to that one node
+        # and therefore hitting the MaxSessions again (theory)
+        for _ in xrange(min(len(clients.keys()), batch_size)):
             thread = Thread(target=cls._collapse_worker, args=(queue, clients, result_handler))
             thread.setDaemon(True)  # Setting threads as "daemon" allows main program to exit eventually even if these don't finish correctly.
             thread.start()
@@ -438,7 +456,9 @@ class ArakoonHealthCheck(object):
 
     @classmethod
     @cluster_check
-    @expose_to_cli(MODULE, 'integrity-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'integrity-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verifies that all Arakoon clusters are still responding to client calls',
+                   short_help='Test if Arakoon clusters are still responding')
     def verify_integrity(cls, result_handler):
         """
         Verifies that all Arakoon clusters are still responding to client calls
@@ -467,7 +487,10 @@ class ArakoonHealthCheck(object):
 
     @classmethod
     @cluster_check
-    @expose_to_cli(MODULE, 'file-descriptors-test', HealthCheckCLIRunner.ADDON_TYPE)
+    @expose_to_cli(MODULE, 'file-descriptors-test', HealthCheckCLI.ADDON_TYPE,
+                   help='Verify the number of File Descriptors on every Arakoon does not exceed the limit',
+                   short_help='Test if #FD does not exceed the limit')
+    @expose_to_cli.option('--fd-limit', type=int, default=30, help='Threshold for the number number of tcp connections for which to start logging warnings')
     def check_arakoon_fd(cls, result_handler, fd_limit=30, passed_connections=None):
         """
         Checks all current open tcp file descriptors for all Arakoon clusters in the OVS cluster
@@ -549,7 +572,7 @@ class ArakoonHealthCheck(object):
         :param arakoon_clusters: Information about all Arakoon clusters, sorted by type and given config
         :type arakoon_clusters: dict
         :param batch_size: Amount of workers to collect the Arakoon information.
-        The amount of workers are dependant on the MaxSessions in the sshd_config
+        Every worker means a connection towards a different node
         :return: Dict with file descriptors contents for every node config
         :rtype: dict
         """
@@ -576,7 +599,11 @@ class ArakoonHealthCheck(object):
                     cluster['fd_result'][node_config] = result
                     queue.put((cluster_name, node_config, result))
         service_manager = ServiceFactory.get_manager()
-        for _ in xrange(batch_size):
+        # Limit to one session for every node.
+        # Every process will fork from this one, creating a new session instead of using the already existing channel
+        # There might be an issue issue if a ssh session would take too long causing all workers to connect to that one node
+        # and therefore hitting the MaxSessions again (theory)
+        for _ in xrange(min(len(clients.keys()), batch_size)):
             thread = Thread(target=cls._fd_worker, args=(queue, clients, result_handler, service_manager))
             thread.setDaemon(True)  # Setting threads as "daemon" allows main program to exit eventually even if these don't finish correctly.
             thread.start()
