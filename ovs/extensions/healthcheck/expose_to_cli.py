@@ -306,10 +306,13 @@ class CLIAddonGroup(CLI):
 ###############################
 
 
-class HealthcheckTerminatedException(KeyboardInterrupt):
+class HealthcheckTerminatedException(Exception):
     """
     Thrown when a test would be terminated by the user
     """
+    def __init__(self, message=None, result_handler=None):
+        super(HealthcheckTerminatedException, self).__init__(message)
+        self.result_handler = result_handler
 
 
 class HealthCheckCLiContext(CLIContext):
@@ -337,6 +340,7 @@ class HealthCheckShared(object):
     CACHE_KEY = 'ovs_healthcheck_discover_method'
 
     logger = Logger("healthcheck-ovs_clirunner")
+    CMD_FOLDER = os.path.join(os.path.dirname(__file__), 'suites')  # Folder to query for commands
 
     @staticmethod
     def get_healthcheck_results(result_handler):
@@ -344,6 +348,9 @@ class HealthCheckShared(object):
         """
         Output the Healthcheck results
         :param result_handler: HCResults instance
+        :type result_handler: HCResults
+        :return dict with information
+        :rtype: dict
         """
         recap_executer = 'Health Check'
         result = result_handler.get_results()
@@ -366,6 +373,7 @@ class HealthcheckAddonGroup(CLIAddonGroup):
     # MRO would point to CLIAddonGroup first to resolve the attr
     ADDON_TYPE = HealthCheckShared.ADDON_TYPE
     CACHE_KEY = HealthCheckShared.CACHE_KEY
+    CMD_FOLDER = HealthCheckShared.CMD_FOLDER
 
     logger = HealthCheckShared.logger
 
@@ -452,8 +460,7 @@ class HealthcheckAddonGroup(CLIAddonGroup):
                     return func(result_handler=result_collector, *args, **kwargs)
                 except (click.Abort, KeyboardInterrupt):
                     self.logger.warning('Caught keyboard interrupt during {0}. Output may be incomplete!'.format(test_name))
-                    HealthCheckShared.get_healthcheck_results(result_handler)
-                    raise HealthcheckTerminatedException()  # Will be handled more globally. The whole Healthcheck should abort
+                    raise HealthcheckTerminatedException(result_handler=result_handler)  # Will be handled more globally. The whole Healthcheck should abort
                 except:
                     self.logger.exception('Unhandled exception caught when executing {0}'.format(test_name))
                     result_handler.exception('Unhandled exception caught when executing {0}'.format(test_name))
@@ -489,6 +496,7 @@ class HealthCheckCLI(CLI):
     # MRO would point to CLIAddonGroup first to resolve the attr
     ADDON_TYPE = HealthCheckShared.ADDON_TYPE
     CACHE_KEY = HealthCheckShared.CACHE_KEY
+    CMD_FOLDER = HealthCheckShared.CMD_FOLDER
 
     logger = HealthCheckShared.logger
 
@@ -549,15 +557,32 @@ class HealthCheckCLI(CLI):
         return HealthCheckShared.get_healthcheck_results(result_handler)
 
     def main(self, args=None, prog_name=None, complete_var=None, standalone_mode=False, **extra):
-        # type: (list, str, bool, bool, **any) -> None
+        # type: (list, str, bool, bool, **any) -> dict
         try:
-            super(HealthCheckCLI, self).main(args, prog_name, complete_var, standalone_mode, **extra)
-        except (HealthcheckTerminatedException, click.Abort, KeyboardInterrupt):
+            return super(HealthCheckCLI, self).main(args, prog_name, complete_var, standalone_mode, **extra)
+        except (click.Abort, KeyboardInterrupt):
+            # Aborted before running any command. Print and return an empty result to stdout.
+            # Unable to capture output params in this stage as it is handled by the main method
+            result_handler = HCResults()
+            result_handler.failure('Terminated before starting!')
+            return HealthCheckShared.get_healthcheck_results(result_handler)
+        except HealthcheckTerminatedException as ex:
+            self.logger.warning('Caught keyboard interrupt while testing. Output may be incomplete!')
+            result_handler = ex.result_handler  # type: HCResults
             # Raised when an invoked command was aborted. The invoked command will output all results and then raise the exception
-            pass
+            return HealthCheckShared.get_healthcheck_results(result_handler)
         except click.ClickException as e:
             e.show()
             sys.exit(e.exit_code)
+
+    def invoke(self, ctx):
+        """
+        Wrap around the invoking part to capture any keyboard interrupts so the main can print a decent log
+        """
+        try:
+            return super(HealthCheckCLI, self).invoke(ctx)
+        except (click.Abort, KeyboardInterrupt):
+            raise HealthcheckTerminatedException(result_handler=ctx.obj.result_handler)
 
 
 @click.group(cls=HealthCheckCLI)
@@ -565,7 +590,7 @@ class HealthCheckCLI(CLI):
 @click.option('--to-json', is_flag=True, help='Only output the results in a JSON format')
 @click.pass_context
 def healthcheck_entry_point(ctx, unattended, to_json):
-    # type: (click.Context, bool, bool) -> None
+    # type: (click.Context, bool, bool) -> any
     """
     OpenvStorage healthcheck command line interface
     """
@@ -579,4 +604,20 @@ def healthcheck_entry_point(ctx, unattended, to_json):
         cli_instance = ctx.command  # type: HealthCheckCLI
         for sub_command in cli_instance.list_commands(ctx):
             ctx.invoke(cli_instance.get_command(ctx, sub_command))
-        return
+        return result_handler
+
+
+class HealthCheckCLIRunner(object):
+    """
+    For backwards compatibility
+    """
+
+    @classmethod
+    def run_method(cls, *args, **kwargs):
+        # type (*any, **any) -> any
+        """
+        Executes the given method like it would be executed through the CLI
+        """
+        if not isinstance(args, tuple):
+            args = (args,)
+        return healthcheck_entry_point(args)
