@@ -174,18 +174,17 @@ class CLI(click.MultiCommand):
                     if not (filename.endswith('.py') and filename != '__init__.py'):
                         continue
                     file_path = os.path.join(root, filename)
-                    relative_path = os.path.relpath(file_path, path)
-                    relative_module_name = ''.join(os.path.split(relative_path.replace('.py', '')))
+                    module_name = 'ovs_cli_{0}'.format(filename.replace('.py', ''))
                     # Import file, making it relative to the start path to avoid name collision.
                     # Without it, the module contents would be merged (eg. alba.py and testing/alba.py would be merged, overriding the path
                     # imp.load_source is different from importing. Therefore using the relative-joined name is safe
                     try:
-                        mod = imp.load_source(relative_module_name, file_path)
+                        mod = imp.load_source(module_name, file_path)
                     except ImportError:
                         cls.logger.exception('Unable to import module at {0}'.format(file_path))
                         continue
                     for member_name, member_value in inspect.getmembers(mod):
-                        if not (inspect.isclass(member_value) and member_value.__module__ == relative_module_name and 'object' in [base.__name__ for base in member_value.__bases__]):
+                        if not (inspect.isclass(member_value) and member_value.__module__ == module_name and 'object' in [base.__name__ for base in member_value.__bases__]):
                             continue
                         for submember_name, submember_value in inspect.getmembers(member_value):
                             if not hasattr(submember_value, expose_to_cli.attribute):
