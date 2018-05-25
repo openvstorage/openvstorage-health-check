@@ -34,12 +34,13 @@ from ovs.extensions.healthcheck.helpers.filesystem import FilesystemHelper
 from ovs.extensions.healthcheck.helpers.helper import Helper
 from ovs.extensions.healthcheck.helpers.network import NetworkHelper
 from ovs.extensions.healthcheck.helpers.rabbitmq import RabbitMQ
-from ovs.extensions.packages.packagefactory import PackageFactory
 from ovs.extensions.services.servicefactory import ServiceFactory
 from ovs.lib.storagerouter import StorageRouterController
 from timeout_decorator import timeout
 from timeout_decorator.timeout_decorator import TimeoutError
 from volumedriver.storagerouter.storagerouterclient import ClusterNotReachableException
+from ovs.extensions.healthcheck.helpers.future.generic.system import System as _FutureSystem
+from ovs.extensions.healthcheck.helpers.future.packages.packagefactory import PackageFactory as _FuturePackageFactory
 
 
 class OpenvStorageHealthCheck(object):
@@ -112,7 +113,7 @@ class OpenvStorageHealthCheck(object):
         """
         # @todo: check other port ranges too
         port_range = Configuration.get('/ovs/framework/hosts/{0}/ports|storagedriver'.format(OpenvStorageHealthCheck.LOCAL_ID))
-        expected_ports = System.get_free_ports(selected_range=port_range, amount=0)
+        expected_ports = _FutureSystem.get_free_ports(selected_range=port_range, amount=0)
         if len(expected_ports) >= requested_ports:
             result_handler.success('{} ports free'.format(len(expected_ports)))
         else:
@@ -222,7 +223,7 @@ class OpenvStorageHealthCheck(object):
         """
         result_handler.info('Checking OVS packages: ', add_to_result=False)
         client = SSHClient(OpenvStorageHealthCheck.LOCAL_SR)
-        package_manager = PackageFactory.get_manager()
+        package_manager = _FuturePackageFactory.get_manager()
         # Get all base packages
         base_packages = set()
         for names in package_manager.package_info['names'].itervalues():
@@ -280,7 +281,7 @@ class OpenvStorageHealthCheck(object):
         # try if celery works smoothly
         try:
             machine_id = OpenvStorageHealthCheck.LOCAL_SR.machine_id
-            obj = StorageRouterController.get_support_info.s().apply_async(routing_key='sr.{0}'.format(machine_id)).get()
+            obj = StorageRouterController.get_support_info.s(OpenvStorageHealthCheck.LOCAL_SR.guid).apply_async(routing_key='sr.{0}'.format(machine_id)).get()
         except TimeoutError as ex:
             raise TimeoutError('{0}: Process is taking to long!'.format(ex.value))
         if obj:

@@ -1,4 +1,4 @@
-# Copyright (C) 2017 iNuron NV
+# Copyright (C) 2018 iNuron NV
 #
 # This file is part of Open vStorage Open Source Edition (OSE),
 # as available from
@@ -14,9 +14,6 @@
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
 
-from ovs.extensions.healthcheck.helpers.future.log.logger import Logger as _Logger
-
-
-class Logger(_Logger):
-    def __init__(self, name):
-        super(Logger, self).__init__(name, forced_target_type='file')
+"""
+Future module. Has methods that are already part of later releases
+"""
