@@ -415,10 +415,12 @@ class HealthcheckAddonGroup(CLIAddonGroup):
                 # Function found, inject the result handler
                 function_data = discovery_data[current_module_name][name]
                 # Try to avoid name collision with other modules. Might lead to unexpected results
-                mod = imp.load_source('healthcheck_{0}'.format(function_data['module_name']), function_data['location'])
+                module_name = function_data['module_name']
+                mod = imp.load_source('healthcheck_{0}'.format(module_name), function_data['location'])
                 cl = getattr(mod, function_data['class'])()
                 method_to_run = getattr(cl, function_data['function'])
-                wrapped_function = (self.healthcheck_wrapper(result_handler, str(name))(method_to_run))  # Inject our Healthcheck arguments
+                full_name = '{0}-{1}'.format(module_name, name)
+                wrapped_function = (self.healthcheck_wrapper(result_handler, full_name)(method_to_run))  # Inject our Healthcheck arguments
                 # Wrap around the click decorator to extract the option arguments
                 click_command = click.command(name=name,
                                               help=function_data.get('help'),
