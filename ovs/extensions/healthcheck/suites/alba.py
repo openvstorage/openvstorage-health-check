@@ -487,15 +487,30 @@ class AlbaHealthCheck(object):
     @expose_to_cli(MODULE, 'disk-safety-test', HealthCheckCLI.ADDON_TYPE,
                    help='Verifies that namespaces have enough safety',
                    short_help='Test if namespaces have enough safety')
-    def check_disk_safety(result_handler):
+    @expose_to_cli.option('--backend', '-b', multiple=True, type=str,
+                          help='Backend(s) to check for. Can be provided multiple times. Ignored if --skip-backend option is given')
+    @expose_to_cli.option('--skip-backend', '-s', multiple=True, type=str,
+                          help='Backend(s) to skip checking for. Can be provided multiple times')
+    @expose_to_cli.option('--include-errored-as-dead', '-i', is_flag=True,
+                          help='OSDs with errors as treated as dead ones during the calculation')
+    def check_disk_safety(result_handler, backend=(), skip_backend=(), include_errored_as_dead=False):
         """
         Check safety of every namespace in every backend
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :param backend: Backend(s) to check for (name does not fit the multiple options. This is to make it pretty for the CLI)
+        :type backend: tuple[str]
+        :param skip_backend: Backend(s) to skip checking for (name does not fit the multiple options. This is to make it pretty for the CLI)
+        :type skip_backend: tuple[str]
+        :param include_errored_as_dead: OSDs with errors as treated as dead ones during the calculation
+        :type include_errored_as_dead: bool
         :return: None
         :rtype: NoneType
         """
-        results = AlbaHealthCheck.get_disk_safety(result_handler)
+        def _get_output(namespaces_to_use):
+            return ',\n'.join(['{0} with {1}% of its objects'.format(n['namespace'], str(n['amount_in_bucket'])) for n in namespaces_to_use])
+
+        results = AlbaHealthCheck.get_disk_safety(result_handler, backends_to_include=backend, backends_to_skip=skip_backend, include_errored_as_dead=include_errored_as_dead)
         for backend_name, policies in results.iteritems():
             result_handler.info('Checking disk safety on backend: {0}'.format(backend_name), add_to_result=False)
             for policy_prefix, policy_details in policies.iteritems():
@@ -516,19 +531,21 @@ class AlbaHealthCheck(object):
                         if disk_safety == policy_details['max_disk_safety']:
                             result_handler.success('The disk safety of {0} namespace(s) is/are totally safe!'.format(len(namespaces)),
                                                    code=ErrorCodes.disk_safety_ok)
-                        elif disk_safety != 0:
+                        elif disk_safety > 0:
                             # Avoid failure override
-                            output = ',\n'.join(['{0} with {1}% of its objects'.format(ns['namespace'], str(ns['amount_in_bucket'])) for ns in namespaces])
-                            result_handler.warning('The disk safety of {0} namespace(s) is {1}, max. disk safety is {2}: \n{3}'.format(len(namespaces), disk_safety, policy_details['max_disk_safety'], output),
+                            result_handler.warning('The disk safety of {0} namespace(s) is {1}, max. disk safety is {2}: \n{3}'.format(len(namespaces), disk_safety, policy_details['max_disk_safety'], _get_output(namespaces)),
                                                    code=ErrorCodes.disk_safety_warn)
+                        # @TODO: after x amount of hours in disk safety 0 put in error, else put in warning
+                        elif disk_safety == 0:
+                            result_handler.failure('The disk safety of {0} namespace(s) is/are ZERO: \n{1}'.format(len(namespaces), _get_output(namespaces)),
+                                                   code=ErrorCodes.disk_safety_error_zero)
                         else:
-                            # @TODO: after x amount of hours in disk safety 0 put in error, else put in warning
-                            output = ',\n'.join(['{0} with {1}% of its objects'.format(ns['namespace'], str(ns['amount_in_bucket'])) for ns in namespaces])
-                            result_handler.failure('The disk safety of {0} namespace(s) is/are ZERO: \n{1}'.format(len(namespaces), output),
-                                                   code=ErrorCodes.disk_safety_error)
+                            # Negative safety
+                            result_handler.failure('The disk safety of {0} namespace(s) is/are below ZERO, safety: {1}: \n{2}'.format(len(namespaces), disk_safety, _get_output(namespaces)),
+                                                   code=ErrorCodes.disk_safety_error_negative)
 
     @classmethod
-    def get_disk_safety(cls, result_handler):
+    def get_disk_safety(cls, result_handler, backends_to_include=(), backends_to_skip=(), include_errored_as_dead=False):
         """
         Fetch safety of every namespace in every backend
         - amount_in_bucket is in %
@@ -541,19 +558,30 @@ class AlbaHealthCheck(object):
         {1: {'namespace': u'e88c88c9-632c-4975-b39f-e9993e352560', 'amount_in_bucket': 100}}}}}
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :param backends_to_include: Backend(s) to check for
+        :type backends_to_include: tuple[str]
+        :param backends_to_skip: Backend(s) to skip checking for
+        :type backends_to_skip: tuple[str]
+        :param include_errored_as_dead: OSDs with errors as treated as dead ones during the calculation
+        :type include_errored_as_dead: bool
         :return: Safety of every namespace in every backend
         :rtype: dict
         """
         disk_safety_overview = {}
         for alba_backend in BackendHelper.get_albabackends():
+            if backends_to_skip and alba_backend.name in backends_to_skip:
+                continue
+            if backends_to_include and alba_backend.name not in backends_to_include:
+                continue
             disk_safety_overview[alba_backend.name] = {}
             config = Configuration.get_configuration_path('ovs/arakoon/{0}-abm/config'.format(alba_backend.name))
             # Fetch alba info
             try:
-                # @TODO add this to extra_params to include corrupt asds. Currently there is a bug with it
-                # Ticket: https://github.com/openvstorage/alba/issues/441
-                # extra_params=['--include-errored-as-dead']
-                namespaces = AlbaCLI.run(command='get-disk-safety', config=config)
+                extra_params = []
+                if include_errored_as_dead:
+                    # @TODO Revisit once the https://github.com/openvstorage/alba/issues/441 has been resolved
+                    extra_params.append('--include-errored-as-dead')
+                namespaces = AlbaCLI.run(command='get-disk-safety', config=config, extra_params=extra_params)
                 cache_eviction_prefix_preset_pairs = AlbaCLI.run(command='get-maintenance-config', config=config)['cache_eviction_prefix_preset_pairs']
                 presets = AlbaCLI.run(command='list-presets', config=config)
             except AlbaException as ex:

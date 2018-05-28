@@ -56,7 +56,7 @@ class OpenvStorageHealthCheck(object):
     @expose_to_cli(MODULE, 'log-files-test', HealthCheckCLI.ADDON_TYPE,
                    help='Verify that all log files are not too big',
                    short_help='Test if log files are not too big')
-    @expose_to_cli.option('--max-log-size', type=int, default=Helper.max_log_size, help='Maximum size of the file (in MB)')
+    @expose_to_cli.option('--max-log-size', '-m', type=float, default=Helper.max_log_size, help='Maximum size of the file (in MB)')
     def check_size_of_log_files(result_handler, max_log_size=Helper.max_log_size):
         """
         Checks the size of the initialized log files
@@ -99,24 +99,25 @@ class OpenvStorageHealthCheck(object):
     @expose_to_cli(MODULE, 'port-ranges-test', HealthCheckCLI.ADDON_TYPE,
                    help='Verify that there are enough ports remaining for OVS use',
                    short_help='Test if there are enough ports remaining')
-    @expose_to_cli.option('--requested-ports', type=int, default=20, help='Minimal number of ports')
-    def check_port_ranges(result_handler, requested_ports=20):
+    @expose_to_cli.option('--minimal_port_amount', '-m', type=int, default=20, help='Minimal number of ports')
+    def check_port_ranges(result_handler, minimal_port_amount=20):
         """
         Checks whether the expected amount of ports is available for the requested amount of ports
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
-        :param requested_ports: minimal number of ports without warning
-        :type requested_ports: int
+        :param minimal_port_amount: minimal number of ports without warning
+        :type minimal_port_amount: int
         :return: None
         :rtype: NoneType
         """
         # @todo: check other port ranges too
         port_range = Configuration.get('/ovs/framework/hosts/{0}/ports|storagedriver'.format(OpenvStorageHealthCheck.LOCAL_ID))
         expected_ports = System.get_free_ports(selected_range=port_range, amount=0)
-        if len(expected_ports) >= requested_ports:
+        result_handler.info('Checking if enough ports are still available for OpenvStorage')
+        if len(expected_ports) >= minimal_port_amount:
             result_handler.success('{} ports free'.format(len(expected_ports)))
         else:
-            result_handler.warning('{} ports found, less than {}'.format(len(expected_ports), requested_ports))
+            result_handler.warning('{} ports found, less than {}'.format(len(expected_ports), minimal_port_amount))
 
     @staticmethod
     @expose_to_cli(MODULE, 'nginx-ports-test', HealthCheckCLI.ADDON_TYPE,
