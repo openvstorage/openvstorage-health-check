@@ -400,11 +400,22 @@ class AlbaHealthCheck(object):
                 osds = []
                 for local_stack in alba_backend.local_stack.itervalues():
                     for osd_stack in local_stack.itervalues():
-                        for osd in osd_stack['osds'].itervalues():
-                            if alba_backend.guid != osd.get('claimed_by'):
+                        for osd in osd_stack['asds'].itervalues():
+                            if alba_backend.guid != osd.get('alba_backend_guid'):
                                 continue
                             else:
-                                osds.append(osd)
+                                arakoon_path = '/ovs/alba/asds/{0}/config|port'.format(osd['asd_id'])
+                                try:
+                                    osd['port'] = Configuration.get(arakoon_path)
+                                    osds.append(osd)
+                                except NotFoundException as ex:
+                                    result_handler.failure('Could not find {0} in Arakoon. Got {1}'.format(arakoon_path, str(ex)),
+                                                           code=ErrorCodes.configuration_not_found)
+                                    raise
+                                except Exception as ex:
+                                    result_handler.failure('Could not connect to the Arakoon due to an uncaught exception: {0}.'.format(str(ex)),
+                                                           code=ErrorCodes.arakoon_connection_failure)
+                                    raise ConnectionFailedException(str(ex))
 
                 # create result
                 result.append({
@@ -665,7 +676,7 @@ class AlbaHealthCheck(object):
             max_load = Configuration.get('ovs/framework/plugins/alba/config|nsm.maxload')
             sorted_nsm_clusters = sorted(alba_backend.nsm_clusters, key=lambda k: k.number)
             for nsm_cluster in sorted_nsm_clusters:
-                nsm_loads[nsm_cluster.number] = AlbaController.get_load(nsm_cluster)
+                nsm_loads[nsm_cluster.number] = AlbaController._get_load(nsm_cluster)
             overloaded = min(nsm_loads.values()) >= max_load
             if overloaded is False:
                 result_handler.success('NSMs for backend {0} are not overloaded'.format(alba_backend.name),

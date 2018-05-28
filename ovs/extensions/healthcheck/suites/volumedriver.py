@@ -447,7 +447,7 @@ class VolumedriverHealthCheck(object):
 
         for std in VolumedriverHealthCheck.LOCAL_SR.storagedrivers:
             try:
-                std_config = StorageDriverConfiguration(std.vpool_guid, std.storagedriver_id)
+                std_config = StorageDriverConfiguration('storagedriver', std.vpool_guid, std.storagedriver_id)
                 client = LocalStorageRouterClient(std_config.remote_path)
                 vol_potential = client.volume_potential(str(std.storagedriver_id))
                 if vol_potential >= critical_vol_number:
@@ -474,7 +474,7 @@ class VolumedriverHealthCheck(object):
         result_handler.info('Checking sco cache mount points on all local storagedrivers')
         for std in VolumedriverHealthCheck.LOCAL_SR.storagedrivers:
             try:
-                std_config = StorageDriverConfiguration(std.vpool_guid, std.storagedriver_id)
+                std_config = StorageDriverConfiguration('storagedriver', std.vpool_guid, std.storagedriver_id)
                 client = LocalStorageRouterClient(std_config.remote_path)
                 for std_info in client.sco_cache_mount_point_info(str(std.storagedriver_id)):
                     if std_info.offlined is True:
