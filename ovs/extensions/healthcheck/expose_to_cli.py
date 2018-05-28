@@ -454,9 +454,9 @@ class HealthcheckAddonGroup(CLIAddonGroup):
                 """
                 if not result_handler.started:
                     result_handler.log_start_of_application()
-
                 try:
-                    return func(result_handler=result_collector, *args, **kwargs)
+                    # Wrap around a node check to only test once per node
+                    return node_check(func)(result_handler=result_collector, *args, **kwargs)
                 except (click.Abort, KeyboardInterrupt):
                     self.logger.warning('Caught keyboard interrupt during {0}. Output may be incomplete!'.format(test_name))
                     raise HealthcheckTerminatedException(result_handler=result_handler)  # Will be handled more globally. The whole Healthcheck should abort
@@ -465,8 +465,7 @@ class HealthcheckAddonGroup(CLIAddonGroup):
                     result_handler.exception('Unhandled exception caught when executing {0}'.format(test_name))
             # Change the name to the desired one
             new_function.__name__ = test_name
-            # Wrap around a node check to only test once per node
-            return node_check(new_function)
+            return new_function
         return wrapper
 
     def run_methods_in_module(self, ctx):

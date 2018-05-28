@@ -37,6 +37,7 @@ def ensure_single_with_callback(key, callback=None, lock_type='local'):
     :param lock_type: Type of lock (can be local or cluster)
     """
     def wrapper(func):
+
         @wraps(func)
         def wrapped(*args, **kwargs):
             if lock_type == 'local':
@@ -80,7 +81,7 @@ def ensure_single_with_callback(key, callback=None, lock_type='local'):
                                     result_handler = arguments.pop(index)
                                     break
                             if result_handler is None:
-                                raise TypeError('Expected an instance of {0}'.format(type(HCResults.HCResultCollector)))
+                                raise TypeError('Expected an instance of {0}'.format(HCResults.HCResultCollector))
                             kwargs['result_handler'] = result_handler
                     return callback_func(**kwargs)
             finally:
