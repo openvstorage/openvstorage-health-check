@@ -686,14 +686,19 @@ class AlbaHealthCheck(object):
     @expose_to_cli(MODULE, 'nsm-load-test', HealthCheckCLI.ADDON_TYPE,
                    help='Verifies that the Namespace Managers are not overloaded',
                    short_help='Test if NSMs are not overloaded')
-    def check_nsm_load(cls, result_handler):
+    @expose_to_cli.option('--max-load', '-m', type=float,
+                          help='Maximum amount of namespaces that may be present in the NSM')
+    def check_nsm_load(cls, result_handler, max_load=None):
         """
         Checks all NSM services registered within the Framework and will report their load
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :param max_load: Maximum amount of namespaces that may be present in the NSM
+        :type max_load: float
         :return: None
         :rtype: NoneType
         """
+        max_load = max_load or Configuration.get('ovs/framework/plugins/alba/config|nsm.maxload')
         for alba_backend in AlbaBackendList.get_albabackends():
             if alba_backend.abm_cluster is None:
                 raise ValueError('No ABM cluster found for ALBA Backend {0}'.format(alba_backend.name))
@@ -701,7 +706,6 @@ class AlbaHealthCheck(object):
                 raise ValueError('ALBA Backend {0} does not have any registered ABM services'.format(alba_backend.name))
             internal = alba_backend.abm_cluster.abm_services[0].service.is_internal
             nsm_loads = {}
-            max_load = Configuration.get('ovs/framework/plugins/alba/config|nsm.maxload')
             sorted_nsm_clusters = sorted(alba_backend.nsm_clusters, key=lambda k: k.number)
             for nsm_cluster in sorted_nsm_clusters:
                 nsm_loads[nsm_cluster.number] = AlbaController._get_load(nsm_cluster)

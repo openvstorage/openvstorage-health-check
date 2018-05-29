@@ -282,7 +282,9 @@ class CLIAddonGroup(CLI):
         # When run with subcommand, allow it to passthrough for default behaviour
         if ctx.invoked_subcommand is None:
             # Invoked without sub command. Run all functions.
-            with self.make_context(ctx.invoked_subcommand, self.list_commands(ctx), parent=ctx) as context:
+            # Explicitly setting the default map as the now context has to behave as a chain.
+            # The current context is not meant to run in chain but to run in CLIAddonGroup context
+            with self.make_context(ctx.invoked_subcommand, self.list_commands(ctx), parent=ctx, default_map=ctx.default_map) as context:
                 self.invoke(context)
             return
 
@@ -510,7 +512,9 @@ class HealthcheckAddonGroup(CLIAddonGroup):
         # When run with subcommand, allow it to passthrough for default behaviour
         if ctx.invoked_subcommand is None:
             # Invoked without sub command. Run all functions.
-            with self.make_context(ctx.invoked_subcommand, self.list_commands(ctx), parent=ctx) as context:
+            # Explicitly setting the default map as the now context has to behave as a chain.
+            # The current context is not meant to run in chain but to run in CLIAddonGroup context
+            with self.make_context(ctx.invoked_subcommand, self.list_commands(ctx), parent=ctx, default_map=ctx.default_map) as context:
                 self.invoke(context)
             return
 
