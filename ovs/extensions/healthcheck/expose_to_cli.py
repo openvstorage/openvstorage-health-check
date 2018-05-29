@@ -684,6 +684,14 @@ class HealthCheckCLIRunner(object):
         return healthcheck_entry_point(args)
 
     @classmethod
-    def generate_configuration_options(cls):
-        cli = HealthCheckCLI(context_settings={})  # Do not use any fetched context setting to provide a full-default option layout
+    def generate_configuration_options(cls, re_use_current_settings=False):
+        # type: (bool) -> dict
+        """
+        Generate a complete structure indicating where tweaking is possible together with the default values
+        :param re_use_current_settings: Re-use the settings currently set. Defaults to False
+        It will regenerate a complete structure and apply the already set values if set to True
+        :return: All options available to the healthcheck
+        :rtype: dict
+        """
+        cli = HealthCheckCLI(context_settings=None if re_use_current_settings else {})
         return cli.generate_configuration_options()
