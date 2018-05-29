@@ -29,10 +29,10 @@ import time
 import click
 import inspect
 from functools import wraps
+from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.healthcheck.decorators import node_check
 from ovs.extensions.healthcheck.result import HCResults
 from ovs.extensions.healthcheck.logger import Logger
-from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.storage.volatilefactory import VolatileFactory
 
 # @todo Make it recursive. Current layout enforces SUBMODULE COMMAND, SUBMODULE, SUB, COMMAND is not possible
@@ -252,7 +252,7 @@ class CLIAddonGroup(CLI):
     """
     Handles retrieving the right command
     """
-    # @todo make it recurive here. The depth of the relation should indicate returning a command or another CLIAddonGroup
+    # @todo make it recursive here. The depth of the relation should indicate returning a command or another CLIAddonGroup
 
     def __init__(self, *args, **kwargs):
         # type: (*any, **any) -> None
