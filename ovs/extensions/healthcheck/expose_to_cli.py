@@ -67,6 +67,8 @@ class expose_to_cli(object):
         """
         Decorator to create an option value for the exposed method
         Wraps around the click decorator
+        Please note: creating commands should be done using the click decorator for commands to read in the __click_params__ attribute
+        to attach the right options to it.
         :param param_decls: All possible param declarations (eg '--to-json', '-t')
         :param attrs: All possible attributes. See click.Option for all possible items
         """
@@ -123,6 +125,7 @@ class CLI(click.Group):
         :param ctx: Passed context
         :return: List of files to look for commands
         """
+        _ = ctx
         sub_commands = self._discover_methods().keys()  # Returns all underlying modules
         sub_commands.sort()
         return sub_commands
@@ -223,13 +226,13 @@ class CLI(click.Group):
                 # Able to use the cache, has not expired yet
                 del exposed_methods['expires']
                 return exposed_methods
-        except:
+        except Exception:
             cls.logger.exception('Unable to retrieve the exposed resources from cache')
         exposed_methods = discover()
         try:
             cls._discovery_cache = exposed_methods
             cls._volatile_client.set(cls.CACHE_KEY, exposed_methods)
-        except:
+        except Exception:
             cls.logger.exception('Unable to cache the exposed resources')
         del exposed_methods['expires']
         return exposed_methods
@@ -249,7 +252,7 @@ class CLIAddonGroup(CLI):
     """
     Handles retrieving the right command
     """
-    # @todo make it recurive here. The depth of the relation should indicate returning a command or antoher CLIAddonGroup
+    # @todo make it recurive here. The depth of the relation should indicate returning a command or another CLIAddonGroup
 
     def __init__(self, *args, **kwargs):
         # type: (*any, **any) -> None
@@ -305,12 +308,13 @@ class CLIAddonGroup(CLI):
                 mod = imp.load_source(function_data['module_name'], function_data['location'])
                 cl = getattr(mod, function_data['class'])()
                 method_to_run = getattr(cl, function_data['function'])
-                click_command = click.Command(name=name,
-                                              help=function_data.get('help'),
-                                              short_help=function_data.get('short_help'),
-                                              callback=method_to_run)
-                self.add_command(click_command)
-                return click_command
+                # Wrap around the click decorator to extract the option arguments using the function parameters
+                click_command_wrap = click.command(name=name,
+                                                   help=function_data.get('help'),
+                                                   short_help=function_data.get('short_help'))
+                cmd = click_command_wrap(method_to_run)
+                self.add_command(cmd)
+                return cmd
 
 ###############################
 # Healthcheck implementations #
@@ -380,7 +384,7 @@ class HealthCheckShared(object):
     @classmethod
     def get_default_arguments(cls):
         if not cls._context_settings:
-            cls._context_settings = Configuration.get(cls.CONTEXT_SETTINGS_KEY, default={'ovs': {'log-files-test': {'max_log_size': 1}}})
+            cls._context_settings = Configuration.get(cls.CONTEXT_SETTINGS_KEY, default={})
         return cls._context_settings
 
 
@@ -446,13 +450,13 @@ class HealthcheckAddonGroup(CLIAddonGroup):
                 method_to_run = getattr(cl, function_data['function'])
                 full_name = '{0}-{1}'.format(module_name, name)
                 wrapped_function = (self.healthcheck_wrapper(result_handler, full_name)(method_to_run))  # Inject our Healthcheck arguments
-                # Wrap around the click decorator to extract the option arguments
-                click_command = click.Command(name=name,
-                                              help=function_data.get('help'),
-                                              short_help=function_data.get('short_help'),
-                                              callback=wrapped_function)
-                self.add_command(click_command)
-                return click_command
+                # Wrap around the click decorator to extract the option arguments using the function parameters
+                click_command_wrap = click.command(name=name,
+                                                   help=function_data.get('help'),
+                                                   short_help=function_data.get('short_help'))
+                cmd = click_command_wrap(wrapped_function)
+                self.add_command(cmd)
+                return cmd
 
     def healthcheck_wrapper(self, result_handler, test_name):
         # type: (HCResults, str) -> callable
@@ -489,7 +493,7 @@ class HealthcheckAddonGroup(CLIAddonGroup):
                 except (click.Abort, KeyboardInterrupt):
                     self.logger.warning('Caught keyboard interrupt during {0}. Output may be incomplete!'.format(test_name))
                     raise HealthcheckTerminatedException(result_handler=result_handler)  # Will be handled more globally. The whole Healthcheck should abort
-                except:
+                except Exception:
                     self.logger.exception('Unhandled exception caught when executing {0}'.format(test_name))
                     result_handler.exception('Unhandled exception caught when executing {0}'.format(test_name))
             # Change the name to the desired one
@@ -527,15 +531,17 @@ class HealthCheckCLI(CLI):
 
     logger = HealthCheckShared.logger
 
-    def __init__(self, *args, **kwargs):
-        # type: (*any, **any) -> None
+    def __init__(self, context_settings=None, *args, **kwargs):
+        # type: (dict, *any, **any) -> None
         """
         Initializes a CLI instance
         Injects a healthcheck specific callback
         """
+        if context_settings is None:
+            context_settings = dict(default_map=HealthCheckShared.get_default_arguments())
         super(HealthCheckCLI, self).__init__(invoke_without_command=True,
                                              result_callback=self.healthcheck_result_handler,
-                                             context_settings=dict(default_map=HealthCheckShared.get_default_arguments()),
+                                             context_settings=context_settings,
                                              *args, **kwargs)
 
     def parse_args(self, ctx, args):
@@ -570,7 +576,7 @@ class HealthCheckCLI(CLI):
         discovery_data = self._discover_methods()
         if name in discovery_data.keys():
             # The current passed name is a module. Wrap it up in a group and add all commands under it dynamically
-            cmd = self.GROUP_MODULE_CLASS(name=name, context_settings=dict(default_map=HealthCheckShared.get_default_arguments().get(name)))
+            cmd = self.GROUP_MODULE_CLASS(name=name)
             self.add_command(cmd)
             return cmd
 
@@ -616,6 +622,28 @@ class HealthCheckCLI(CLI):
         except (click.Abort, KeyboardInterrupt):
             raise HealthcheckTerminatedException(result_handler=ctx.obj.result_handler)
 
+    def generate_configuration_options(self, cmd=None, ctx=None):
+        """
+        Generate a dict with all possible configuration options available
+        Only to be
+        """
+        options = {}
+        cmd = cmd or self
+        ctx = cmd.make_context(cmd.name, [], ctx)
+        if not ctx.obj:  # Inject the result handler as the Healthcheck wraps the functions and requires this object
+            result_handler = HCResults(unattended=False, to_json=False)
+            ctx.obj = HealthCheckCLiContext(result_handler)
+        if hasattr(cmd, 'list_commands'):
+            for sub_cmd_name in cmd.list_commands(ctx):
+                sub_cmd = cmd.get_command(ctx, sub_cmd_name)
+                sub_cmd_options = {sub_cmd.name: self.generate_configuration_options(sub_cmd, ctx)}
+                options.update(sub_cmd_options)
+        else:
+            for param in cmd.params:
+                handled_value, _ = param.handle_parse_result(ctx, {}, [])
+                options.update({param.name: handled_value})
+        return options
+
 
 @click.group(cls=HealthCheckCLI)
 @click.option('--unattended', is_flag=True, help='Only output the results in a compact format')
@@ -650,10 +678,12 @@ class HealthCheckCLIRunner(object):
         """
         Executes the given method like it would be executed through the CLI
         """
+        _ = kwargs
         if not isinstance(args, tuple):
             args = (args,)
         return healthcheck_entry_point(args)
 
-
-if __name__ == '__main__':
-    HealthCheckCLIRunner.run_method('ovs', 'log-files-test')
+    @classmethod
+    def generate_configuration_options(cls):
+        cli = HealthCheckCLI(context_settings={})  # Do not use any fetched context setting to provide a full-default option layout
+        return cli.generate_configuration_options()
