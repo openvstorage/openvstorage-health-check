@@ -146,12 +146,12 @@ from ovs.extensions.healthcheck.expose_to_cli import HealthCheckShared, HealthCh
 Configuration.set(HealthCheckShared.CONTEXT_SETTINGS_KEY, HealthCheckCLIRunner.generate_configuration_options())
 ```
 
-When new arguments are added: the generation can take your old settings into account by providing `False'
+When new arguments are added: the generation can take your old settings into account by providing `True'
 
 ```
 from ovs.extensions.generic.configuration import Configuration
 from ovs.extensions.healthcheck.expose_to_cli import HealthCheckShared, HealthCheckCLIRunner
-Configuration.set(HealthCheckShared.CONTEXT_SETTINGS_KEY, HealthCheckCLIRunner.generate_configuration_options(False))
+Configuration.set(HealthCheckShared.CONTEXT_SETTINGS_KEY, HealthCheckCLIRunner.generate_configuration_options(True))
 ```
 
 ## 5. Important to know!
