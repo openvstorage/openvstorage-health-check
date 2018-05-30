@@ -21,6 +21,7 @@ Alba Health Check Module
 """
 
 import os
+import math
 import uuid
 import time
 import hashlib
@@ -675,37 +676,93 @@ class AlbaHealthCheck(object):
     @expose_to_cli(MODULE, 'nsm-load-test', HealthCheckCLI.ADDON_TYPE,
                    help='Verifies that the Namespace Managers are not overloaded',
                    short_help='Test if NSMs are not overloaded')
-    @expose_to_cli.option('--max-load', '-m', type=float,
-                          help='Maximum amount of namespaces that may be present in the NSM')
-    def check_nsm_load(cls, result_handler, max_load=None):
+    @expose_to_cli.option('--max-load', '-m', type=int,
+                          help='Maximum load percentage before marking it as overloaded. Defaults to ovs/framework/plugins/alba/config|nsm.maxload).'
+                               'Ignored when --use-total-capacity is given')
+    @expose_to_cli.option('--use-total-capacity', '-u', is_flag=True,
+                          help='Base NSM load of the total possible capacity (capacity of NSMs before they are marked as overloaded) '
+                               'instead of checking the least filled NSM. '
+                               'Use threshold arguments for tuning')
+    @expose_to_cli.option('--total-capacity-warning', '-w', type=int,
+                          help='Number of remaining namespaces threshold before throwing a warning. '
+                               'Defaults 20% of the total namespaces')
+    @expose_to_cli.option('--total-capacity-error', '-e', type=int,
+                          help='Number of remaining namespaces threshold before throwing an error. '
+                               'Defaults to 5% of the total namespaces')
+    def check_nsm_load(cls, result_handler, max_load=None, use_total_capacity=False, total_capacity_warning=None, total_capacity_error=None):
         """
         Checks all NSM services registered within the Framework and will report their load
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
-        :param max_load: Maximum amount of namespaces that may be present in the NSM
+        :param max_load: Maximum load percentage before marking it as overloaded. Defaults to ovs/framework/plugins/alba/config|nsm.maxload
         :type max_load: float
+        :param use_total_capacity: Base NSM load of the total possible capacity (capacity of NSMs before they are marked as overloaded)
+        instead of checking the least filled NSM. Use threshold arguments for tuning'
+        :type use_total_capacity: bool
+        :param total_capacity_warning: Number of remaining namespaces threshold before throwing a warning. Defaults 20% of the total namespaces
+        :type total_capacity_warning: int
+        :param total_capacity_error: Number of remaining namespaces threshold before throwing an error. Defaults to 5% of the total namespaces
+        :type total_capacity_error: int
         :return: None
         :rtype: NoneType
         """
-        max_load = max_load or Configuration.get('ovs/framework/plugins/alba/config|nsm.maxload')
+        max_nsm_load_config = Configuration.get('ovs/framework/plugins/alba/config|nsm.maxload')
+        max_load = max_load or max_nsm_load_config
         for alba_backend in AlbaBackendList.get_albabackends():
             if alba_backend.abm_cluster is None:
-                raise ValueError('No ABM cluster found for ALBA Backend {0}'.format(alba_backend.name))
+                result_handler.failure('No ABM cluster found for ALBA Backend {0}'.format(alba_backend.name))
+                continue
             if len(alba_backend.abm_cluster.abm_services) == 0:
-                raise ValueError('ALBA Backend {0} does not have any registered ABM services'.format(alba_backend.name))
+                result_handler.failure('ALBA Backend {0} does not have any registered ABM services'.format(alba_backend.name))
+                continue
+            if len(alba_backend.nsm_clusters) == 0:
+                result_handler.failure('ALBA Backend {0} does not have any registered NSM services'.format(alba_backend.name))
+                continue
             internal = alba_backend.abm_cluster.abm_services[0].service.is_internal
-            nsm_loads = {}
-            sorted_nsm_clusters = sorted(alba_backend.nsm_clusters, key=lambda k: k.number)
-            for nsm_cluster in sorted_nsm_clusters:
-                nsm_loads[nsm_cluster.number] = AlbaController.get_load(nsm_cluster)
-            overloaded = min(nsm_loads.values()) >= max_load
-            if overloaded is False:
-                result_handler.success('NSMs for backend {0} are not overloaded'.format(alba_backend.name),
-                                       code=ErrorCodes.nsm_load_ok)
-            else:
-                if internal is True:
-                    result_handler.warning('NSMs for backend {0} are overloaded. The NSM checkup will take care of this'.format(alba_backend.name),
-                                           code=ErrorCodes.nsm_load_warn)
+            if use_total_capacity:
+                maximum_capacity_before_overload = AlbaHealthCheck._get_nsm_max_capacity_before_overload(alba_backend, max_nsm_load_config)
+                total_capacity_warning = total_capacity_warning or math.ceil(maximum_capacity_before_overload * 1.0/5)
+                total_capacity_error = total_capacity_error or math.ceil(maximum_capacity_before_overload * 1.0/20)
+                config = Configuration.get_configuration_path(key=alba_backend.abm_cluster.config_location)
+                hosts_data = AlbaCLI.run(command='list-nsm-hosts', config=config)
+                current_capacity = sum([host['namespaces_count'] for host in hosts_data if not host['lost']])
+                remaining_capacity = maximum_capacity_before_overload - current_capacity
+                if remaining_capacity > total_capacity_warning and remaining_capacity > total_capacity_error:  # Only error could be specified
+                    result_handler.success('NSMs for backend {0} have enough capacity remaining ({1}/{2} used)'.format(alba_backend.name, current_capacity, maximum_capacity_before_overload),
+                                           code=ErrorCodes.nsm_load_ok)
+                elif total_capacity_warning >= remaining_capacity > total_capacity_error:
+                    result_handler.warning('NSMs for backend {0} have reached the warning threshold '
+                                           '({1} namespaces had to be remaining, {2}/{3} used)'.format(alba_backend.name, total_capacity_warning, current_capacity, maximum_capacity_before_overload),
+                                           code=ErrorCodes.nsm_load_ok)
                 else:
-                    result_handler.failure('NSMs for backend {0} are overloaded. Please add your own NSM clusters to the backend'.format(alba_backend.name),
-                                           code=ErrorCodes.nsm_load_failure)
+                    result_handler.failure('NSMs for backend {0} have reached the error threshold '
+                                           '({1} namespaces had to be remaining, ({2}/{3} used)'.format(alba_backend.name, total_capacity_error, current_capacity, maximum_capacity_before_overload),
+                                           code=ErrorCodes.nsm_load_ok)
+            else:
+                nsm_loads = {}
+                sorted_nsm_clusters = sorted(alba_backend.nsm_clusters, key=lambda k: k.number)
+                for nsm_cluster in sorted_nsm_clusters:
+                    nsm_loads[nsm_cluster.number] = AlbaController.get_load(nsm_cluster)
+                overloaded = min(nsm_loads.values()) >= max_load
+                if overloaded is False:
+                    result_handler.success('NSMs for backend {0} are not overloaded'.format(alba_backend.name),
+                                           code=ErrorCodes.nsm_load_ok)
+                else:
+                    if internal is True:
+                        result_handler.warning('NSMs for backend {0} are overloaded. The NSM checkup will take care of this'.format(alba_backend.name),
+                                               code=ErrorCodes.nsm_load_warn)
+                    else:
+                        result_handler.failure('NSMs for backend {0} are overloaded. Please add your own NSM clusters to the backend'.format(alba_backend.name),
+                                               code=ErrorCodes.nsm_load_failure)
+
+    @staticmethod
+    def _get_nsm_max_capacity_before_overload(alba_backend, max_load=None):
+        """
+        Get the maximum amount of namespaces that the nsm clusters can hold for a backend before being marked as overloaded
+        :param alba_backend: AlbaBackend object to use
+        :type alba_backend: ovs.dal.hybrids.albabackend.AlbaBackend
+        :return: The max amount of namespaces
+        :rtype: int
+        """
+        max_load = max_load or Configuration.get('ovs/framework/plugins/alba/config|nsm.maxload')
+        return sum(int(math.ceil(nsm.capacity * (float(max_load)/100.0))) for nsm in alba_backend.nsm_clusters)
