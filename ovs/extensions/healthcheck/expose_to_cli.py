@@ -543,6 +543,11 @@ class HealthCheckCLI(CLI):
         """
         if context_settings is None:
             context_settings = dict(default_map=HealthCheckShared.get_default_arguments())
+        # It is not possible to add multi commands as children to another multi command that is in chain mode.
+        #   Command "healthcheck_entry_point" is set to chain and "alba" was added as subcommand but it in itself is a multi command.
+        #   ("alba" is a HealthcheckAddonGroup within a chained HealthCheckCLI named "healthcheck_entry_point").
+        #   This restriction was supposed to be lifted in 6.0 but the fix was flawed.  This will be fixed in Click 7.0
+        # Therefore the result_callback must be called if invoke_without_command is done
         super(HealthCheckCLI, self).__init__(invoke_without_command=True,
                                              result_callback=self.healthcheck_result_handler,
                                              context_settings=context_settings,
@@ -598,10 +603,10 @@ class HealthCheckCLI(CLI):
         result_handler = hc_context.result_handler
         return HealthCheckShared.get_healthcheck_results(result_handler)
 
-    def main(self, args=None, prog_name=None, complete_var=None, standalone_mode=False, **extra):
-        # type: (list, str, bool, bool, **any) -> dict
+    def main(self, *args, **kwargs):
+        # type: (List[any], Dict[any]) -> dict
         try:
-            return super(HealthCheckCLI, self).main(args, prog_name, complete_var, standalone_mode, **extra)
+            return super(HealthCheckCLI, self).main(*args, **kwargs)
         except (click.Abort, KeyboardInterrupt):
             # Aborted before running any command. Print and return an empty result to stdout.
             # Unable to capture output params in this stage as it is handled by the main method
@@ -668,6 +673,8 @@ def healthcheck_entry_point(ctx, unattended, to_json):
         cli_instance = ctx.command  # type: HealthCheckCLI
         for sub_command in cli_instance.list_commands(ctx):
             ctx.invoke(cli_instance.get_command(ctx, sub_command))
+        # Working around the multicommand wrapping. See init of healtcheck cli
+        HealthCheckShared.get_healthcheck_results(result_handler)
         return result_handler
 
 
