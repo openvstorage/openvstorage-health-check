@@ -753,7 +753,7 @@ class AlbaHealthCheck(object):
                 nsm_loads = {}
                 sorted_nsm_clusters = sorted(alba_backend.nsm_clusters, key=lambda k: k.number)
                 for nsm_cluster in sorted_nsm_clusters:
-                    nsm_loads[nsm_cluster.number] = AlbaController.get_load(nsm_cluster)
+                    nsm_loads[nsm_cluster.number] = AlbaController._get_load(nsm_cluster)
                 overloaded = min(nsm_loads.values()) >= max_load
                 if overloaded is False:
                     result_handler.success('NSMs for backend {0} are not overloaded'.format(alba_backend.name),
