@@ -603,10 +603,10 @@ class HealthCheckCLI(CLI):
         result_handler = hc_context.result_handler
         return HealthCheckShared.get_healthcheck_results(result_handler)
 
-    def main(self, *args, **kwargs):
+    def main(self, args=None, prog_name=None, complete_var=None, standalone_mode=False, **extra):
         # type: (List[any], Dict[any]) -> dict
         try:
-            return super(HealthCheckCLI, self).main(*args, **kwargs)
+            return super(HealthCheckCLI, self).main(args, prog_name, complete_var, standalone_mode, **extra)
         except (click.Abort, KeyboardInterrupt):
             # Aborted before running any command. Print and return an empty result to stdout.
             # Unable to capture output params in this stage as it is handled by the main method
