@@ -15,6 +15,7 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
+from __future__ import absolute_import
 
 from ovs.dal.lists.albanodelist import AlbaNodeList
 from ovs.extensions.generic.configuration import Configuration
