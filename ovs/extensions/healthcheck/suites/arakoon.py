@@ -19,6 +19,7 @@
 """
 Arakoon Health Check module
 """
+from __future__ import absolute_import
 
 import os
 import json
@@ -92,7 +93,7 @@ class ArakoonHealthCheck(object):
     @expose_to_cli(MODULE, 'nodes-test', HealthCheckCLI.ADDON_TYPE,
                    help='Verify if nodes are missing and if nodes are catching up to the master',
                    short_help='Test if there are nodes missing/catching up')
-    @expose_to_cli.option('--max-transactions-behind', type=int, default=10, help='The number of transactions that a slave can be behind a master before logging a failure')
+    @expose_to_cli.option('--max-transactions-behind', '-m', type=int, default=10, help='The number of transactions that a slave can be behind a master before logging a failure')
     def check_node_status(cls, result_handler, max_transactions_behind=10):
         """
         Checks the status of every node within the Arakoon cluster
@@ -140,10 +141,10 @@ class ArakoonHealthCheck(object):
                         else:
                             result_handler.success(log.format('is up to date'), code=ErrorCodes.node_up_to_date)
                 except (ArakoonNoMaster, ArakoonNoMasterResult) as ex:
-                    result_handler.failure('{0} cannot find a master. (Message: {1})'.format(identifier, cluster_name, str(ex)), code=ErrorCodes.master_none)
+                    result_handler.failure('{0} cannot find a master. (Message: {1})'.format(identifier, str(ex)), code=ErrorCodes.master_none)
                 except Exception as ex:
                     cls.logger.exception('Unhandled exception during the nodes check')
-                    result_handler.exception('Testing {0} threw an unhandled exception. (Message: {1})'.format(identifier, cluster_name, str(ex)),
+                    result_handler.exception('Testing {0} threw an unhandled exception. (Message: {1})'.format(identifier, str(ex)),
                                              code=ErrorCodes.unhandled_exception)
 
     @classmethod
@@ -259,8 +260,8 @@ class ArakoonHealthCheck(object):
     @expose_to_cli(MODULE, 'collapse-test', HealthCheckCLI.ADDON_TYPE,
                    help='Verifies collapsing has occurred for all Arakoons',
                    short_help='Test if Arakoon collapsing is not failing')
-    @expose_to_cli.option('--max-collapse-age', type=int, default=3, help='Maximum age in days for TLX')
-    @expose_to_cli.option('--min-tlx-amount', type=int, default=10, help='Minimum amount of TLX files before testing')
+    @expose_to_cli.option('--max-collapse-age', '-a', type=int, default=3, help='Maximum age in days for TLX')
+    @expose_to_cli.option('--min-tlx-amount', '-t', type=int, default=10, help='Minimum amount of TLX files before testing')
     def check_collapse(cls, result_handler, max_collapse_age=3, min_tlx_amount=10):
         """
         Verifies collapsing has occurred for all Arakoons
@@ -490,7 +491,7 @@ class ArakoonHealthCheck(object):
     @expose_to_cli(MODULE, 'file-descriptors-test', HealthCheckCLI.ADDON_TYPE,
                    help='Verify the number of File Descriptors on every Arakoon does not exceed the limit',
                    short_help='Test if #FD does not exceed the limit')
-    @expose_to_cli.option('--fd-limit', type=int, default=30, help='Threshold for the number number of tcp connections for which to start logging warnings')
+    @expose_to_cli.option('--fd-limit', '-l', type=int, default=30, help='Threshold for the number number of tcp connections for which to start logging warnings')
     def check_arakoon_fd(cls, result_handler, fd_limit=30, passed_connections=None):
         """
         Checks all current open tcp file descriptors for all Arakoon clusters in the OVS cluster

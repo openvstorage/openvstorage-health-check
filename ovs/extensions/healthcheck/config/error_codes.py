@@ -85,7 +85,8 @@ class ErrorCodes(object):
         # Disk safety
         'disk_safety_ok': ErrorCode('ALBA0300', 'All data for the backend is safe, no data is at risk', no_action),
         'disk_safety_warn': ErrorCode('ALBA0301', 'Not all data is completely safe, certain fragments are to be repaired', 'Validate whether all OSDs are running'),
-        'disk_safety_error': ErrorCode('ALBA0302', 'The data is at risk or might have suffered some loss!', 'Validate whether all OSDs are running'),
+        'disk_safety_error_zero': ErrorCode('ALBA0302', 'The data is at risk or might have suffered some loss!', 'Validate whether all OSDs are running'),
+        'disk_safety_error_negative': ErrorCode('ALBA0303', 'The data has suffered some loss!', 'Validate whether all OSDs are running'),
         # Services
         'alba_service_running': ErrorCode('ALBA0400', 'The Alba service is up and running', no_action),
         'alba_service_down': ErrorCode('ALBA0401', 'The Alba service is not running', 'Validate whether the Alba service has been started'),

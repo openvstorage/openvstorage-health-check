@@ -13,6 +13,8 @@
 #
 # Open vStorage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY of any kind.
+from __future__ import absolute_import
+
 import os
 import subprocess
 import timeout_decorator
@@ -430,7 +432,7 @@ class VolumedriverHealthCheck(object):
     @expose_to_cli(MODULE, 'volume-potential-test', HealthCheckCLI.ADDON_TYPE,
                    help='Verify that the Volumedrivers have enough VDisk potential left',
                    short_help='Test if the Volumedrivers can create enough VDisks')
-    @expose_to_cli.option('--critical-vol-number', type=int, default=25, help='Minimum number of volumes left to create')
+    @expose_to_cli.option('--critical-vol-number', '-c', type=int, default=25, help='Minimum number of volumes left to create')
     def check_volume_potential(result_handler, critical_vol_number=25):
         """
         Checks all local storage drivers from a volume driver. Results in a success if enough volumes are available, a warning if the number of volumes is

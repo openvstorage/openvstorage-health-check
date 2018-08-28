@@ -19,8 +19,10 @@
 """
 Alba Health Check Module
 """
+from __future__ import absolute_import
 
 import os
+import math
 import uuid
 import time
 import hashlib
@@ -487,15 +489,30 @@ class AlbaHealthCheck(object):
     @expose_to_cli(MODULE, 'disk-safety-test', HealthCheckCLI.ADDON_TYPE,
                    help='Verifies that namespaces have enough safety',
                    short_help='Test if namespaces have enough safety')
-    def check_disk_safety(result_handler):
+    @expose_to_cli.option('--backend', '-b', multiple=True, type=str,
+                          help='Backend(s) to check for. Can be provided multiple times. Ignored if --skip-backend option is given')
+    @expose_to_cli.option('--skip-backend', '-s', multiple=True, type=str,
+                          help='Backend(s) to skip checking for. Can be provided multiple times')
+    @expose_to_cli.option('--include-errored-as-dead', '-i', is_flag=True,
+                          help='OSDs with errors as treated as dead ones during the calculation')
+    def check_disk_safety(result_handler, backend=(), skip_backend=(), include_errored_as_dead=False):
         """
         Check safety of every namespace in every backend
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :param backend: Backend(s) to check for (name does not fit the multiple options. This is to make it pretty for the CLI)
+        :type backend: tuple[str]
+        :param skip_backend: Backend(s) to skip checking for (name does not fit the multiple options. This is to make it pretty for the CLI)
+        :type skip_backend: tuple[str]
+        :param include_errored_as_dead: OSDs with errors as treated as dead ones during the calculation
+        :type include_errored_as_dead: bool
         :return: None
         :rtype: NoneType
         """
-        results = AlbaHealthCheck.get_disk_safety(result_handler)
+        def _get_output(namespaces_to_use):
+            return ',\n'.join(['{0} with {1}% of its objects'.format(n['namespace'], str(n['amount_in_bucket'])) for n in namespaces_to_use])
+
+        results = AlbaHealthCheck.get_disk_safety(result_handler, backends_to_include=backend, backends_to_skip=skip_backend, include_errored_as_dead=include_errored_as_dead)
         for backend_name, policies in results.iteritems():
             result_handler.info('Checking disk safety on backend: {0}'.format(backend_name), add_to_result=False)
             for policy_prefix, policy_details in policies.iteritems():
@@ -516,19 +533,21 @@ class AlbaHealthCheck(object):
                         if disk_safety == policy_details['max_disk_safety']:
                             result_handler.success('The disk safety of {0} namespace(s) is/are totally safe!'.format(len(namespaces)),
                                                    code=ErrorCodes.disk_safety_ok)
-                        elif disk_safety != 0:
+                        elif disk_safety > 0:
                             # Avoid failure override
-                            output = ',\n'.join(['{0} with {1}% of its objects'.format(ns['namespace'], str(ns['amount_in_bucket'])) for ns in namespaces])
-                            result_handler.warning('The disk safety of {0} namespace(s) is {1}, max. disk safety is {2}: \n{3}'.format(len(namespaces), disk_safety, policy_details['max_disk_safety'], output),
+                            result_handler.warning('The disk safety of {0} namespace(s) is {1}, max. disk safety is {2}: \n{3}'.format(len(namespaces), disk_safety, policy_details['max_disk_safety'], _get_output(namespaces)),
                                                    code=ErrorCodes.disk_safety_warn)
+                        # @TODO: after x amount of hours in disk safety 0 put in error, else put in warning
+                        elif disk_safety == 0:
+                            result_handler.failure('The disk safety of {0} namespace(s) is/are ZERO: \n{1}'.format(len(namespaces), _get_output(namespaces)),
+                                                   code=ErrorCodes.disk_safety_error_zero)
                         else:
-                            # @TODO: after x amount of hours in disk safety 0 put in error, else put in warning
-                            output = ',\n'.join(['{0} with {1}% of its objects'.format(ns['namespace'], str(ns['amount_in_bucket'])) for ns in namespaces])
-                            result_handler.failure('The disk safety of {0} namespace(s) is/are ZERO: \n{1}'.format(len(namespaces), output),
-                                                   code=ErrorCodes.disk_safety_error)
+                            # Negative safety
+                            result_handler.failure('The disk safety of {0} namespace(s) is/are below ZERO, safety: {1}: \n{2}'.format(len(namespaces), disk_safety, _get_output(namespaces)),
+                                                   code=ErrorCodes.disk_safety_error_negative)
 
     @classmethod
-    def get_disk_safety(cls, result_handler):
+    def get_disk_safety(cls, result_handler, backends_to_include=(), backends_to_skip=(), include_errored_as_dead=False):
         """
         Fetch safety of every namespace in every backend
         - amount_in_bucket is in %
@@ -541,19 +560,30 @@ class AlbaHealthCheck(object):
         {1: {'namespace': u'e88c88c9-632c-4975-b39f-e9993e352560', 'amount_in_bucket': 100}}}}}
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :param backends_to_include: Backend(s) to check for
+        :type backends_to_include: tuple[str]
+        :param backends_to_skip: Backend(s) to skip checking for
+        :type backends_to_skip: tuple[str]
+        :param include_errored_as_dead: OSDs with errors as treated as dead ones during the calculation
+        :type include_errored_as_dead: bool
         :return: Safety of every namespace in every backend
         :rtype: dict
         """
         disk_safety_overview = {}
         for alba_backend in BackendHelper.get_albabackends():
+            if backends_to_skip and alba_backend.name in backends_to_skip:
+                continue
+            if backends_to_include and alba_backend.name not in backends_to_include:
+                continue
             disk_safety_overview[alba_backend.name] = {}
             config = Configuration.get_configuration_path('ovs/arakoon/{0}-abm/config'.format(alba_backend.name))
             # Fetch alba info
             try:
-                # @TODO add this to extra_params to include corrupt asds. Currently there is a bug with it
-                # Ticket: https://github.com/openvstorage/alba/issues/441
-                # extra_params=['--include-errored-as-dead']
-                namespaces = AlbaCLI.run(command='get-disk-safety', config=config)
+                extra_params = []
+                if include_errored_as_dead:
+                    # @TODO Revisit once the https://github.com/openvstorage/alba/issues/441 has been resolved
+                    extra_params.append('--include-errored-as-dead')
+                namespaces = AlbaCLI.run(command='get-disk-safety', config=config, extra_params=extra_params)
                 cache_eviction_prefix_preset_pairs = AlbaCLI.run(command='get-maintenance-config', config=config)['cache_eviction_prefix_preset_pairs']
                 presets = AlbaCLI.run(command='list-presets', config=config)
             except AlbaException as ex:
@@ -647,33 +677,93 @@ class AlbaHealthCheck(object):
     @expose_to_cli(MODULE, 'nsm-load-test', HealthCheckCLI.ADDON_TYPE,
                    help='Verifies that the Namespace Managers are not overloaded',
                    short_help='Test if NSMs are not overloaded')
-    def check_nsm_load(cls, result_handler):
+    @expose_to_cli.option('--max-load', '-m', type=int,
+                          help='Maximum load percentage before marking it as overloaded. Defaults to ovs/framework/plugins/alba/config|nsm.maxload).'
+                               'Ignored when --use-total-capacity is given')
+    @expose_to_cli.option('--use-total-capacity', '-u', is_flag=True,
+                          help='Base NSM load of the total possible capacity (capacity of NSMs before they are marked as overloaded) '
+                               'instead of checking the least filled NSM. '
+                               'Use threshold arguments for tuning')
+    @expose_to_cli.option('--total-capacity-warning', '-w', type=int,
+                          help='Number of remaining namespaces threshold before throwing a warning. '
+                               'Defaults 20% of the total namespaces')
+    @expose_to_cli.option('--total-capacity-error', '-e', type=int,
+                          help='Number of remaining namespaces threshold before throwing an error. '
+                               'Defaults to 5% of the total namespaces')
+    def check_nsm_load(cls, result_handler, max_load=None, use_total_capacity=False, total_capacity_warning=None, total_capacity_error=None):
         """
         Checks all NSM services registered within the Framework and will report their load
         :param result_handler: logging object
         :type result_handler: ovs.extensions.healthcheck.result.HCResults
+        :param max_load: Maximum load percentage before marking it as overloaded. Defaults to ovs/framework/plugins/alba/config|nsm.maxload
+        :type max_load: float
+        :param use_total_capacity: Base NSM load of the total possible capacity (capacity of NSMs before they are marked as overloaded)
+        instead of checking the least filled NSM. Use threshold arguments for tuning'
+        :type use_total_capacity: bool
+        :param total_capacity_warning: Number of remaining namespaces threshold before throwing a warning. Defaults 20% of the total namespaces
+        :type total_capacity_warning: int
+        :param total_capacity_error: Number of remaining namespaces threshold before throwing an error. Defaults to 5% of the total namespaces
+        :type total_capacity_error: int
         :return: None
         :rtype: NoneType
         """
+        max_nsm_load_config = Configuration.get('ovs/framework/plugins/alba/config|nsm.maxload')
+        max_load = max_load or max_nsm_load_config
         for alba_backend in AlbaBackendList.get_albabackends():
             if alba_backend.abm_cluster is None:
-                raise ValueError('No ABM cluster found for ALBA Backend {0}'.format(alba_backend.name))
+                result_handler.failure('No ABM cluster found for ALBA Backend {0}'.format(alba_backend.name))
+                continue
             if len(alba_backend.abm_cluster.abm_services) == 0:
-                raise ValueError('ALBA Backend {0} does not have any registered ABM services'.format(alba_backend.name))
+                result_handler.failure('ALBA Backend {0} does not have any registered ABM services'.format(alba_backend.name))
+                continue
+            if len(alba_backend.nsm_clusters) == 0:
+                result_handler.failure('ALBA Backend {0} does not have any registered NSM services'.format(alba_backend.name))
+                continue
             internal = alba_backend.abm_cluster.abm_services[0].service.is_internal
-            nsm_loads = {}
-            max_load = Configuration.get('ovs/framework/plugins/alba/config|nsm.maxload')
-            sorted_nsm_clusters = sorted(alba_backend.nsm_clusters, key=lambda k: k.number)
-            for nsm_cluster in sorted_nsm_clusters:
-                nsm_loads[nsm_cluster.number] = AlbaController.get_load(nsm_cluster)
-            overloaded = min(nsm_loads.values()) >= max_load
-            if overloaded is False:
-                result_handler.success('NSMs for backend {0} are not overloaded'.format(alba_backend.name),
-                                       code=ErrorCodes.nsm_load_ok)
-            else:
-                if internal is True:
-                    result_handler.warning('NSMs for backend {0} are overloaded. The NSM checkup will take care of this'.format(alba_backend.name),
-                                           code=ErrorCodes.nsm_load_warn)
+            if use_total_capacity:
+                maximum_capacity_before_overload = AlbaHealthCheck._get_nsm_max_capacity_before_overload(alba_backend, max_nsm_load_config)
+                total_capacity_warning = total_capacity_warning or math.ceil(maximum_capacity_before_overload * 1.0/5)
+                total_capacity_error = total_capacity_error or math.ceil(maximum_capacity_before_overload * 1.0/20)
+                config = Configuration.get_configuration_path(key=alba_backend.abm_cluster.config_location)
+                hosts_data = AlbaCLI.run(command='list-nsm-hosts', config=config)
+                current_capacity = sum([host['namespaces_count'] for host in hosts_data if not host['lost']])
+                remaining_capacity = maximum_capacity_before_overload - current_capacity
+                if remaining_capacity > total_capacity_warning and remaining_capacity > total_capacity_error:  # Only error could be specified
+                    result_handler.success('NSMs for backend {0} have enough capacity remaining ({1}/{2} used)'.format(alba_backend.name, current_capacity, maximum_capacity_before_overload),
+                                           code=ErrorCodes.nsm_load_ok)
+                elif total_capacity_warning >= remaining_capacity > total_capacity_error:
+                    result_handler.warning('NSMs for backend {0} have reached the warning threshold '
+                                           '({1} namespaces had to be remaining, {2}/{3} used)'.format(alba_backend.name, total_capacity_warning, current_capacity, maximum_capacity_before_overload),
+                                           code=ErrorCodes.nsm_load_ok)
                 else:
-                    result_handler.failure('NSMs for backend {0} are overloaded. Please add your own NSM clusters to the backend'.format(alba_backend.name),
-                                           code=ErrorCodes.nsm_load_failure)
+                    result_handler.failure('NSMs for backend {0} have reached the error threshold '
+                                           '({1} namespaces had to be remaining, ({2}/{3} used)'.format(alba_backend.name, total_capacity_error, current_capacity, maximum_capacity_before_overload),
+                                           code=ErrorCodes.nsm_load_ok)
+            else:
+                nsm_loads = {}
+                sorted_nsm_clusters = sorted(alba_backend.nsm_clusters, key=lambda k: k.number)
+                for nsm_cluster in sorted_nsm_clusters:
+                    nsm_loads[nsm_cluster.number] = AlbaController.get_load(nsm_cluster)
+                overloaded = min(nsm_loads.values()) >= max_load
+                if overloaded is False:
+                    result_handler.success('NSMs for backend {0} are not overloaded'.format(alba_backend.name),
+                                           code=ErrorCodes.nsm_load_ok)
+                else:
+                    if internal is True:
+                        result_handler.warning('NSMs for backend {0} are overloaded. The NSM checkup will take care of this'.format(alba_backend.name),
+                                               code=ErrorCodes.nsm_load_warn)
+                    else:
+                        result_handler.failure('NSMs for backend {0} are overloaded. Please add your own NSM clusters to the backend'.format(alba_backend.name),
+                                               code=ErrorCodes.nsm_load_failure)
+
+    @staticmethod
+    def _get_nsm_max_capacity_before_overload(alba_backend, max_load=None):
+        """
+        Get the maximum amount of namespaces that the nsm clusters can hold for a backend before being marked as overloaded
+        :param alba_backend: AlbaBackend object to use
+        :type alba_backend: ovs.dal.hybrids.albabackend.AlbaBackend
+        :return: The max amount of namespaces
+        :rtype: int
+        """
+        max_load = max_load or Configuration.get('ovs/framework/plugins/alba/config|nsm.maxload')
+        return sum(int(math.ceil(nsm.capacity * (float(max_load)/100.0))) for nsm in alba_backend.nsm_clusters)
