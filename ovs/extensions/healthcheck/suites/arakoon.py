@@ -30,7 +30,7 @@ import operator
 from datetime import timedelta
 from collections import OrderedDict
 from threading import Thread
-from ovs.dal.hybrids.servicetype import ServiceType
+from ovs_extensions.constants.config import CACC_LOCATION
 from ovs.extensions.db.arakooninstaller import ArakoonClusterConfig, ArakoonInstaller
 from ovs_extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNoMaster, ArakoonNoMasterResult
 from ovs.extensions.generic.configuration import Configuration
@@ -68,7 +68,7 @@ class ArakoonHealthCheck(object):
             is_cacc = cluster_name == 'cacc'
             arakoon_config = ArakoonClusterConfig(cluster_id=cluster_name, load_config=not is_cacc)
             if is_cacc is True:
-                with open(Configuration.CACC_LOCATION) as config_file:
+                with open(CACC_LOCATION) as config_file:
                     contents = config_file.read()
                 arakoon_config.read_config(contents=contents)
             try:
