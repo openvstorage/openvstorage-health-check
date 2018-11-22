@@ -248,7 +248,7 @@ class AlbaHealthCheck(object):
                                     alba_backend_guid = vpool.metadata['backend']['backend_info']['alba_backend_guid']
                                     api_url = 'alba/backends/{0}'.format(alba_backend_guid)
                                     if api_url not in api_cache:
-                                        connection_info = vpool.metadata['backend']['connection_info']
+                                        connection_info = vpool.metadata['backend']['backend_info']['connection_info']
                                         api_client = OVSClient(connection_info['host'], connection_info['port'], (connection_info['client_id'], connection_info['client_secret']))
                                         start = time.time()
                                         _presets = api_client.get(api_url, params={'contents': 'presets'})['presets']
