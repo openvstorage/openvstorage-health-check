@@ -29,6 +29,7 @@ import hashlib
 import subprocess
 from ovs.dal.lists.albabackendlist import AlbaBackendList
 from ovs_extensions.api.client import OVSClient
+from ovs_extensions.constants.vpools import PROXY_CONFIG_ABM
 from ovs_extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNotFound, ArakoonNoMaster, ArakoonNoMasterResult
 from ovs.extensions.generic.configuration import Configuration, NotFoundException
 from ovs.extensions.generic.sshclient import SSHClient
@@ -194,7 +195,7 @@ class AlbaHealthCheck(object):
                 # Check if proxy config is correctly setup
                 if abm_name is None:
                     raise ConfigNotMatchedException('Proxy config for proxy {0} does not have the correct format on node {1} with port {2}.'.format(service.name, ip, service.ports[0]))
-                abm_config = Configuration.get_configuration_path('/ovs/vpools/{0}/proxies/{1}/config/abm' .format(service.alba_proxy.storagedriver.vpool.guid, service.alba_proxy.guid))
+                abm_config = Configuration.get_configuration_path(PROXY_CONFIG_ABM.format(service.alba_proxy.storagedriver.vpool.guid, service.alba_proxy.guid))
 
                 # Determine presets / backend
                 try:
