@@ -63,7 +63,7 @@ class CacheHelper(object):
         :return: True if successful, False if not
         """
         _key = CacheHelper._generate_key(key=key)
-        retrieved_value = CacheHelper.get(key=key, raw=True)
+        retrieved_value = CacheHelper.get(key=key)
         timestamp = int(time.time())
         value = {'item': item, 'time_added': retrieved_value['time_added'], 'time_updated': timestamp}
         CacheHelper.client.set(key=_key, value=value, time=expire_time)

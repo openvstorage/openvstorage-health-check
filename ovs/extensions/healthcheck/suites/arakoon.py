@@ -31,6 +31,7 @@ from datetime import timedelta
 from collections import OrderedDict
 from threading import Thread
 from ovs_extensions.constants.config import CACC_LOCATION
+from ovs_extensions.constants.arakoon import ARAKOON_BASE
 from ovs.extensions.db.arakooninstaller import ArakoonClusterConfig, ArakoonInstaller
 from ovs_extensions.db.arakoon.pyrakoon.pyrakoon.compat import ArakoonNoMaster, ArakoonNoMasterResult
 from ovs.extensions.generic.configuration import Configuration
@@ -63,7 +64,7 @@ class ArakoonHealthCheck(object):
         """
         result_handler.info('Fetching available arakoon clusters.', add_to_result=False)
         arakoon_clusters = {}
-        for cluster_name in list(Configuration.list('/ovs/arakoon')) + ['cacc']:
+        for cluster_name in list(Configuration.list(ARAKOON_BASE)) + ['cacc']:
             # Determine Arakoon type
             is_cacc = cluster_name == 'cacc'
             arakoon_config = ArakoonClusterConfig(cluster_id=cluster_name, load_config=not is_cacc)
